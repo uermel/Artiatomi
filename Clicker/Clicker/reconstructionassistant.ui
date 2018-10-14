@@ -1,0 +1,1285 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ReconstructionAssistant</class>
+ <widget class="QDialog" name="ReconstructionAssistant">
+  <property name="windowModality">
+   <enum>Qt::NonModal</enum>
+  </property>
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>746</width>
+    <height>435</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Reconstruction assistant</string>
+  </property>
+  <property name="sizeGripEnabled">
+   <bool>false</bool>
+  </property>
+  <property name="modal">
+   <bool>false</bool>
+  </property>
+  <layout class="QGridLayout" name="gridLayout">
+   <item row="1" column="0">
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Save</set>
+     </property>
+     <property name="centerButtons">
+      <bool>false</bool>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="0">
+    <widget class="QTabWidget" name="tabWidget">
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <widget class="QWidget" name="tab">
+      <attribute name="title">
+       <string>General settings</string>
+      </attribute>
+      <layout class="QGridLayout" name="gridLayout_2">
+       <item row="4" column="0">
+        <widget class="QLabel" name="label_8">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="MinimumExpanding">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="0">
+        <layout class="QHBoxLayout" name="horizontalLayout">
+         <item>
+          <widget class="QLabel" name="label">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>Cuda device IDs to use for reconstruction</string>
+           </property>
+           <property name="text">
+            <string>Cuda device IDs: </string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="txt_CudaDeviceIDs">
+           <property name="text">
+            <string>0 1 2 3</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item row="1" column="0">
+        <widget class="QGroupBox" name="groupBox">
+         <property name="title">
+          <string>Reconstruction method</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout">
+          <item>
+           <widget class="QRadioButton" name="chk_SART">
+            <property name="text">
+             <string>SART</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QRadioButton" name="chk_WBP">
+            <property name="text">
+             <string>WBP</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QRadioButton" name="chk_WBPContrast">
+            <property name="text">
+             <string>WBP contrast enhanced</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item row="3" column="0">
+        <widget class="QGroupBox" name="groupBox_2">
+         <property name="title">
+          <string>Alignment</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_3">
+          <item row="3" column="0">
+           <widget class="QLabel" name="label_10">
+            <property name="text">
+             <string>Magnification anisotropy: </string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_2">
+            <property name="text">
+             <string>Marker file: </string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="label_4">
+            <property name="text">
+             <string>Volume shift:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <layout class="QHBoxLayout" name="horizontalLayout_3">
+            <item>
+             <widget class="QLabel" name="label_5">
+              <property name="text">
+               <string>X: </string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="IntLineEdit" name="txt_VolumeShiftX">
+              <property name="text">
+               <string>0</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_6">
+              <property name="text">
+               <string>Y: </string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="IntLineEdit" name="txt_VolumeShiftY">
+              <property name="text">
+               <string>0</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_7">
+              <property name="text">
+               <string>Z: </string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="IntLineEdit" name="txt_VolumeShiftZ">
+              <property name="text">
+               <string>0</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="3" column="1">
+           <layout class="QHBoxLayout" name="horizontalLayout_5">
+            <item>
+             <widget class="QLabel" name="label_11">
+              <property name="text">
+               <string>Amount: </string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="FloatLineEdit" name="txt_MagAnisoAmount">
+              <property name="text">
+               <string>1</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_12">
+              <property name="text">
+               <string>Angle: </string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="FloatLineEdit" name="txt_MagAnisoAngle">
+              <property name="text">
+               <string>0</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="0" column="1">
+           <widget class="QLineEdit" name="txt_markerFile"/>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="label_3">
+            <property name="text">
+             <string>Beam declination: </string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QPushButton" name="btn_openMarkerfile">
+            <property name="text">
+             <string>...</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="FloatLineEdit" name="txt_beamDeclination">
+            <property name="text">
+             <string>0</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="label_16">
+            <property name="text">
+             <string>Add tilt angles: </string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <layout class="QHBoxLayout" name="horizontalLayout_7">
+            <item>
+             <widget class="QLabel" name="label_17">
+              <property name="text">
+               <string>X: </string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="FloatLineEdit" name="txt_AddTiltXAngle">
+              <property name="text">
+               <string>0</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_18">
+              <property name="text">
+               <string>Y (tilt axis): </string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="FloatLineEdit" name="txt_AddTiltAngle">
+              <property name="text">
+               <string>0</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="1" column="2">
+           <widget class="QLabel" name="label_40">
+            <property name="text">
+             <string>[deg]</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="2">
+           <widget class="QLabel" name="label_41">
+            <property name="text">
+             <string>[voxels]</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="2">
+           <widget class="QLabel" name="label_42">
+            <property name="text">
+             <string>[deg]</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="2">
+           <widget class="QLabel" name="label_43">
+            <property name="text">
+             <string>[deg]</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item row="2" column="0">
+        <layout class="QHBoxLayout" name="horizontalLayout_4">
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="label_9">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>Contrast parameter: For sub-tomogram averaging use 1, for better contrast 5-15</string>
+           </property>
+           <property name="text">
+            <string>Ordered subset size: </string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QSpinBox" name="txt_SIRTCount">
+           <property name="minimum">
+            <number>1</number>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_2">
+      <attribute name="title">
+       <string>Projection settings</string>
+      </attribute>
+      <layout class="QGridLayout" name="gridLayout_4">
+       <item row="3" column="1">
+        <widget class="QCheckBox" name="chk_BadPixels">
+         <property name="text">
+          <string>Correct for bad pixels</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="1">
+        <widget class="QLabel" name="label_14">
+         <property name="text">
+          <string>Supersampling: </string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="3">
+        <widget class="QSpinBox" name="txt_OverSampling">
+         <property name="minimum">
+          <number>1</number>
+         </property>
+         <property name="maximum">
+          <number>100</number>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QLabel" name="label_13">
+         <property name="text">
+          <string>Projection file: </string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="4">
+        <widget class="QPushButton" name="btn_openProjection">
+         <property name="text">
+          <string>...</string>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="3">
+        <widget class="FloatLineEdit" name="txt_ScaleFactor">
+         <property name="text">
+          <string>1000.000</string>
+         </property>
+        </widget>
+       </item>
+       <item row="7" column="1">
+        <widget class="QLabel" name="label_29">
+         <property name="text">
+          <string/>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="3">
+        <layout class="QHBoxLayout" name="FourierFilters">
+         <item>
+          <widget class="QLabel" name="label_20">
+           <property name="text">
+            <string>Low pass: </string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QSpinBox" name="txt_LP">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_21">
+           <property name="text">
+            <string>LP sigma: </string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QSpinBox" name="txt_LPS">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_22">
+           <property name="text">
+            <string>High pass: </string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QSpinBox" name="txt_HP">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_23">
+           <property name="text">
+            <string>HP sigma: </string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QSpinBox" name="txt_HPS">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item row="3" column="3">
+        <layout class="QHBoxLayout" name="horizontalLayout_6">
+         <item>
+          <widget class="QLabel" name="label_15">
+           <property name="text">
+            <string>Threshold: </string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="FloatLineEdit" name="txt_BadPixelValue">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>10</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item row="0" column="3">
+        <widget class="QLineEdit" name="txt_Projection"/>
+       </item>
+       <item row="5" column="1">
+        <widget class="QLabel" name="label_31">
+         <property name="toolTip">
+          <string>Scale factor is needed for 16 bit volume storage format. Can be set to 1 for 32-bit floats.</string>
+         </property>
+         <property name="text">
+          <string>Scale factor: </string>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="1">
+        <widget class="QCheckBox" name="chk_Fourier">
+         <property name="text">
+          <string>Apply Fourier filter</string>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="1">
+        <widget class="QLabel" name="label_32">
+         <property name="text">
+          <string>Normalization method:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="3">
+        <widget class="QComboBox" name="cmb_NomalizationMethod"/>
+       </item>
+       <item row="4" column="4">
+        <widget class="QLabel" name="label_39">
+         <property name="text">
+          <string>[pixels]</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_3">
+      <attribute name="title">
+       <string>Volume settings</string>
+      </attribute>
+      <layout class="QGridLayout" name="gridLayout_5">
+       <item row="0" column="0">
+        <widget class="QLabel" name="label_19">
+         <property name="text">
+          <string>Output volume file: </string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="2">
+        <widget class="QPushButton" name="btn_SaveVolume">
+         <property name="text">
+          <string>...</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QComboBox" name="cmb_Binning">
+         <property name="currentText">
+          <string/>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="0">
+        <widget class="QLabel" name="label_25">
+         <property name="toolTip">
+          <string>Binning factor for the reconstruction volume. X and Y volume size is given by the projection size divided by binning factor. Z is estimated from the highest and lowest marker position in Z, adopted to binning.</string>
+         </property>
+         <property name="text">
+          <string>Volume dimensions: </string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="1">
+        <widget class="QCheckBox" name="chk_WriteAsFP16">
+         <property name="toolTip">
+          <string>Write the reconstructed volume as 16-bit floats without conversion to 32-bits. Saves storage space, but data is not directly readable!</string>
+         </property>
+         <property name="text">
+          <string>Write result as 16 bit floats, too</string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="0">
+        <widget class="QCheckBox" name="chk_FP16">
+         <property name="toolTip">
+          <string>Use 16-bit floats for internal volume storage format to save space.</string>
+         </property>
+         <property name="text">
+          <string>Use 16 bit floats</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="label_24">
+         <property name="toolTip">
+          <string>Binning factor for the reconstruction volume. X and Y volume size is given by the projection size divided by binning factor. Z is estimated from the highest and lowest marker position in Z, adopted to binning.</string>
+         </property>
+         <property name="text">
+          <string>Binning: </string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="1">
+        <layout class="QHBoxLayout" name="horizontalLayout_9">
+         <item>
+          <widget class="QLabel" name="label_26">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>X: </string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="IntLineEdit" name="txt_VolDimX"/>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_27">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>Y: </string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="IntLineEdit" name="txt_VolDimY"/>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_28">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>Z: </string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="IntLineEdit" name="txt_VolDimZ"/>
+         </item>
+        </layout>
+       </item>
+       <item row="0" column="1">
+        <widget class="QLineEdit" name="txt_OutputVolumefile"/>
+       </item>
+       <item row="4" column="0">
+        <widget class="QLabel" name="label_30">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="MinimumExpanding">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="2">
+        <widget class="QLabel" name="label_38">
+         <property name="text">
+          <string>[voxels]</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_4">
+      <attribute name="title">
+       <string>CTF correction</string>
+      </attribute>
+      <layout class="QGridLayout" name="gridLayout_6">
+       <item row="4" column="3">
+        <widget class="QLabel" name="label_45">
+         <property name="text">
+          <string>[pixels]</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QCheckBox" name="chk_CTFCorrection">
+         <property name="toolTip">
+          <string>Enable CTF correction</string>
+         </property>
+         <property name="text">
+          <string>Do CTF correction</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="2">
+        <widget class="FloatLineEdit" name="txt_Cs">
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+         <property name="text">
+          <string>2.7</string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="2">
+        <widget class="FloatLineEdit" name="txt_Voltage">
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+         <property name="text">
+          <string>300</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="3">
+        <widget class="QLabel" name="label_37">
+         <property name="text">
+          <string>[mm]</string>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="1">
+        <widget class="QLabel" name="label_46">
+         <property name="toolTip">
+          <string>Envelope is given as env = e^(-bx²): Set value for b.</string>
+         </property>
+         <property name="text">
+          <string>Dampening envelope: </string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="1">
+        <widget class="QLabel" name="label_35">
+         <property name="text">
+          <string>Voltage: </string>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="1">
+        <widget class="QLabel" name="label_44">
+         <property name="toolTip">
+          <string>First maximum of the CTF: CTF is not corrected for frequencies below this value.</string>
+         </property>
+         <property name="text">
+          <string>First maximum: </string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="3">
+        <widget class="QPushButton" name="btn_openCTFFile">
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+         <property name="text">
+          <string>...</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QLabel" name="label_33">
+         <property name="toolTip">
+          <string>CTF file containing defocus and astigmatism information for each micrograph</string>
+         </property>
+         <property name="text">
+          <string>CTF file: </string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="3">
+        <widget class="QLabel" name="label_36">
+         <property name="text">
+          <string>[kV]</string>
+         </property>
+        </widget>
+       </item>
+       <item row="7" column="1">
+        <widget class="QCheckBox" name="chk_IgnoreZShift">
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+         <property name="text">
+          <string>Ignore volume Z-shift</string>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="2">
+        <widget class="FloatLineEdit" name="txt_BetaFac">
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+         <property name="text">
+          <string>0.003</string>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="2">
+        <widget class="IntLineEdit" name="txt_FirstMaximum">
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+         <property name="text">
+          <string>250</string>
+         </property>
+        </widget>
+       </item>
+       <item row="8" column="1">
+        <widget class="QLabel" name="label_47">
+         <property name="text">
+          <string/>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="2">
+        <widget class="QLineEdit" name="txt_CTFFilename">
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="1">
+        <widget class="QLabel" name="label_34">
+         <property name="text">
+          <string>Cs:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="1">
+        <widget class="QLabel" name="label_48">
+         <property name="toolTip">
+          <string>Slice thickness for three-dimensional CTF correction: Should be in the range of defocus estimation precision.</string>
+         </property>
+         <property name="text">
+          <string>Slice thickness</string>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="2">
+        <widget class="QSpinBox" name="txt_SliceThickness">
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+         <property name="minimum">
+          <number>1</number>
+         </property>
+         <property name="maximum">
+          <number>300</number>
+         </property>
+         <property name="value">
+          <number>50</number>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="3">
+        <widget class="QLabel" name="label_49">
+         <property name="text">
+          <string>[nm]</string>
+         </property>
+        </widget>
+       </item>
+       <item row="7" column="2">
+        <widget class="QLabel" name="label_50">
+         <property name="text">
+          <string>(If checked, the determined defocus is not adjusted according to global volume Z-shift)</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+  <action name="actionOpen_marker_file">
+   <property name="text">
+    <string>Open marker file</string>
+   </property>
+  </action>
+  <action name="actionOpen_projection_file">
+   <property name="text">
+    <string>Open projection file</string>
+   </property>
+  </action>
+  <action name="actionOpen_CTF_file">
+   <property name="text">
+    <string>Open CTF file</string>
+   </property>
+  </action>
+  <action name="actionSet_output_file">
+   <property name="text">
+    <string>Set output file</string>
+   </property>
+  </action>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>FloatLineEdit</class>
+   <extends>QLineEdit</extends>
+   <header>floatlineedit.h</header>
+   <slots>
+    <signal>valueChanged(float)</signal>
+    <slot>setValue(float)</slot>
+    <slot>setValueNormalized(float)</slot>
+   </slots>
+  </customwidget>
+  <customwidget>
+   <class>IntLineEdit</class>
+   <extends>QLineEdit</extends>
+   <header>intlineedit.h</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>accepted()</signal>
+   <receiver>ReconstructionAssistant</receiver>
+   <slot>accept()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>248</x>
+     <y>254</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>157</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>rejected()</signal>
+   <receiver>ReconstructionAssistant</receiver>
+   <slot>reject()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>316</x>
+     <y>260</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>286</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>chk_SART</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>txt_SIRTCount</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>371</x>
+     <y>99</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>548</x>
+     <y>180</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>chk_BadPixels</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>txt_BadPixelValue</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>83</x>
+     <y>447</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>427</x>
+     <y>447</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>chk_Fourier</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>txt_LP</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>83</x>
+     <y>473</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>241</x>
+     <y>473</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>chk_Fourier</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>txt_LPS</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>83</x>
+     <y>473</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>362</x>
+     <y>473</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>chk_Fourier</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>txt_HP</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>83</x>
+     <y>473</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>488</x>
+     <y>473</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>chk_Fourier</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>txt_HPS</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>83</x>
+     <y>473</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>611</x>
+     <y>473</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>chk_FP16</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>chk_WriteAsFP16</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>70</x>
+     <y>564</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>384</x>
+     <y>564</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>chk_CTFCorrection</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>txt_CTFFilename</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>82</x>
+     <y>48</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>397</x>
+     <y>73</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>chk_CTFCorrection</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>btn_openCTFFile</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>82</x>
+     <y>48</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>686</x>
+     <y>74</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>chk_CTFCorrection</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>txt_Cs</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>82</x>
+     <y>48</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>397</x>
+     <y>101</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>chk_CTFCorrection</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>txt_Voltage</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>82</x>
+     <y>48</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>397</x>
+     <y>127</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>chk_CTFCorrection</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>txt_FirstMaximum</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>82</x>
+     <y>48</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>397</x>
+     <y>153</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>chk_CTFCorrection</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>txt_BetaFac</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>82</x>
+     <y>48</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>397</x>
+     <y>179</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>chk_CTFCorrection</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>txt_SliceThickness</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>82</x>
+     <y>48</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>397</x>
+     <y>205</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>chk_CTFCorrection</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>chk_IgnoreZShift</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>82</x>
+     <y>48</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>82</x>
+     <y>230</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>btn_openMarkerfile</sender>
+   <signal>clicked()</signal>
+   <receiver>actionOpen_marker_file</receiver>
+   <slot>trigger()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>676</x>
+     <y>232</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>btn_openProjection</sender>
+   <signal>clicked()</signal>
+   <receiver>actionOpen_projection_file</receiver>
+   <slot>trigger()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>686</x>
+     <y>51</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>btn_SaveVolume</sender>
+   <signal>clicked()</signal>
+   <receiver>actionSet_output_file</receiver>
+   <slot>trigger()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>686</x>
+     <y>51</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>btn_openCTFFile</sender>
+   <signal>clicked()</signal>
+   <receiver>actionOpen_CTF_file</receiver>
+   <slot>trigger()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>686</x>
+     <y>74</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+</ui>
