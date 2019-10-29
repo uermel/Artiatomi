@@ -66,7 +66,7 @@ versions. For Linux, each tool has a hand written make file.
 - Cuda 8.0 
 - openMPI on Linux, version of your choice
 - MPICH on Windows, http://www.mpich.org/static/downloads/1.4.1p1/mpich2-1.4.1p1-win-x86-64.msi
-- For Clicker only: Qt 5.2, we still have troubles to get that 
+- For Clicker only: Qt 5.5, we still have troubles to get that
   compiled on different machines...
 
 # Cuda kernels:
