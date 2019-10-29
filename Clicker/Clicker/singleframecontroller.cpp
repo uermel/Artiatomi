@@ -21,6 +21,7 @@
 ////////////////////////////////////////////////////////////////////////
 
 
+#include <math.h>
 #include "singleframecontroller.h"
 #include <QMessageBox>
 #include <QDebug>

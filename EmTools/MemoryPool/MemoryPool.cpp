@@ -480,7 +480,7 @@ size_t MemoryPool::AllocateCudaDevice(std::shared_ptr<BufferRequest> request)
 #ifdef USE_CUDA
 size_t MemoryPool::AllocateCudaHost(std::shared_ptr<BufferRequest> request)
 {
-	throw exception("Not Implemented!");
+	throw runtime_error("Not Implemented!");
 }
 #endif
 

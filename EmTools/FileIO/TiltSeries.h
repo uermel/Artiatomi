@@ -60,10 +60,10 @@ private:
 
 	static bool FileIsPartOfMultiFiles(string aFileName);
 	static vector<string> GetMultiFilesFromFilename(string aFileName);
-	static int TiltSeries::CountFilesInStack(std::string aFileName, int& aFirstIndex);
-	static bool TiltSeries::fexists(string aFileName);
-	static string TiltSeries::GetStringFromInt(int aInt);
-	static string TiltSeries::GetFileNameFromIndex(int aIndex, string aFileName);
+	static int CountFilesInStack(std::string aFileName, int& aFirstIndex);
+	static bool fexists(string aFileName);
+	static string GetStringFromInt(int aInt);
+	static string GetFileNameFromIndex(int aIndex, string aFileName);
 
 };
 

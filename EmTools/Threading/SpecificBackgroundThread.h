@@ -28,7 +28,7 @@
 #include <mutex>
 
 #define RunInThread(a, ...) (__runInThread(10, a, __VA_ARGS__))
-#define RunInCudaThread(a, ...) (__runInThread(CUDA_THREAD_ID, a, __VA_ARGS__))
+#define RunInCudaThread(a, ...) (__runInThread(CUDA_THREAD_ID, a, ## __VA_ARGS__))
 #define RunInOpenCLThread(a, ...) (__runInThread(OPENCL_THREAD_ID, a, __VA_ARGS__))
 
 class SingletonThread

@@ -24,7 +24,7 @@
 #ifndef DM3FILESTACK_H
 #define DM3FILESTACK_H
 
-#include "../../Basics/Default.h"
+#include "../Basics/Default.h"
 #include "Dm3File.h"
 #include "FileReader.h"
 
@@ -44,6 +44,7 @@ private:
 	std::string GetFileNameFromIndex(int aIndex, std::string aFileName);
 	int CountFilesInStack(std::string aFileName);
 	int _fileCount;
+	char* _data;
 
 	std::vector<Dm3File*> _dm3files;
 	

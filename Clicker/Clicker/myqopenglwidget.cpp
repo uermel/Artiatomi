@@ -31,6 +31,7 @@
 #include <QPainter>
 #define GL_GLEXT_PROTOTYPES
 #include <qopenglext.h>
+#include <math.h>
 
 //#define NoSecondContext
 

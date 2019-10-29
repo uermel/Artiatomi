@@ -45,13 +45,13 @@ public:
 
 	uint version;
 	uint fileSize;
-	void* _data;
+	char* _data;
 
 	Dm3FileTagDirectory* root;
 
 	uint GetPixelDepthInBytes();
 	uint GetImageSizeInBytes();
-	void* GetImageData();
+	char* GetImageData();
 	uint GetImageDimensionX();
 	uint GetImageDimensionY();
 	float GetPixelSizeX();

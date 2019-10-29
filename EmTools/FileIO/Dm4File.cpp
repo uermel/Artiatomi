@@ -113,7 +113,7 @@ uint Dm4File::GetThumbnailDimensionY()
 
 	return dimY->GetSingleValueInt(dimY->InfoArray[0]);
 }
-void* Dm4File::GetImageData()
+char* Dm4File::GetImageData()
 {
 	Dm4FileTagDirectory* dataDir = GetImageDataDir();
 	if (dataDir == NULL) return NULL;
@@ -376,7 +376,7 @@ float Dm4File::GetPixelSizeX()
 	if (unit)
 	{
 		std::string s = unit->GetSingleValueString(unit->InfoArray[1]);
-		if (s == "µm")
+		if (s == "ï¿½m")
 			scaleUnit = 1000;
 		if (s == "nm")
 			scaleUnit = 1;
@@ -402,7 +402,7 @@ float Dm4File::GetPixelSizeY()
 	if (unit)
 	{
 		std::string s = unit->GetSingleValueString(unit->InfoArray[1]);
-		if (s == "µm")
+		if (s == "ï¿½m")
 			scaleUnit = 1000;
 		if (s == "nm")
 			scaleUnit = 1;

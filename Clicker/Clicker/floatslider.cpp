@@ -20,7 +20,7 @@
 //  
 ////////////////////////////////////////////////////////////////////////
 
-
+#include <math.h>
 #include "floatslider.h"
 
 void FloatSlider::mouseDoubleClickEvent(QMouseEvent *e)

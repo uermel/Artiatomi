@@ -24,7 +24,7 @@
 #ifndef DM4FILESTACK_H
 #define DM4FILESTACK_H
 
-#include "../../Basics/Default.h"
+#include "../Basics/Default.h"
 #include "Dm4File.h"
 #include "FileReader.h"
 
@@ -45,6 +45,7 @@ private:
 	int CountFilesInStack(std::string aFileName);
 	int _fileCount;
 	int _firstIndex;
+	char* _data;
 
 	std::vector<Dm4File*> _dm4files;
 

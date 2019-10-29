@@ -44,13 +44,13 @@ public:
 
 	uint version;
 	ulong64 fileSize;
-	void* _data;
+	char* _data;
 
 	Dm4FileTagDirectory* root;
 
 	uint GetPixelDepthInBytes();
 	uint GetImageSizeInBytes();
-	void* GetImageData();
+	char* GetImageData();
 	uint GetImageDimensionX();
 	uint GetImageDimensionY();
 	uint GetImageDimensionZ();

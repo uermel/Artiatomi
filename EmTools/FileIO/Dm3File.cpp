@@ -82,7 +82,7 @@ uint Dm3File::GetImageDimensionY()
 
 	return dimY->GetSingleValueInt(dimY->InfoArray[0]);
 }
-void* Dm3File::GetImageData()
+char* Dm3File::GetImageData()
 {
 	Dm3FileTagDirectory* dataDir = GetImageDataDir();
 	if (dataDir == NULL) return NULL;
@@ -289,7 +289,7 @@ float Dm3File::GetPixelSizeX()
 	if (unit)
 	{
 		std::string s = unit->GetSingleValueString(unit->InfoArray[1]);
-		if (s == "µm")
+		if (s == "ï¿½m")
 			scaleUnit = 1000;
 		if (s == "nm")
 			scaleUnit = 1;
@@ -314,7 +314,7 @@ float Dm3File::GetPixelSizeY()
 	if (unit)
 	{
 		std::string s = unit->GetSingleValueString(unit->InfoArray[1]);
-		if (s == "µm")
+		if (s == "ï¿½m")
 			scaleUnit = 1000;
 		if (s == "nm")
 			scaleUnit = 1;
