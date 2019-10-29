@@ -2,10 +2,12 @@ cmake_minimum_required(VERSION 3.14)
 project(Artiatomi LANGUAGES CUDA CXX)
 
 set(CMAKE_CXX_STANDARD 14)
+
+
 set(EMTOOLS_PATH "EmTools" CACHE PATH "Path to EmTools source.")
 set(CLICKER_PATH "Clicker/Clicker" CACHE PATH "Path to Clicker source.")
 
-######################### CUDA stuff #############################
+######################### CUDA #############################
 if(NOT DEFINED CMAKE_CUDA_STANDARD)
     set(CMAKE_CUDA_STANDARD 14)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
@@ -13,19 +15,18 @@ endif()
 
 find_library(CUDA_LIBRARY cuda ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
 find_library(CUFFT_LIBRARY cufft ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
-find_library(NPPC_LIBRARY libnppc ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
-find_library(NPPI_LIBRARY libnppi ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
+find_library(NPPC_LIBRARY nppc  ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
+find_library(NPPI_LIBRARY nppi ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
 
 set(CUDA_LIBS ${CUDA_LIBRARY} ${CUFFT_LIBRARY} ${NPPC_LIBRARY} ${NPPI_LIBRARY})
-######################### CUDA stuff #############################
+######################### CUDA #############################
 
-######################### OpenCL stuff #############################
-
+######################### OpenCL/GL #############################
 find_package(OpenCL REQUIRED)
+find_package(OpenGL REQUIRED)
+######################### OpenCL #############################
 
-######################### OpenCL stuff #############################
-
-######################### Qt stuff #############################
+######################### Qt #############################
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
@@ -35,17 +36,15 @@ if(CMAKE_VERSION VERSION_LESS "3.7.0")
 endif()
 
 find_package(Qt5 COMPONENTS Core Widgets DBus OpenGL REQUIRED)
-find_package(OpenGL REQUIRED)
+######################### Qt #############################
 
-######################### Qt stuff #############################
-
-######################### System stuff ################################
-
+######################### System ################################
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-find_package(OpenCL REQUIRED )
+######################### System ################################
 
-######################### System stuff ################################
+####################################################################################################
+####################################################################################################
 
 ######################### MKLog #####################################
 set(MK_LOG_SRC
@@ -55,10 +54,8 @@ set(MK_LOG_INC
         ${EMTOOLS_PATH}/Basics
         ${EMTOOLS_PATH}/MKLog)
 
-add_library(MKLog
-        ${MK_LOG_SRC})
-
-target_include_directories(MKLog PUBLIC ${MK_LOG_INC})
+set(MK_LOG_LIB
+        )
 ######################### MKLog #####################################
 
 ######################### Threading ################################
@@ -71,48 +68,7 @@ set(THREADING_INC
 
 set(THREADING_LIB
         Threads::Threads)
-
-add_library(Threading
-        ${THREADING_SRC})
-
-target_include_directories(Threading PUBLIC ${THREADING_INC})
-target_link_libraries(Threading ${THREADING_LIB})
 ######################### Threading ################################
-
-######################### CudaHelpers ################################
-set(CUDA_HELPERS_SRC
-        ${EMTOOLS_PATH}/CudaHelpers/CudaArrays.cpp
-        ${EMTOOLS_PATH}/CudaHelpers/CudaContext.cpp
-        ${EMTOOLS_PATH}/CudaHelpers/CudaDeviceProperties.cpp
-        ${EMTOOLS_PATH}/CudaHelpers/CudaException.cpp
-        ${EMTOOLS_PATH}/CudaHelpers/CudaHelpers.cpp
-        ${EMTOOLS_PATH}/CudaHelpers/CudaKernel.cpp
-        ${EMTOOLS_PATH}/CudaHelpers/CudaTextures.cpp
-        ${EMTOOLS_PATH}/CudaHelpers/CudaVariables.cpp
-        ${EMTOOLS_PATH}/CudaHelpers/NPPImageBase.cpp
-        ${EMTOOLS_PATH}/CudaHelpers/NPPImages.cpp)
-
-set(CUDA_HELPERS_INC
-        ${EMTOOLS_PATH}/CudaHelpers
-        ${EMTOOLS_PATH}/Basics
-        ${EMTOOLS_PATH}/MemoryPool
-        ${EMTOOLS_PATH}/Threading
-        ${EMTOOLS_PATH}/MKLog
-        ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
-
-set(CUDA_HELPERS_LIB
-        MemoryPool
-        Threading
-        MKLog
-        ${CUDA_LIBS})
-
-add_library(CudaHelpers
-        ${CUDA_HELPERS_SRC})
-
-target_include_directories(CudaHelpers PUBLIC ${CUDA_HELPERS_INC})
-target_link_libraries(CudaHelpers ${CUDA_HELPERS_LIB})
-######################### CudaHelpers ################################
-
 
 ######################### FilterGraph #####################################
 set(FILTER_GRAPH_SRC
@@ -133,16 +89,16 @@ set(FILTER_GRAPH_SRC
 set(FILTER_GRAPH_INC
         ${EMTOOLS_PATH}/FilterGraph
         ${EMTOOLS_PATH}/Basics
-        ${EMTOOLS_PATH}/MemoryPool)
+        ${MEMORY_POOL_INC})
 
 set(FILTER_GRAPH_LIB
-        MemoryPool)
+        ${MEMORY_POOL_LIB})
 
-add_library(FilterGraph
-        ${FILTER_GRAPH_SRC})
+#add_library(FilterGraph
+#        ${FILTER_GRAPH_SRC})
 
-target_include_directories(FilterGraph PUBLIC ${FILTER_GRAPH_INC})
-target_link_libraries(FilterGraph ${FILTER_GRAPH_LIB})
+#target_include_directories(FilterGraph PUBLIC ${FILTER_GRAPH_INC})
+#target_link_libraries(FilterGraph ${FILTER_GRAPH_LIB})
 ######################### FilterGraph #####################################
 
 ######################### Minimization ################################
@@ -153,10 +109,10 @@ set(MINIMIZATION_INC
         ${EMTOOLS_PATH}/Basics
         ${EMTOOLS_PATH}/Minimization)
 
-add_library(Minimization
-        ${MINIMIZATION_SRC})
+set(MINIMIZATION_LIB
+        )
 
-target_include_directories(Minimization PUBLIC ${MINIMIZATION_INC})
+#target_include_directories(Minimization PUBLIC ${MINIMIZATION_INC})
 ######################### Minimization ################################
 
 ######################### FileIO #####################################
@@ -190,22 +146,19 @@ set(FILEIO_SRC
 set(FILEIO_INC
         ${EMTOOLS_PATH}/FileIO
         ${EMTOOLS_PATH}/Basics
-        ${EMTOOLS_PATH}/MKLog
-        ${EMTOOLS_PATH}/FilterGraph
-        ${EMTOOLS_PATH}/Minimization)
+        ${MK_LOG_INC}
+        ${FILTER_GRAPH_INC}
+        ${MINIMIZATION_INC})
 
 set(FILEIO_LIB
-        MKLog
-        FilterGraph
-        Minimization)
+        )
 
-add_library(FileIO
-        ${FILEIO_SRC})
+#add_library(FileIO
+#        ${FILEIO_SRC})
 
-target_include_directories(FileIO PUBLIC ${FILEIO_INC})
-target_link_libraries(FileIO ${FILEIO_LIB})
+#target_include_directories(FileIO PUBLIC ${FILEIO_INC})
+#target_link_libraries(FileIO ${FILEIO_LIB})
 ######################### FileIO #####################################
-
 
 ######################### OpenCLHelpers #####################################
 set(OPENCL_HELPERS_SRC
@@ -218,26 +171,19 @@ set(OPENCL_HELPERS_SRC
 set(OPENCL_HELPERS_INC
         ${EMTOOLS_PATH}/OpenCLHelpers
         ${EMTOOLS_PATH}/Basics
-        ${EMTOOLS_PATH}/MKLog
-        ${EMTOOLS_PATH}/Threading
+        ${MK_LOG_INC}
+        ${THREADING_INC}
         ${OpenCL_INCLUDE_DIRS})
 
 set(OPENCL_HELPERS_LIB
-        MKLog
-        Threading
-        ${OpenCL_INCLUDE_DIRS}
+        ${MK_LOG_LIB}
+        ${THREADING_LIB}
         Qt5::Widgets
         Qt5::Core
         Qt5::OpenGL
         Qt5::DBus
         ${OPENGL_LIBRARIES}
         ${OpenCL_LIBRARIES})
-
-add_library(OpenCLHelpers
-        ${OPENCL_HELPERS_SRC})
-
-target_include_directories(OpenCLHelpers PUBLIC ${OPENCL_HELPERS_INC})
-target_link_libraries(OpenCLHelpers ${OPENCL_HELPERS_LIB})
 ######################### OpenCLHelpers #####################################
 
 ######################### MemoryPool ################################
@@ -252,21 +198,47 @@ set(MEMORY_POOL_SRC
 set(MEMORY_POOL_INC
         ${EMTOOLS_PATH}/MemoryPool
         ${EMTOOLS_PATH}/Basics
-        ${EMTOOLS_PATH}/MKLog
-        ${EMTOOLS_PATH}/CudaHelpers
-        ${EMTOOLS_PATH}/OpenCLHelpers)
+        ${MK_LOG_INC}
+        ${CUDA_HELPERS_INC}
+        ${OPENCL_HELPERS_INC})
 
 set(MEMORY_POOL_LIB
-        MKLog
-        CudaHelpers
-        OpenCLHelpers)
+        ${MK_LOG_LIB}
+        ${OPENCL_HELPERS_LIB}
+        ${CUDA_HELPERS_LIB})
 
-add_library(MemoryPool
-        ${MEMORY_POOL_SRC})
+#add_library(MemoryPool
+#        ${MEMORY_POOL_SRC})
 
-target_include_directories(MemoryPool PUBLIC ${MEMORY_POOL_INC})
-target_link_libraries(MemoryPool ${MEMORY_POOL_LIB})
+#target_include_directories(MemoryPool PUBLIC ${MEMORY_POOL_INC})
+#target_link_libraries(MemoryPool ${MEMORY_POOL_LIB})
 ######################### MemoryPool ################################
+
+######################### CudaHelpers ################################
+set(CUDA_HELPERS_SRC
+        ${EMTOOLS_PATH}/CudaHelpers/CudaArrays.cpp
+        ${EMTOOLS_PATH}/CudaHelpers/CudaContext.cpp
+        ${EMTOOLS_PATH}/CudaHelpers/CudaDeviceProperties.cpp
+        ${EMTOOLS_PATH}/CudaHelpers/CudaException.cpp
+        ${EMTOOLS_PATH}/CudaHelpers/CudaHelpers.cpp
+        ${EMTOOLS_PATH}/CudaHelpers/CudaKernel.cpp
+        ${EMTOOLS_PATH}/CudaHelpers/CudaTextures.cpp
+        ${EMTOOLS_PATH}/CudaHelpers/CudaVariables.cpp
+        ${EMTOOLS_PATH}/CudaHelpers/NPPImageBase.cpp
+        ${EMTOOLS_PATH}/CudaHelpers/NPPImages.cpp)
+
+set(CUDA_HELPERS_INC
+        ${EMTOOLS_PATH}/CudaHelpers
+        ${EMTOOLS_PATH}/Basics
+        ${MEMORY_POOL_INC}
+        ${THREADING_INC}
+        ${MK_LOG_INC}
+        ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
+
+set(CUDA_HELPERS_LIB
+        ${CUDA_LIBS}
+        ${THREADING_LIB})
+######################### CudaHelpers ################################
 
 ######################### CC #####################################
 set(CC_SRC
@@ -275,30 +247,36 @@ set(CC_SRC
 set(CC_INC
         ${EMTOOLS_PATH}/CrossCorrelation
         ${EMTOOLS_PATH}/Basics
+        ${FILEIO_INC}
+        ${FILTER_GRAPH_INC}
         ${EMTOOLS_PATH}/FileIO
         ${EMTOOLS_PATH}/FilterGraph)
 
 set(CC_LIB
-        FilterGraph
-        FileIO
+        ${FILTER_GRAPH_LIB}
+        ${FILEIO_LIB}
         fftw3f)
-
-set(CC_LIB_EXT
-        fftw3f)
-
-add_library(CrossCorrelation
-        ${CC_SRC})
-
-target_include_directories(CrossCorrelation PUBLIC ${CC_INC})
-target_link_libraries(CrossCorrelation ${CC_LIB})
 ######################### CC #####################################
 
 ####################################################################################################
 ####################################################################################################
 
 
+####################################################################################################
+#############################   Applications   #####################################################
+####################################################################################################
+
 ######################### Clicker #####################################
 set(CLICKER_SRC
+        ${MKLOG_SRC}
+        ${FILEIO_SRC}
+        ${CC_SRC}
+        ${OPENCL_HELPERS_SRC}
+        ${MINIMIZATION_SRC}
+        ${THREADING_SRC}
+        ${FILTER_GRAPH_SRC}
+        ${MEMORY_POOL_SRC}
+
         ${CLICKER_PATH}/mymainwindow.ui
         ${CLICKER_PATH}/alignmentreport.cpp
         ${CLICKER_PATH}/baseframecontroller.cpp
@@ -317,26 +295,29 @@ set(CLICKER_SRC
         ${CLICKER_PATH}/singleframecontroller.cpp
         ${CLICKER_PATH}/singletonoffscreensurface.cpp
         ${CLICKER_PATH}/squarelabel.cpp
-        ${CLICKER_PATH}/tiltseriescontroller.cpp
-
-        ${MKLOG_SRC}
-        ${FILEIO_SRC}
-        ${CC_SRC}
-        ${OPENCL_HELPERS_SRC})
+        ${CLICKER_PATH}/tiltseriescontroller.cpp)
 
 set(CLICKER_INC
         ${CLICKER_PATH}
-        ${EMTOOLS_PATH}/MKLog
-        ${EMTOOLS_PATH}/FileIO
-        ${EMTOOLS_PATH}/CrossCorrelation
-        ${EMTOOLS_PATH}/OpenCLHelpers)
+        ${MK_LOG_INC}
+        ${FILEIO_INC}
+        ${CC_INC}
+        ${OPENCL_HELPERS_INC}
+        ${MINIMIZATION_INC}
+        ${THREADING_INC}
+        ${FILTER_GRAPH_INC}
+        ${MEMORY_POOL_INC}
+        )
 
 set(CLICKER_LIB
-        #MKLog
-        #FileIO
-        #CrossCorrelation
-        #OpenCLHelpers
-        ${CC_LIB_EXT}
+        ${OPENCL_HELPERS_LIB}
+        ${CC_LIB}
+        ${FILEIO_LIB}
+        ${MK_LOG_LIB}
+        ${MINIMIZATION_LIB}
+        ${THREADING_LIB}
+        ${FILTER_GRAPH_LIB}
+        ${MEMORY_POOL_LIB}
         Qt5::Widgets
         Qt5::Core
         Qt5::OpenGL
@@ -348,6 +329,7 @@ add_executable(Clicker
 
 target_include_directories(Clicker PUBLIC ${CLICKER_INC})
 target_link_libraries(Clicker ${CLICKER_LIB})
-target_compile_definitions(Clicker PUBLIC USE_OPENCL)
-#target_compile_definitions(Clicker PUBLIC USE_OPENCL)
+target_compile_definitions(Clicker PUBLIC NO_CUDA)
 ######################### Clicker #####################################
+
+

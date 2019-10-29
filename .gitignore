@@ -1,2 +1,6 @@
 # GV
 *.dot
+*.ps
+
+#cmake
+cmake-build-debug
