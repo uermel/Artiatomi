@@ -2,21 +2,24 @@ function marker = read(fileName, doPrint)
 % artia.marker.read -- Read marker files in extended EM-format (aditional info in
 % header and following the data).
 %
-%  Usage:
+% Usage:
 %    marker = artia.marker.read(fileName)
 %
-%  Inputs:
-%    fileName    File in EM-Format [character vector]
-%    doPrint     Whether or not to print info [0/1/true/false], false by
-%                default
+% Inputs:
+%    fileName (str):
+%       File in EM-Format [character vector]
+%    doPrint (bool):
+%       Whether or not to print info [0/1/true/false], false by default
 %
-%  Outputs:
-%    marker    	 Matlab structure containing the marker information
+% Outputs:
+%    marker (struct):
+%       Matlab structure containing the marker information
 %
-%  See Also
+% See Also:
 %    artia.marker.write, artia.em.read, artia.em.read_header
-%
-% Utz H. Ermel 2019    
+% 
+% Author:
+%   Utz H. Ermel, 2019    
 
     % Print action?
     if nargin == 1
@@ -28,9 +31,9 @@ function marker = read(fileName, doPrint)
     if ~header.isMarker
         error('Based on the header this EM-file is not a Markerfile. It was probably not created using Clicker or markerWrite.');
     end
-    xdim = header.DimX;
-    ydim = header.DimY;
-    zdim = header.DimZ;
+    xdim = header.dimX;
+    ydim = header.dimY;
+    zdim = header.dimZ;
 
     % Print action
     if doPrint

@@ -144,7 +144,7 @@ function modify(inpaths, outpaths, varargin)
     end
     
     for i = 1:size(inpaths, 2)
-        tempstruct = cfg2struct(inpaths{i});
+        tempstruct = artia.cfg.read(inpaths{i});
         
         for j = 1:size(universalNames, 2)
             tempstruct.(universalNames{j}) = universalParams{j};
@@ -154,6 +154,6 @@ function modify(inpaths, outpaths, varargin)
             tempstruct.(uniqueNames{j}) = uniqueParams{j,i};
         end
         
-        struct2cfg(tempstruct, outpaths{i});
+        artia.cfg.write(tempstruct, outpaths{i});
     end
 end
