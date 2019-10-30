@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 14)
 set(EMTOOLS_PATH "EmTools" CACHE PATH "Path to EmTools source.")
 set(CLICKER_PATH "Clicker/Clicker" CACHE PATH "Path to Clicker source.")
 set(ISA_PATH "ImageStackAlignator" CACHE PATH "Path to ImageStackAlignator source.")
-set(CUDA_PATH "/usr/local/cuda-9.0" CACHE PATH "Path to cuda 8 root")
+set(CUDA_PATH "/usr/local/cuda-9.0" CACHE PATH "Path to cuda 9 root")
 
 ######################### CUDA #############################
 set(CUDA_TOOLKIT_ROOT_DIR ${CUDA_PATH})
@@ -399,9 +399,71 @@ add_executable(ImageStackAlignator
 # Executable depends on ptx files
 add_dependencies(ImageStackAlignator isa_ptx)
 
-
 target_include_directories(ImageStackAlignator PUBLIC ${ISA_INC})
 target_link_libraries(ImageStackAlignator ${ISA_LIB})
 target_compile_definitions(ImageStackAlignator PUBLIC NO_OPENCL)
 target_compile_options(ImageStackAlignator PUBLIC -fpermissive)
 ######################### ImageStackAlignator #####################################
+
+
+######################### EmSART #####################################
+set(EMSART_SRC
+        ${FILEIO_SRC}
+        ${CUDA_HELPERS_SRC}
+        ${MKLOG_SRC}
+        ${THREADING_SRC}
+        ${FILTER_GRAPH_SRC}
+        ${MEMORY_POOL_SRC}
+        ${MINIMIZATION_SRC}
+
+        ${ISA_PATH}/AlignmentOptions.cpp
+        ${ISA_PATH}/BaseAligner.cpp
+        ${ISA_PATH}/CudaCrossCorrelator.cpp
+        ${ISA_PATH}/ImageStackAlignator.cpp
+        ${ISA_PATH}/Kernels.cpp)
+
+set(EmSART_INC
+        ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+        ${MPI_INCLUDE_PATH}
+        ${EMTOOLS_PATH})
+
+set(EmSART_LIB
+        ${CUDA_LIBS}
+        ${MPI_LIBRARIES}
+        ${FILEIO_LIB}
+        ${MK_LOG_LIB}
+        ${MINIMIZATION_LIB}
+        ${THREADING_LIB}
+        ${FILTER_GRAPH_LIB}
+        ${MEMORY_POOL_LIB}
+        m
+        cuda
+        ${CUDA_LIBRARIES}
+        ${CUDA_CUFFT_LIBRARIES}
+        ${CUDA_nppi_LIBRARY}
+        ${CUDA_nppc_LIBRARY}
+        ${MPI_LIBRARIES})
+
+message(${ISA_LIB})
+set(CMAKE_VERBOSE_MAKEFILE ON)
+
+# PTX-Kernel file
+#cuda_compile_ptx(ISA_PTX_FILES ${ISA_PATH}/ImageStackAlignatorKernels/kernel.cu)
+#add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/kernel.ptx COMMAND ${CMAKE_COMMAND} -E rename ${ISA_PTX_FILES} ${CMAKE_BINARY_DIR}/kernel.ptx DEPENDS ${ISA_PTX_FILES})
+#add_custom_target(isa_ptx ALL
+#        DEPENDS ${CMAKE_BINARY_DIR}/kernel.ptx ${ISA_PATH}/ImageStackAlignatorKernels/kernel.cu
+#        SOURCES ${ISA_PATH}/ImageStackAlignatorKernels/kernel.cu)
+
+# Executable
+add_executable(EmSART
+        ${EMSART_SRC})
+
+# Executable depends on ptx files
+#add_dependencies(ImageStackAlignator isa_ptx)
+
+
+target_include_directories(EmSART PUBLIC ${ISA_INC})
+target_link_libraries(EmSART ${ISA_LIB})
+target_compile_definitions(EmSART PUBLIC NO_OPENCL)
+target_compile_options(EmSART PUBLIC -fpermissive)
+######################### EmSART #####################################
