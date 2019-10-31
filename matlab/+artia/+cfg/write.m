@@ -1,4 +1,5 @@
 function write(instruct, outfile)
+% artia.cfg.write writes the 
 % A function to convert MATLAB structures to MKTools config files. The
 % structure must contain fields with string values only. The entry names
 % will be the field names

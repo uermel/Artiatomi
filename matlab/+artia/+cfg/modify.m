@@ -1,5 +1,5 @@
 function modify(inpaths, outpaths, varargin)
-% A function to change entries in a list of MKTools config files.
+% artia.cfg.modify changes entries in a list of Artiatomi config files.
 %
 % inpaths - cell array of cfg filenames to use as input
 % example: inpaths = {'/path/to/infileA.cfg', '/path/to/infileB.cfg'}

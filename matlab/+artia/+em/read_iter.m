@@ -13,8 +13,8 @@ function iter = read_iter(fileName, orig, width, varargin)
         assert(isempty(width), 'Width cannot be specified if reading z-sections.')
         readMode = 'section';
     else
-        assert(size(orig, 1) == 3), 'Origin has to be 3xN-element vector. Is %dx%d-element vector.', size(orig, 1), size(orig, 2));
-        assert(size(width, 1) == 3), 'Width has to be 3xN-element vector. Is %dx%d-element vector.', size(width, 1), size(width, 2));
+        assert(size(orig, 1) == 3, 'Origin has to be 3xN-element vector. Is %dx%d-element vector.', size(orig, 1), size(orig, 2));
+        assert(size(width, 1) == 3, 'Width has to be 3xN-element vector. Is %dx%d-element vector.', size(width, 1), size(width, 2));
     end
 
     % Read header

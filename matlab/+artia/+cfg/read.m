@@ -1,35 +1,21 @@
 function outstruct = read(infile)
-% A function to convert MKTools config files to MATLAB structures. The
-% structure contains a field for each entry in the config file.
+% artia.cfg.read creates MATLAB structs from Artiatomi cfg-files. All values 
+% are stored as strings, including numerical entries.
 %
-% infile - Path to a config file
+% Usage:
+%   outstruct = cfg2struct('path/to/file.cfg');
 %
-% outstruct - The corresponding structure.
+% Parameters:
+%   infile (str):
+%       Path to a config file.
 %
-% example: Reading a reconstruction config file.
+% Returns:
+%   outstruct (struct):
+%       The corresponding structure.
 %
-% outstruct = cfg2struct('path/to/recon.cfg');
-%
-% outstruct = 
-% 
-%   struct with fields:
-% 
-%                CudaDeviceID: '1 2'
-%              ProjectionFile: '/home/Group/millertree/yeast/cryo_pp/2018_01_04/tomos/tomo_12/tomo_12.st_Alig.st'
-%               OutVolumeFile: '/home/Group/millertree/yeast/cryo_pp/2018_01_04/tomos/Reconstructions/tomo_12_2k_ss4.em'
-%                  MarkerFile: '/home/Group/millertree/yeast/cryo_pp/2018_01_04/tomos/tomo_12/tomo_12_marker_post_alig.em'
-%                               -
-%                               -
-%                               -
-%           WriteVolumeAsFP16: 'false'
-%       ProjectionScaleFactor: '1'
-%     ProjectionNormalization: 'std'
-%
-% IMPORTANT: All values will be strings, including numerical entries.
-%
-% See also: struct2cfg, modify_cfgs
-%
-% UE 2018    
+% Author:
+%   Utz H. Ermel, 2018    
+
     disp(['Reading cfg-file ' infile]);
 
     content = fileread(infile);
