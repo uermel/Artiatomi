@@ -3,10 +3,21 @@ function [model] = recon2real(xyz, reconDim, voxelSize, volumeShifts)
 % coordinates to global coordinates.
 %
 % Parameters:
-%   xyz ():
+%   xyz (double):
+%       The reconstruction volume coordinates.
+%   reconDim (double[3]):
+%       The reconstruction dimensions.
+%   voxelSize (double):
+%       The voxel size of the reconstruction.
+%   volumeShifts (double[3]):
+%       The volume shifts applied during reconstruction.
 %
+% Returns: 
+%   model:
+%       The real space model.
 %
-%
+% Author:
+%   UE, 2019
 %
 
     % Binned, shifted tomogram coordinates to unbinned, unshifted coordinates

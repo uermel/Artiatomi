@@ -1,5 +1,39 @@
 function data = read_inc(fileName, orig, width, varargin)
-
+% artia.em.read_inc reads a portion of an EM-file.
+%
+% Parameters:
+%   fileName (str):
+%       Path to the input file.
+%   orig (double[1] or double[3]):
+%       1. Single value: is interpreted as the index of the z-section to be
+%       read.
+%       2. 3-element vector: is interpreted as the origin of the box to be
+%       read (see Name Value pair 'readMode').
+%   width (double[3]):
+%       The dimensions of the subvolume to be read.
+%
+% Name Value Pairs:
+%   'readMode' (str):
+%       1. 'CenterWidth' (default): The orig-parameter specifies the
+%       center of the box to be cut in EmSART convention.
+%       2. 'CornerWidth': The orig-parameter specifies the upper left
+%       corner of the box to be cut.
+%   'padMode' (str):
+%       If part of the box is outside the volume:
+%       1. 'replicate' (default): the void is filled by replicating the border voxels.
+%       2. 'symmetric': the void is filled by mirroring the filled portion.
+%       3. 'circular': the void is filled with a circular repetition of the filled portion
+%       4. 'mean': the void is filled with the mean value of the filled
+%       portion.
+%       5. 'zero': the void is filled with zeros.
+%
+% Returns:
+%   data (double):
+%       The requested subvolume.
+%
+% Author:
+%   UE, 2019
+%
     % Default params
     defs = struct();
     defs.readMode.val = 'CenterWidth';

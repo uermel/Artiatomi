@@ -1,10 +1,9 @@
 function marker = scale(marker, pixelSize, newPixelSize, varargin)
 % artia.marker.scale rescales the 3D alignment of tomographic tilt series.
 %
-%
 % Parameters:
 %   marker (struct, str): 
-%       Markerfile structure or filename of a markerfile 
+%       Markerfile structure or filename of a markerfile.
 %   voxelSize (int): 
 %       Current voxel size of the marker file
 %   newVoxelSize (int): 
@@ -17,7 +16,8 @@ function marker = scale(marker, pixelSize, newPixelSize, varargin)
 %   marker (struct) - A markerfile structure. 
 %
 % Author:
-%   Utz H. Ermel, 2019
+%   UE, 2019
+%
 
     % Read if necessary
     if ischar(marker)

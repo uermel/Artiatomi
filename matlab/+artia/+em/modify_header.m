@@ -1,4 +1,16 @@
-function modify_header(file, varargin)
+function modify_header(fileName, varargin)
+% artia.em.modify_header modifies the header of an EM-file
+%
+% Parameters:
+%   file (str):
+%       Path to the file.
+%
+% Name Value Pairs:
+%   Header fields to be modified are supplied as Name Value pairs.
+%
+% Author:
+%   UE, 2019
+%
 
     % Set up default values for arguments
     fmt = artia.em.header_fmt();
@@ -31,10 +43,10 @@ function modify_header(file, varargin)
     end
     
     % Open file if filename was passed
-    if ischar(file)
-        fid = fopen(file, 'a+', 'ieee-le');
+    if ischar(fileName)
+        fid = fopen(fileName, 'a+', 'ieee-le');
     else
-        fid = file;
+        fid = fileName;
     end
     
     for i = 1:numel(sec_names)
@@ -43,7 +55,7 @@ function modify_header(file, varargin)
     end
     
     % Close if filename was passed
-    if ischar(file)
+    if ischar(fileName)
         fclose(fid);
     end
     

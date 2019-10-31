@@ -13,7 +13,7 @@ function fmt = header_fmt()
 %       that header section.
 %
 % Author:
-%   Utz H. Ermel 2019
+%   UE, 2019
 
     fmt = struct();
     % Header elements in their order. Order is preserved in MATLAB structures, 

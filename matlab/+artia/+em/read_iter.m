@@ -1,4 +1,5 @@
 function iter = read_iter(fileName, orig, width, varargin)
+% artia.em.read_iter returns a function handle to 
 
     % Default params
     defs = struct();

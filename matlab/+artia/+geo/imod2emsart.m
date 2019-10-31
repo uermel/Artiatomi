@@ -2,6 +2,18 @@ function ali = imod2emsart(imod_rootname)
 % artia.geo.artia2emsart converts an IMOD tomographic tilt series alignment
 % to the EmSART convention and format. Needs the .xf and .tlt files.
 %
+% Parameters:
+%   imod_rootname (str):
+%       The root filename of the imod project. For example
+%       '/path/to/tilt' for an etomo directory for stack
+%       '/path/to/tilt.st'.
+%
+% Returns:
+%   ali (double[10xNx1]):
+%       The EmSART projection alignment parameters for N projections.
+%
+% Author:
+%   MK
 %
     fid = fopen([imod_rootname '.xf']);
     fx = fscanf(fid, '%f %f %f %f %f %f\n', [6, inf]);

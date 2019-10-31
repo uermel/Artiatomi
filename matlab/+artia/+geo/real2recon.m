@@ -2,7 +2,22 @@ function [xyz] = real2recon(model, reconDim, voxelSize, volumeShifts)
 % artia.geo.real2recon transforms the 3D marker model from global
 % coordinates to binned, shifted reconstruction coordinates.
 %
+% Parameters:
+%   model (double):
+%       The real space model to be converted.
+%   reconDim (double[3]):
+%       The reconstruction dimensions.
+%   voxelSize (double):
+%       The voxel size of the reconstruction.
+%   volumeShifts (double[3]):
+%       The volume shifts applied during reconstruction.
 %
+% Returns:
+%   xyz (double):
+%       The reconstruction volume coordinates.
+%
+% Author:
+%   UE, 2019
 %
 
     % Mirror along y-axis and rotate -90 degrees to transform to recon

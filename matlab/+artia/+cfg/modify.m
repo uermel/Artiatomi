@@ -1,37 +1,50 @@
 function modify(inpaths, outpaths, varargin)
-% artia.cfg.modify changes entries in a list of Artiatomi config files.
+% artia.cfg.modify modifies or creates Artiatomi cfg-files.
 %
-% inpaths - cell array of cfg filenames to use as input
-% example: inpaths = {'/path/to/infileA.cfg', '/path/to/infileB.cfg'}
+% Parameters:
+%   inpaths (cell):
+%       cell array of cfg filenames to use as input.
+%       Example: 
+%       .. code-block:: matlab   
+%
+%           inpaths = {'/path/to/infileA.cfg', '/path/to/infileB.cfg'};
 % 
-% outpaths - cell array of output filenames for the new config files
-% example: outpaths = {'/path/to/outfileA.cfg', '/path/to/outfileB.cfg'}
+%   outpaths (cell):
+%       cell array of output filenames for the new config files.
+%       Example: 
+%       .. code-block:: matlab   
+%
+%           outpaths = {'/path/to/outfileA.cfg', '/path/to/outfileB.cfg'};
+%
+% Name Value Pairs:
 % 
-% All entries to be modified are added as name-value pairs.
-% In order to change an entry two possibilities exist:
+%   All entries to be modified are added as name-value pairs. In order to change an entry two possibilities exist
 % 
-% 1. Change/Append an entry with the same value in all config files. 
-%    example: 
-%    To set 'VoxelSize' to 4 in all configs in the infiles list:
+%     1. Change/Append an entry with the same value in all config files. 
+%        Example: 
+%        To set 'VoxelSize' to 4 in all configs in the infiles list:
 %
-%    modify_configs(inpaths, outpaths, 'VoxelSize', {'4'});
+%        IMPORTANT: Convert Numbers to strings.
+%        IMPORTANT: Single values also have to contained in a cell array.
+%       .. code-block:: matlab  
+% 
+%        modify_configs(inpaths, outpaths, 'VoxelSize', {'4'});
+% 
+%     2. Change/Append an entry with a different value for each config file.
+%        Example: 
+%        To set 'VoxelSize' to 4 in the first config, to 8 in the second
+%        config and to 12 in the third config:
 %
-%    IMPORTANT: Convert Numbers to strings.
-%    IMPORTANT: Single values also have to contained in a cell array.
+%       IMPORTANT: Convert Numbers to strings.
+% 
+%       .. code-block:: matlab  
 %
-% 2. Change/Append an entry with a different value for each config file.
-%    example: 
-%    To set 'VoxelSize' to 4 in the first config, to 8 in the second
-%    config and to 12 in the third config:
-%
-%    modify_configs(inpaths, outpaths, 'VoxelSize', {'4', '8', '12'});
-%
-%    IMPORTANT: Convert Numbers to strings.
+%        modify_configs(inpaths, outpaths, 'VoxelSize', {'4', '8', '12'});
 %
 %
-%   See also: cfg2struct, struct2cfg
-%
-% UE 2018
+% Author:
+%   Utz H. Ermel, 2018
+
     params = {'CudaDeviceID', ... 
             'ProjectionFile', ... 
             'OutVolumeFile', ... 

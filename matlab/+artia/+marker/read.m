@@ -13,13 +13,12 @@ function marker = read(fileName, doPrint)
 %
 % Outputs:
 %    marker (struct):
-%       Matlab structure containing the marker information
+%       Matlab structure containing the marker information.
+%       1. marker.ali -> The tilt series alignment.
+%       2. marker.model -> The real space model.
 %
-% See Also:
-%    artia.marker.write, artia.em.read, artia.em.read_header
-% 
 % Author:
-%   Utz H. Ermel, 2019    
+%   UE, 2019    
 
     % Print action?
     if nargin == 1

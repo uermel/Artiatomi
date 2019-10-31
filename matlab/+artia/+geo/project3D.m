@@ -1,6 +1,38 @@
-function [ali, model] = project3D(xyz, ali, phi, reconDim, imageDims, voxelSize, volumeShifts, magAnisoAmount, magAnisoAngle, refinementShifts)
-% project3D projects coordinates from binned, volume-shifted tomograms to
+function [ali, model] = project3D(xyz, ali, phi, reconDim, imageDim, voxelSize, volumeShifts, magAnisoAmount, magAnisoAngle, refinementShifts)
+% artia.geo.project3D projects coordinates from binned, volume-shifted tomograms to
 % magnification distorted 2D-Image coordinates.
+%
+% Parameters:
+%   xyz (double):
+%       3D positions of particles in the tomogram.
+%   ali (double):
+%       The EmSART tilt series alignment parameters.
+%   phi (double):
+%       The angle of beam declination (degrees).
+%   reconDim (double[3]):
+%       The reconstruction dimensions.
+%   imageDim (double[2]):
+%       The projection dimensions.
+%   voxelSize (double):
+%       The voxelsize used for reconstruction.
+%   volumeShifts (double[3]):
+%       The volumeShifts applied during reconstruction.
+%   magAnisoAmount (double):
+%       The magnification anisotropy factor (major axis/minor axis, i.e. ellipticity).
+%   magAnisoAngle (double):
+%       The angle of the minor axis to the x axis (degrees).
+%   refinementShifts (double[]):
+%       Alignment shifts determined by EmSARTRefine.
+%
+% Returns:
+%   ali (double):
+%       The EmSART tilt series alignment parameters (for each input particle). 
+%   model (double):
+%       The real space model equivalent of the input particles.
+%
+% Author:
+%   UE, 2019
+%
 
     % Binned, shifted tomogram coordinates to unbinned, unshifted coordinates
     %  --> Center points and remove binning
@@ -86,7 +118,7 @@ function [ali, model] = project3D(xyz, ali, phi, reconDim, imageDims, voxelSize,
                  + (m12 * y(marker)) ...
                  + (m13 * z(marker)) ...
                  + shiftX(projection) ...
-                 + imageDims(1)/2 ...
+                 + imageDim(1)/2 ...
                  - refinementShifts(marker, projection, 1);
              
             % Projected point x
@@ -94,31 +126,31 @@ function [ali, model] = project3D(xyz, ali, phi, reconDim, imageDims, voxelSize,
                  + (m12 * y(marker)) ...
                  + (m13 * z(marker)) ...
                  + shiftX(projection) ...
-                 + imageDims(1)/2;
+                 + imageDim(1)/2;
              
             % Projected point y
             py =   (m21 * x(marker)) ...
                  + (m22 * y(marker)) ...
                  + (m23 * z(marker)) ...
                  + shiftY(projection) ...
-                 + imageDims(2)/2 ...
+                 + imageDim(2)/2 ...
                  - refinementShifts(marker, projection, 2);
              
              pyo =   (m21 * x(marker)) ...
                  + (m22 * y(marker)) ...
                  + (m23 * z(marker)) ...
                  + shiftY(projection) ...
-                 + imageDims(2)/2;
+                 + imageDim(2)/2;
             
             % Check that the points are within the image
-            xwithin = px > 0 && px < imageDims(1);
-            ywithin = py > 0 && py < imageDims(2);
+            xwithin = px > 0 && px < imageDim(1);
+            ywithin = py > 0 && py < imageDim(2);
             
             % Mark points outside invalid
             if xwithin && ywithin
                 % Distort the image coordinates
-                dist = artia.geo.induceMagAniso([px py], magAnisoAmount, magAnisoAngle, imageDims);
-                disto = artia.geo.induceMagAniso([pxo pyo], magAnisoAmount, magAnisoAngle, imageDims);
+                dist = artia.geo.induceMagAniso([px py], magAnisoAmount, magAnisoAngle, imageDim);
+                disto = artia.geo.induceMagAniso([pxo pyo], magAnisoAmount, magAnisoAngle, imageDim);
                 
                 % Save the distorted points
                 posU(projection, marker) = dist(1);

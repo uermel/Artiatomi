@@ -1,11 +1,29 @@
 function mmap = memmap(fileName, varargin)
-
+% artia.em.mmap opens an EM-file as a memory map and returns the
+% memorymap-object.
+%
+% Parameters:
+%   fileName (str):
+%       Path to the EM-file.
+%
+% Name Value Pairs:
+%   'fmode' (str):
+%       The file mode. Can be either 'r' (read) or 'w' (write). Defaults to
+%       'r'.
+%
+% Returns:
+%   mmap (object):
+%       Matlab memory map object.
+%
+% Author
+%   UE, 2019
+%
     % Default params
     defs = struct();
-    defs.mode.val = 'r';
+    defs.fmode.val = 'r';
     artia.sys.getOpts(varargin, defs);
     
-    switch lower(mode)
+    switch lower(fmode)
         case 'r'
             filemode = false;
         case 'w'

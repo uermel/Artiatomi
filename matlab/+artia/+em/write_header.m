@@ -1,5 +1,21 @@
 function fid = write_header(header, file)
-    
+% artia.em.write_header writes the header of an em-file.
+%
+% Parameters:
+%   header (struct):
+%       Matlab struct containing the em-header sections as fields.
+%
+%   fileName (str/fileID):
+%       1. String input: Path to the file.
+%       2. File ID input: Matlab file ID to an opened file.
+%
+% Returns:
+%   fid (fileID):
+%       Matlab file ID to the file.
+%
+% Author:
+%    UE, 2019
+%
     if ischar(file)
         fid = fopen(file,'w','ieee-le');
     else

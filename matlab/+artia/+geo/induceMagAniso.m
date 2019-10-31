@@ -1,7 +1,23 @@
 function distorted = induceMagAniso(coords, amount, angle, dims)
-% artia.geo.induceMagAniso applies an affine transformation to induce
-% magnification anisotropy.
+% artia.geo.induceMagAniso applies an affine transformation to input coordinates to
+% induce magnification anisotropy.
 %
+% Parameters:
+%   coords (double[Nx2]):
+%       The input coordinates.
+%   amount (double):
+%       The anisotropy factor (major axis / minor axis, i.e. ellipticity).
+%   angle (double):
+%       The angle of the minor axis to the x-axis (degrees).
+%   dims (double[2])
+%       The image dimensions.
+%
+% Returns:
+%   distorted (double[Nx2]):
+%       The distorted coordinates.
+%
+% Author:
+%   UE, 2019
 %
     % Get distortion matrices -- these are the matrices for correcting
     % distortion, so inversion of the stretch is necessary later on
