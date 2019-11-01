@@ -36,7 +36,7 @@ function emfid = write(data, fileName, varargin)
 %       matlab file-ID is returned.
 %
 % Author:
-%   Utz H. Ermel 2019
+%   UE, 2019
 
     % Default params
     defs = struct();
