@@ -1,4 +1,4 @@
-function write(data, fileName, varargin)
+function emfid = write(data, fileName, varargin)
 % artia.em.write writes the 1-3 dimensional array to an EM-file at fileName. 
 %
 % Usage:
@@ -40,6 +40,7 @@ function write(data, fileName, varargin)
     defs.dataType.val = 'float32';
     defs.header.val = [];
     defs.doAppend.val = false;
+    defs.returnFid = false;
     artia.sys.getOpts(varargin, defs)
     
     % Data size
@@ -102,6 +103,12 @@ function write(data, fileName, varargin)
         fwrite(fid, data, dataType);
     end
     
-    % Close file
-    fclose(fid);
+    % Close file if not returning fid
+    if returnFid
+        emfid = fid;
+    else
+        fclose(fid);
+        emfid = [];
+    end
+    
 end
