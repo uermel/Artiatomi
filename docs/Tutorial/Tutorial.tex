@@ -1,0 +1,768 @@
+\documentclass[12pt,a4paper]{scrartcl}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{amssymb}
+\usepackage{wasysym}
+\usepackage{textcomp}
+\usepackage{listings}
+\usepackage{color} %red, green, blue, yellow, cyan, magenta, black, white
+\definecolor{mygreen}{RGB}{28,172,0} % color values Red, Green, Blue
+\definecolor{mylilas}{RGB}{170,55,241}
+
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows}
+\usepackage{pgfplots}
+
+
+\begin{document}
+	
+\tikzstyle{io} = [rectangle, rounded corners, minimum width=3cm, minimum height=1cm,text centered, draw=black, fill=green!30]
+\tikzstyle{arrow} = [thick,->,>=stealth]	
+	
+\lstset{language=Matlab,%
+		%basicstyle=\color{red},
+		breaklines=true,%
+		morekeywords={matlab2tikz},
+		keywordstyle=\color{blue},%
+		morekeywords=[2]{1}, keywordstyle=[2]{\color{black}},
+		identifierstyle=\color{black},%
+		stringstyle=\color{mylilas},
+		commentstyle=\color{mygreen},%
+		showstringspaces=false,%without this there will be a symbol in the places where there is a space
+		numbers=left,%
+		numberstyle={\tiny \color{black}},% size of the numbers
+		numbersep=9pt, % this defines how far the numbers are from the text
+		emph=[1]{for,end,break},emphstyle=[1]\color{red}, %some words to emphasise
+		%emph=[2]{word1,word2}, emphstyle=[2]{style},    
+} 
+
+
+\setlength{\parindent}{0em} 
+\title{\textbf{Software Documentation Artiatomi}}
+\author{Lasse Sprankel} \date{\today}
+\maketitle
+
+\pagenumbering{roman}
+\tableofcontents
+\newpage
+\pagenumbering{arabic}
+
+\section{Introduction}
+
+Artiatomi is software package for the alignment of tilt-series, reconstruction and sub-tomogram averaging of tomographic data. It is based on the simultaneous algebraic reconstruction technique (SART) and the principle of minimizing interpolations, optimizing i/o and performing all computations on the GPUs.  
+
+The processing pipeline is the following: 
+\begin{enumerate}
+
+\item Dose-fractionation image stack alignment
+\item CTF estimation (GUI) of the individual images of the tilt-series, optimized for dose-levels used in tomography.  
+\item Alignment of the tilt-series (GUI), involving all known distortions of the electron microscope
+\item Three-dimensional CTF correction
+\item Sub-Tomogram refinement and optimization. 
+\end{enumerate}
+
+General details:
+\begin{itemize}
+	\item We put efforts that each step can be done individually without binding to our pipeline
+		\begin{itemize}
+		\item Dose-fractionation stack alignment, the CTF and the 3D marker 			model calculation can be estimated elsewhere.
+		\end{itemize}
+	\item Typically we use the EM Format as defined in the original EM Program 		from Reiner Hegerl and further advertised in the tom package.
+	\item MATLAB functions may support in between processing commands, e.g. 		creating of a dose-weighting function, generations of masks, etc. 
+\end{itemize}
+
+\newpage 
+\section{Overview - Processing}
+\begin {figure}[b!] 
+\centering 
+\begin{tikzpicture} [node distance=2cm] 
+
+\node (start) [io]{data acqusition};
+\node (ISTA)[io, below of=start,]{ImageStackAlignator};
+\node (pro1) [io, below of=ISTA,xshift=-3cm] {Clicker};
+\node (pro2) [io, below of=ISTA, xshift=3cm] {CTFDetector}; 
+\node (pro3) [io, below of=pro1, xshift=3cm] {SART Reconstruction}; 
+\node (pro4) [io, below of=pro3] {Particle picking};
+\node (pro5) [io, below of=pro4] {Extract Particles};
+\node (pro6) [io, below of=pro5] {SubTomogramAverage};
+\node (pro7) [io, below of=pro6] {Local Refinement};
+\node (pro8) [io, below of=pro7,xshift=-4cm] {Reconstructing Subvols};
+\node (pro9) [io, below of=pro7,xshift=4cm] {SubTomogramAverage};
+
+\draw [arrow] (start) -- node[anchor=west]{frames.mrc} (ISTA);
+\draw [arrow] (ISTA) --  node[anchor=east,xshift=-0.5cm]{TiltSeries.Alig.st}(pro1);
+\draw [arrow] (ISTA) -- node[anchor=west,xshift=0.5cm]{TiltSeries.Alig.st}(pro2);
+\draw [arrow] (pro1) -- node[anchor=east,xshift=-0.5cm]{marker.em} (pro3);
+\draw [arrow] (pro2) -- node[anchor=south]{CTF File.em}(pro1);
+\draw [arrow] (pro2) -- node[anchor=west,xshift=0.5cm]{CTF File.em} (pro3);
+\draw [arrow] (pro3) -- node[anchor=west]{NL, HR and HRF}(pro4);
+\draw [arrow] (pro4) -- node[anchor=west]{motl.em} (pro5);
+\draw [arrow] (pro5) -- node[anchor=west]{particles}(pro6);
+\draw [arrow] (pro6) -- node[anchor=west]{averaged reference}(pro7);
+\draw [arrow] (pro7) -- node[anchor=west,xshift=0.5cm]{shifts}(pro8);
+\draw [arrow] (pro8) -- node[anchor=south]{refined particles}(pro9);
+\draw [arrow] (pro9.south) to [out=-150, in=-30] node[anchor=north]{upscale 2k,4k,8k} (pro8.south);
+
+
+
+
+\end{tikzpicture}
+\caption{Overview - Processing Pipeline}
+\end{figure}
+
+
+\newpage
+\section{Dose fractionation image stack alignment} 
+
+\subsection{Motivation}
+
+This procedure is used to align the individual frames of one 
+(dose fractionated) exposure. Cross correlation is used to find 
+the correct alignments. Only a translational movement is compensated. 
+In addition to the frame alignment and summing of the frames, 
+dead pixels are removed, and the K2 detector sectors are checked 
+for sanity.
+
+\subsection{Input and Expected Output}
+First argument passed is the input file name, either a single MRC file or a SerialEM mdoc-file with a list of all MRC files in a tilt series. If a mdoc file provided, the second parameter must be "-a" as you will see below. The output would be in the same folder as the input. The name of the output would be "Input+Alig.st".
+
+\subsection{Procedure}
+
+Open a terminal and navigate to the folder with the input files. Run the following command.
+
+
+\textbf{ImageStackAlignator TiltSeries.mrc.mdoc - a -lp 400 -lps 100 -hp 50 			-hps 15 -m 100 }
+\begin{itemize}
+
+
+\item\textbf{lp:} Low-pass filter cut in pixel
+\item\textbf{lps:} lps: Gaussian smoothing of lp to reduce leaking
+\item\textbf{hp:} High-pass filter cut in pixel
+\item\textbf{hps:} Gaussian smoothing of hp to reduce leaking
+\item\textbf{m:} maximum shift allowed per frame in the first shift determination step 
+\end{itemize}
+
+Repeat this step for all tomograms. 
+
+\section{CTF Correction}
+
+\subsection{Motivation}
+The CTFDetector estimates the defocus on a micrograph. This is equivalent to the popular function CTFFind4, adapted for low-dose tomography data. It was benchmarked to CTFPlotter from IMOD and performs equal or better. It runs in two steps:
+\begin{enumerate}
+\item Coarse detection for general estimation of the parameters 
+\item Fine detection for a detailed estimation on each micrograph
+\end{enumerate}
+It performs a brute force scan of different defocus, astigmatisms and finds the best match. The power spectra can be low-pass filtered for more reliable results. After the first image is roughly estimated all other images run automatically. Other CTF parameters are given in the reconstruction configuration file, such as Cs, acceleration voltage and dampening envelope.
+\begin{itemize}
+\item Make sure that the pixel size of the header is set and read properly. For this purpose you can connect to r2d2 (ssh r2d2) and execute the python script \textbf{e2iminfo.py -H /path/to/filename.mrc}. The current pixelsize is displayed in the lines apix\_x, apix\_y and apix\_z.  
+\item Consecutive frames could be averaged especially
+\end{itemize}
+
+\subsection{Input and Expected Output}
+
+\begin{itemize}
+\item Input
+\begin{itemize}
+\item coarsely aligned tilt series *.mrcAlig.st
+\end{itemize}
+\item Output
+\begin{itemize}
+\item corrected ctf file *.em
+\end{itemize}
+\end{itemize}
+
+\subsection{Procedure}
+Connect to one of the free GPU machines with \textbf{ssh -X name.local}. To check wheter the GPU machine is free use the \textbf{check} command on your local computer. After logged in to the GPU machine you can execute the \textbf{nvidia-smi} command to see if there are any processes running on the GPU (sometimes it can happen, that a GPU process is running but not displayed with the check command). 
+Start CTFDetector by typing the command CTFDetector and pressing enter – the GUI appears.
+\vspace{1em}
+
+\textbf{Loading a tilt series stack and preparation}
+\vspace{1em}
+\newline In order to open a tilt series press the \textbf{Load MRC} button on the top left side of the GUI. Choose a tilt series stack of type \textbf{.st} in the file browser and wait until loading the file has finished (blue progress bar).
+Check which image of the stack is displayed. ’Current index’ in the ’0) Preview’ panel should be 20 for the 0 -projection.Eventually, press the ’Check mask and filter’ button on the ’0) Preview’ panel to view the currently selected image of the stack and display its power spectrum. The following should be displayed:
+To prepare analysis adjust the following parameters:
+
+\begin{itemize}
+\item Remove Backgroud
+\item Average PS
+\item Binning: 4
+\end{itemize}
+
+Adjust the ’Inner width’ parameter such that the central peak and the first minimum, but not the first maximum (first ring) in the power spectrum is covered by the grey circle \textbf{(note that value for later}. Check by adjusting the parameter and pressing \textbf{Check mask and filter}, as in the examples below. Press \textbf{Next}.  
+\vspace{1em}
+\newline\textbf{Coarse CTF estimation and astigmatism} 
+\vspace{1em}
+\newline In the \textbf{1) Coarse Detection} panel set the following parameters
+\begin{itemize}
+\item Defocus (center) in nm: 2500
+\item Decfocusrange in nm: 5000
+\item Defocus step in nm: 50 
+\end{itemize}
+Press \textbf{Start} and wait for the detection to finish. 
+\newline If the theoretical CTF matched up with the signal well during the detection, proceed by pressing \textbf{Next}. If the curve did not match up well, adjust the center and range. \textbf{Best defocus} should always be a positive value, typically between 0 and 5000.
+\vspace{1em}
+\newline In the \textbf{2) Astigmatism} panel set the following parameters for a broad search:
+Defocus (center) should be the ’Best Defocus’ value from the previous step. The search of values is defined by the range centered around the ’center’ value. This means that for a center of 1000 and a range of 1000 with a step size of 100, values will range from 500 - 1500 in steps of 100, i.e. [500, 600, 700, \dots , 1400, 1500].
+\vspace{1em}
+\newline\textbf{Astig} is typically \~{}200, with a \textbf{Astig range} of \~{} 400 (values between 0 and 400) and a \textbf{Astig step} size of 50.Astigmatism reflects the stretching of the circular pattern in one direction (i.e. quantifies how eliptic the pattern looks).
+\vspace{1em}
+\newline\textbf{A. angle min} should be 0,\textbf{A.angle max} should be 180, with a stepsize of 20 (noramlly sufficient). Press \textbf{Start Astig} and wait for the detection to finish (blue bar indicates progress). After the first round of detection, the \textbf{Best astig}, {textbf{Best def} and textbf{Best angle} text boxes will show the best fitting value. To use these values for further detection press \textbf{Recenter search range}.
+
+The second iteration of detection is used for a finer search. The smallest step sizes for detection should be 25 nm (Defocus), 10 nm (Astigmatism) and 5 degrees (Angle).
+Defocus (center) should be the \textbf{Best Defocus} value from the previous step. The range and step size should be smaller, for example range 500 and step 25. Don’t use a large range with a small step size, as it will increase computational time exponentially.
+
+The same holds true for astigmatism estimation. Set range to the smaller value of 100 and the step to 10. The center value is set to 50 so negative values are not checked.
+Constrain the number of angles checked in the process around the best angle and use a smaller step size. In this example case the best angle was 0 degrees, so search from 0 to 25 degrees with a step size of 5.
+Press \textbf{Start Astig} and wait for the estimation to finish.
+Once this is finished proceed to the next step by pressing \textbf{Next}. 
+\vspace{1em}
+\par\textbf{Fine estimation}
+\vspace{1em}
+
+Typically coarse estimation occurs in the central slice of the tilt series stack. Using the determined parameters, the CTF can be estimated on the remaining slices, as astigmatism and angle usually don’t change during one series.
+\vspace{1em}
+
+\centerline{{\color{red}\textbf{Uncheck Average PS}}}
+\vspace{1em}
+
+In the \textbf{3) Fine Detection} panel set the following parameters for a broad search:
+
+\begin{itemize}
+\item \textbf{Defocus (center)}: Best defocus from the last estimation (should be there automatically). 
+\item \textbf{Defocus range}: Twice the best defocus value to avoid checking negative values (i.e. 6000 for a best defocus of 3000). 
+\item \textbf{Defocus step}: 50
+\item \textbf{Angle}: Best Angle from the last estimation (should be there automatically). 
+\end{itemize}
+
+Press \textbf{Start} and wait for the estimation to finish. Save the result as an ’.em’-File in the folder of the tilt series stack with the name of the stack and the suffix ’\_ctf’, i.e. for ’tomo\_16.Aligst.st’ save ’tomo\_16\_ctf.em’.
+
+\section{Tilt-Series Alignment}
+\subsection{Motivation}
+Register all micrographs of the tilt-series ( after stack alignment "Alig.st") to a common origin, i.e. calculate the 3D marker model. In order to manually register the images of the tilt-series to each other, we will use "clicker". With "clicker" we can mark the gold beads (GB) in the sample that are used as fiducials for the alignment of the tilt-series. Once the GB are marked, "clicker" can calculate the 3D marker alignment of the different images to each other. Basic 3D geometry principles are used for aligning the tilt series.
+\subsection{Input and Expected Output}
+The input for this part of the processing is typically the "Alig.st" file, which was created after alignment of the dose-fractionation stacks. The output of the 3D marker model is the marker file (".em") that will be further used for 3D reconstruction.
+\subsection{Procedure}
+Open "clicker" (after adapting the bashrc file, just enter \textbf{clicker} in the terimnal) which should open the GUI. Load the tilt series in clicker go to: \par File \textrightarrow{}  Open tilt series \textrightarrow{} select your tilt series *.Alig.st from the Data folder. In the upper part of the Clicker GUI you can use the sliders "Center" and "Width" to adjust the contrast/intensity of the images. Find a setting so that you can properly see the GB. Use the bar on the left side (or the \textbf{PgUp/PgDown} buttons on the keyboard) to browse through the projections. You can use \textbf{left-click drag and drop} to move the image and the \textbf{mouse wheel} to zoom in or out.
+
+Move to the 0  projection (the tilt-angle can be seen in the upper left part of the clicker GUI). Click on \textbf{New} in the lower-right part of the GUI to create a new marker file. The positions of all GB that you click will be saved in this marker file. However, there is no auto-save function. So if the GUI crashes, all unsaved progress is gone! Save your work from time to time! Choose the most central GB and click on it with the \textbf{right mouse button}. Adjust the marker size (slider at the right side of the GUI, close to the bottom) so that the green circle fits over the gold bead. In the inset images, you will see the gold bead you have clicked and the template that will be used for cross-correlation (cc) of the other gold beads (thanks to cc, you will only need to click near the gold beads, not precisely on the GB). In case the autofit does not work, you can use the \textbf{middle mouse click to manually click the GB} (this should be done very accurately since it does not re-do the cross-correlation). Use the PgUp/PgDown buttons to move through the image stack and click the identical GB in every image. In this process you can also exclude tilts by not clicking any GB in the respective image.  If you want to delete a marker from the current image, use the \textbf{delete button} of your keyboard. If you click the \textbf{Remove} button on the GUI that is close to the \textbf{Add} button, you remove the current marker from the entire image stack!
+Once you selected the first GB on all projections, you can check \textbf{Fix fist marker at center}. If you now scan through the projections, you will see that now all the images are aligned to the marker that you have clicked. This will make it easier to click the rest of the gold beads, since the jumps from image to image have been removed. Click on \textbf{Add} to click a 2nd marker. Usually we click 15-20 GB for each tomogram. 
+After you are done with clicking GBs , make sure that your first GB is the active one (select number 1 from the drop-down in the upper right part of the GUI) and proceed with the alignment. 
+
+\par The tilt series can be aligned for four different parameters (\textbf{tilt angles, magnification, image rotation, beam-declination}). Before starting the alignment change the value of the \textbf{Magnification anisotropy} to 1.016 and 42 (if data was acquired at magnification of 64,000x). If you do not know the value you can leave it as it is. 
+\par If you have clicked at least 20 goldbeads, the alignment for the beam declination ist done first. For that, a constant image rotation is needed (\textbf{Image rotation} and \textbf{Constant img. rot.} both checked. Tilt angles and Magnification remain unchecked).Press \textbf{Start} to align. A pop up window shows the beam declination value and it is automatically saved in the Set beam decl. to: box. The second alignment round is for Tilt angles, Image rotation (\textbf{uncheck Constant img. rot., Beam-declination } but the beam-declination box should contain the determined value). Experience showed that the alignment works better if we do not align for Magnification, but if you want to do it you should do it in this round of the alignment. 
+Press \textbf{Start} to align. Again a pop up window will appear which gives you a error score in pixel for each projection and per marker. You should click as precisely as possible, in order to get the best image registration, so if your global error score is above 5, you should troubleshoot.
+\par If you switch from \textbf{Fix first marker at center} to \textbf{Use alignment}, you will see all your images rotated in order to get the tilt-axis on the X-axis. In an ideal alignment, all markers should now move on a straight line up and down. You can check \textbf{Auto loop} at the left side of the GUI to automatically loop through the tilts. If you also check \textbf{Skip unaligned p.}, the projections where you have not clicked gold beads will be excluded from this loop. After you are done with the alignment of your tilt-series, save your marker file in your Data folder.
+
+
+\section{Reconstructing the tilt series}
+\subsection{Motivation}
+Initially we will create two reconstructions for each tilt series, one with high contrast and another one with high resolution. The idea behind this is as follows: In the high contrast tomogram you can nicely see the macromolecules and mark their positions (typical for ART reconstructions). Using this information we will extract the sub-tomograms from the high resolution and ctf corrected tomograms. Since we want to extract sub tomograms from a another tomogram it is important that the reconstruction dimensions for both of the tomograms are identical.
+\subsection{Input and Expected Output}
+\begin{itemize}
+\item Input
+\begin{itemize}
+\item .Alig.st projection file
+\item marker file from either clicker(*.em) or Imod(*.fid)
+\item Ctf correction *.em
+\end{itemize}
+\item Output
+\begin{itemize}
+\item *.cfg file for high contrast nice looking reconstruction (NL)
+\item *.cfg file for high resolution (HR) ctf corrected reconstruction 
+\item NL and HR reconstruction  
+\end{itemize} 
+\end{itemize}
+
+\subsection{Procedure}
+For the reconstruction we will need a *.cfg file, which can be generated with clicker or by hand.  To generate it using clicker click on \textbf{Assistants} \textrightarrow{} \textbf{Reconstruction}. The reconstruction assitant will pop up with for different panels (General setting, Projection settings, Volume settings, CTF correction).\\
+
+For the NL reconstructions select the following parameters:
+
+\begin{enumerate}
+\item Genreal settings
+\begin{itemize}
+\item Ordered subset size (SIRTcount) 10 
+\end{itemize}
+\item Projection settings
+\begin{itemize}
+\item Correct for bad pixels 10
+\item \CheckedBox Apply Fourier filter: LP:400 LPs:100 HP:10 HPs:4   
+\end{itemize}
+\item Volume settings
+\begin{itemize}
+\item Output volume file: define the name and path of your output file
+\item Binning 8 (for 1k) or 4 (for 2k) 
+\item Volume dimensions (e.g. for 1k) 928 928 200
+\item\Square\hspace{0.1em}  Use 16 bit floats
+\end{itemize}
+\item CTF correction
+\begin{itemize}
+\item\Square\hspace{0.1em}  Do CTF correction 
+\end{itemize}
+\end{enumerate}
+
+Press \textbf{Save} to save the .cfg file. 
+\vspace{1em}
+\par To create now the HR.cfg file you can redo the whole process with some changes. In comparison to previously set the \textbf{Ordered subset size to 1}, uncheck Apply Fourier filter. Most importantly check Do CTF correction and select your CTF file. The first maximum more or less equal to the inner width value you determined while using the CTFDetector. Finally save the .cfg file.
+
+After creating both of the .cfg files reconstruct all of the tilt series. Therefore open a terminal and connect to an unused GPU computer and execute the following command. 
+\vspace{1em}
+\par\textbf{mpiexec -n 4 EmSART -u path/to/config\_filename.cfg}
+\vspace{1em}
+\par Repeat this step until all of your tomograms are generated. 
+             
+
+\section{Visualizing the tomograms and clicking of 3D positions}
+\subsection{Motivation}
+During this step we examine the quality of the generated tomograms and, if necessary adjust the .cfg file, for instance for volume shift, over sampling, filter parameters, to improve the result. To do this we are using Amira.     
+\subsection{Input and Expected Output}
+\begin{itemize}
+\item Input
+\begin{itemize}
+\item NL reconstruction
+\end{itemize}
+\item Output
+\begin{itemize}
+\item motivelist containing the clicked particle positions   
+\end{itemize} 
+\end{itemize}
+\subsection{Procedure}
+To open amira type amira in the terminal. Open the tomogram by drag and drop or the file manager in amira. Once the reconstruction is loaded a green modual appears to visualize it you need to at an visualization module such as ortho slice. Right click on the green module and select \textbf{OrthoSlice}. To visualize the features more clearly you can either select as a \textbf{Mapping Type Histogram} (left click on the OrthoSlice module \textrightarrow{} Properties (left corner) \textrightarrow{} Mapping Type: Histogram) or add an ContrastControl module to the OrthoSlice module (right click on OrthoSlice \textrightarrow{} ContrastControl). As the name already suggest you can adjust the contrast of the visualization whit this module.
+
+To click the particles of interest right click on your data module (green) and select \textrightarrow{} EMPackage \textrightarrow{} Clicker. You will see the new button for the clicker tool. In order to use it to pick the positions, you have to switch to the arrow tool in the upper bar of the amira GUI. Furthermore you need to change the Size in the Clicker tool to the size your particle is e.g. 10.  It is advisable to start the clicking in the upper slices of the tomogram. 
+Once you have marked all objects of interest in the current slice, move down through the volume until you see more particles. Pick all objects of interest that you can find in the entire volume. In order to remove a picked position, you have to switch between \textbf{add} and \textbf{remove} in the clicker tool. Once you have clicked all particles, save your positions  as a .em file ("Filename\_for\_saving\_motl:" and "Save\_motl:" in the clicker tool).
+
+\section{Extracting the objects of interest from the high-resolution tomogram}
+\subsection{Motivation}
+After clicking the objects of interest from the high contrast reconstructions we can now extract the objects of interest from the high resolution reconstructions. For this purpose we are going to use Matlab.
+
+\subsection{Input and Expected Output}
+\begin{itemize}
+\item Input
+\begin{itemize}
+\item motivelist from amira
+\item HR reconstruction 
+\end{itemize}
+\item Output
+\begin{itemize}
+\item HR particles
+\item mask
+\item maskcc
+\item global motivelist
+\item wedge file    
+\end{itemize} 
+\end{itemize}
+\subsection{Procedure}
+
+Before extracting the objects of interest create a new folder for the averaging. This folder should contain at least three additional folders:
+
+\begin{enumerate}
+\item \textbf{parts} for the extracted particles
+\item \textbf{ref} for the reference
+\item \textbf{motl} for the motivelists
+\item \textbf{other} optional for wedge, mask, ccmask 
+\end{enumerate}
+
+
+\begin{lstlisting}
+%% Load motl: 
+% Change the filenames to the motivelist you want to use and adjust the tomonr according tou your tomogram numbers 
+% and the amount of tomograms
+motl_filenames = {'/home/sprankel/ribosomes/05/Tomo5_1k_hc_motl.em','/home/sprankel/ribosomes/06/Tomo6_1k_hc_motl.em', ...
+'/home/sprankel/ribosomes/07/Tomo7_1k_hc_motl.em', '/home/sprankel/ribosomes/08/Tomo8_1k_hc_motl.em', ...
+'/home/sprankel/ribosomes/09/Tomo9_1k_hc_motl.em', '/home/sprankel/ribosomes/10/Tomo10_1k_hc_motl.em', ...
+'/home/sprankel/ribosomes/11/Tomo11_1k_hc_motl.em'};
+tomonr = [5, 6, 7, 8, 9, 10, 11];
+
+%% Loop and write stuff into motls
+
+global_motl = [];
+
+for i = 1:numel(tomonr)
+
+% Read motl
+motl = emread(motl_filenames{i});
+
+% Tomo nr.
+motl(5, :) = tomonr(i);
+
+% Part number
+motl(6, :) = 1:size(motl, 2);
+
+% Clean motl
+motl(1, :) = 0;
+motl(20, :) = 0;
+
+% Save motl
+emwrite(motl, motl_filenames{i});
+
+% Append to global_motl
+global_motl = [global_motl motl];
+end
+
+%% Extract parts
+
+% Low contrast, high-res tomograms
+% hange the filenames to the folder were your high resolution tomogram is located
+tomo_filenames = {'/home/sprankel/ribosomes/05/Tomo5_2k_ctf.em', '/home/sprankel/ribosomes/06/Tomo6_2k_ctf.em', ...
+'/home/sprankel/ribosomes/07/Tomo7_2k_ctf.em', '/home/sprankel/ribosomes/08/Tomo8_2k_ctf.em', ...
+'/home/sprankel/ribosomes/09/Tomo9_2k_ctf.em', '/home/sprankel/ribosomes/10/Tomo10_2k_ctf.em', ...
+'/home/sprankel/ribosomes/11/Tomo11_2k_ctf.em'};
+
+% Extract
+%motl_filenames, down/upscale factor (0.5, 1 , 2), tomo_filenames, radius of the box (32, 64, 128, 256), no rotation = 1,
+% no translation = 1 
+parts = av3_partCreateCellArrayParameters(motl_filenames, 2, tomo_filenames, 64, 1, 1);
+
+% Write out particles
+% For all particles
+particle_folder = '/home/sprankel/ribosomes/averaging/parts_2k/';
+
+for i = 1:size(global_motl, 2)
+% Filename 
+partFN = sprintf('%spart_%d_%d.em', particle_folder, global_motl(5, i), global_motl(6, i));
+
+% Save particle
+emwrite(parts{i}, partFN);
+end
+
+%% Averaging - additional stuff
+
+% Mask: Set the directory where your mask should be saved and change the filename according to your parameters 
+% you selected for your mask sphereGaussianBoundaries([boxsize x, boxsize y, boxsize z, radius, sigma, [radius +1,
+% radius +1, radius +1] ); 
+maskFile = 'mask_128_30_3.em';
+mask = sphereGaussianBoundaries([128 128 128], 30, 3, [65 65 65]);
+emwrite(mask, maskFile)
+
+% Wedge: Set directory where your wedge file should be saved and change the filename according to your parameters. 
+% createWedge(dimensions x y z, angle1, angle2)
+wedgeFile = 'wedge_128_60.em';
+wedge = createWedge([128 128 128], -60, 60);
+emwrite(wedge, wedgeFile);
+
+% CCMask: similar to mask 
+maskCCFile = 'maskCC_128_10.em';
+maskCC = sphereGaussianBoundaries([128 128 128], 10, 0, [65 65 65]);
+emwrite(maskCC, maskCCFile);
+
+% Motl: Set the path where your motl list should be saved.
+motlFile = '/home/sprankel/ribosomes/averaging/motl_2k/motl_1.em';
+emwrite(global_motl, motlFile);
+
+\end{lstlisting}
+
+\section{SubTomogramAveraging}
+\subsection{Motivation}
+Due to the low signal to noise ratio in cryo electron microscopy a few particles do not suffice to obtain strucutral data of 15 to 8 Angstrom. Thus the extracted particles are averaged. In this process the randomly oriented subtomograms are aligned to a reference which is updated after each iteration.  
+ 
+\subsection{Input and Expected Output}
+\begin{itemize}
+\item Input
+\begin{itemize}
+\item cfg file for averaging
+\item HR particles
+\item mask
+\item maskcc
+\item global motivelist from matlab
+\item wedge file  
+\end{itemize}
+\item Output
+\begin{itemize}
+\item reference
+\item updated motl 
+\end{itemize}
+\end{itemize}
+\subsection{Procedure}
+Create a .cfg file for the SubTomogramAveraging by hand using any texteditor software (save it in the end as .cfg file).
+\vspace{1em}
+The cfg file for the averaging must contain the following paramters: 
+\vspace{1em}
+\par CudaDeviceID = 0 1 2 3
+\par MotiveList = /path/to/motl/motl\_
+\par WedgeFile = /path/to/wedge/wedge.em
+\par Particles = /path/to/parts/part\_
+\par WedgeIndices = 
+\par Classes = 
+\par MultiReference = false
+\par PathWin =  
+\par PathLinux = 
+\par Reference = /path/to/ref/ref\_  
+\par Mask = /path/to/mask.em
+\par MaskCC = path/to/maskcc.em
+\par NamingConvention = TomoParticle
+\par StartIteration = 1
+\par EndIteration = 5
+\par AngIter = 9
+\par AngIncr = 20
+\par PhiAngIter = 9
+\par PhiAngIncr = 20
+\par LowPass = 12
+\par HighPass = 0
+\par Sigma = 2
+\par ClearAngles = false
+\par BestParticleRatio = 1
+\par ApplySymmetry = false
+\par CouplePhiToPsi = true
+
+\vspace{1em} 
+The example file given here will run the SubTomogramAverage for with iterations with an angular iteration of 180 degrees with an increment of 20. If your starting from a starting reference which was generated with\textbf{AddParticles} (\ref{AddParticles}) it is helpful to coarsely align your particles and  for the further iterations reduce the angular search range step by step, to reduce the computational time as much as possible. 
+
+\subsubsection{AddParticles} 
+\begin{enumerate}
+	\item open a terminal and connect to one of the GPU computers
+	\item change directory to /home/kunz/DevelopSicherung/							SubTomogramAverageMPI/ SubTomogramAverageMPI/SubTomogramAverageMPI 
+	\item execute: \textbf{mpiexec -n 4 AddParticles -u /path/to/					Average.cfg}
+\end{enumerate}
+\label{AddParticles}
+\subsubsection{creating starting reference from PDB}
+\subsubsection{creating starting reference from EMDB}
+\begin{enumerate}
+	\item open Chimera and open a file via Fetch by ID
+	\item check EMDB and enter the accesion number 3228
+	\item In Volume Viewer select \textbf{file}  \textbf{save map as} and save the file as a *.mrc. 
+	\item lowpass filter the file, for instance with relion
+	\begin{enumerate}
+		\item open a terminal and change the directory where your file is located
+		\item relion\_image\_handler \--\--i reference.mrc \--\--o referenceLP60.mrc \--\--lowpass 60 \--\--new\_box 128 \--\--angpix 2.17 \--\--rescale\_angpix 4.34
+	\end{enumerate}
+	\item ssh to r2d2 and execute the python script 
+	\begin{enumerate}
+	\item e2proc3d.py referenceLP60.mrc referenceLP60.em
+	\end{enumerate}
+\item openmatlab and load the created referenceLP60.em
+		\begin{enumerate}
+			\item ref = emread('path/to/referenceLP60.em');
+		\end{enumerate}
+\item invert the reference by multiplying the reference with -1 
+	\begin{enumerate}
+		\item ref\_inv = ref .* -1; 
+	\end{enumerate}
+\item save the created inverted file 
+	\begin{enumerate}
+		\item emwrite(ref\_inv,'ref\_1.em'); 
+	\end{enumerate}
+\end{enumerate}
+
+\subsubsection{Averaging}
+After creating your starting reference check how it looks like in Amira. Depending on from which reference your are starting with the AngIter, PhiAngIter, AngIncr, PhiAngIncr should be adjusted. In the example cfg file the averaging will use a increment of 20 degrees with 9 iterations, which means that it will a total of 180 degrees with an increment of 20 are being searched. If you already start with a structure close to yours it suffices to use a smaller increment like 3 for a 2 k dataset and a higher angular iteration like 10 to search a total of 30 degrees.   
+
+To start the averaging you need to connect to a GPU machine and change the directory to:
+/home/kunz/DevelopSicherung/							SubTomogramAverageMPI/ SubTomogramAverageMPI/SubTomogramAverageMPI \\
+
+And execute:\\ 
+
+\textbf{mpiexec -n 4 SubTomogramAverageMPI -u path/to/cfg/Average.cfg}\\
+
+In the first 5 iterations the angle increment is high that all possible orientation angles from the particle are being covered. For the subsequent iterations you can step by step decrease the search range (AngIter, PhiAngIter) and the stepsize (AngIncr, PhiAngIncr) to refine the references and obtain a better resolution. After the first iterations are done it is recomandable to visualize the latest reference in amira or another comparable program. After the reference isn’t changing anymore you can proceed with the local refinement. 
+
+
+
+\section{Local Refinement}
+\subsection{Motivation}
+EMSART refine matches a pre-oriented reference volume to individual locations of subtomograms on the projections of the corresponding tilt-series and locally refines the tilt-series based on the created reference and the defined mask. 
+ 
+\subsection{Input and Expected Output}
+
+\begin{itemize}
+	\item Input
+	\begin{itemize}
+		\item high resolution filtered reconstruction 
+		\item HR reconstruction 
+		\item tilt\_series.Alig.st 
+		\item marker file 
+		\item Motivelist
+		\item CTF file 
+	\end{itemize}
+	\item Output
+	\begin{itemize}
+		\item shift file containing the refined alignment for each input subtomogram
+		\item cross correlation map
+	\end{itemize} 
+\end{itemize}
+
+\subsection{Procedure}
+Before starting with the refinement we will need a third reconstruction. Using the exact same settings as we applied for the high resolution reconstruction. The only difference is that this time we are also applying filter (same filter parameters as used for the high contrast reconstruction).
+For the local refinement we will need an additional .cfg file which has to be created by hand. For this purpose modify the filtered high resolution .cfg file you just created and copy the following lines at the end of the existing cfg file and save the file under a new name.\\ 
+
+GroupMode = MaxDistance/MaxCount/ByGroup 
+
+GroupSize = 0                         
+
+MaxDistance = 100                      
+
+MaxShift = 100                        
+
+ScaleMotivelistPosition = 1           
+
+ScaleMotivelistShift = 1           
+
+SizeSubVol = 64                      
+
+SpeedUpDistance = 100                 
+
+VoxelSizeSubVol = 4                  
+
+Reference = /path/to/your/reference.em  
+
+MotiveList = /path/to/your/motivelist\_motl.em
+
+CCMapFileName = /path/to/your/CCmap/ccmap\_ 
+
+ShiftOutputFile = Location to save the shiftfile \\
+
+
+\textbf{MaxDistance}: all subtomograms of a threshold distance (defined by MaxDistance) are grouped 
+
+\textbf{MaxCount}: The n closest subtomograms are grouped (defined by Parameter Groupsize)
+
+\textbf{ByGroup}: Groups are determined by the value in row 20 of the motivelist
+
+\textbf{GroupSize}: Ignored when GroupMode MaxDistance/ByGrouping
+
+\textbf{MaxDistance}: Ignored when GroupMode MaxCount/ByGrouping 
+
+\textbf{MaxShift}: 10-100 (pixel in tilt series); maximum shift allowed when matching subtomogramin projection 
+
+\textbf{ScaleMotivelistPosition}: Factor to up or downscale the motivelist rows 8,9,10. For instance when working with a 1k motl list but doing the refinement on a 2k volume the value needs to be 2.  
+          
+\textbf{ScaleMotivelistShift}: Factor to scale the motivelist rows 11,12 and 13. When working with a 1k motivelist and doing the refinment with 2k volumes the value still stays 1. 
+
+\textbf{Speedupdistance}: Distance within particles are assigned the same shifts and skipped during the refinement process.
+ 
+\textbf{MotiveList}: You need to split the global motivlist by tomogram number, because the refinement will peformed for each tomogram individually.
+
+As mentioned you need to split your latest motivelist from the subtomogram averaging that they can be used for the local refinement for their respective tomogram.
+For this purpose we are using matlab. \\
+
+\begin{lstlisting}
+motl = emread(‘latest motl file.em'); 
+
+tomonr = [#,#,#,….]; 
+
+for i = 1:numel(tomonr) 
+
+idx = motl(5,:) == tomonr(i);
+tomo_motl = motl(:,idx);  
+
+emwrite(tomo_motl, sprintf('/folder/where/the/motl/list/should/be/safedl/tomo%d_motl.em',tomonr(i)));
+
+end 
+\end{lstlisting}
+
+This loop will create for each of your used tomograms (defined in tomonr)  a separate motl list, which can be used for the refinement. 
+
+Furthermore we need to overlay the mask and the latest reference with each other to create a reference for the refinement. For this purpose you can use the following commands in matlab.
+
+\begin{lstlisting}
+%% Load mask and ref
+ref = emread('/home/sprankel/ribosomes/FromScratch/example/averaging/ref/ref_10.em'); 
+mask = emread('/home/sprankel/ribosomes/FromScratch/example/averaging/other/mask_128_30_3.em');
+
+%% Overlay mask and ref
+ref_mask = (ref .* mask);
+avg_ref_mask = mean(ref_mask(:));
+std_ref_mask = std(ref_mask(:));
+
+%% write reference for the refinement
+ref_refinement = (ref_mask - avg_ref_mask) ./ std_ref_mask ;
+emwrite(ref_refinement, '/home/sprankel/ribosomes/FromScratch/example/averaging/refinement/ref_refinement.em'); 
+\end{lstlisting}
+
+Finally you can start the refinement for each of the respective tomograms with the following command.\\
+
+\textbf{EmSARTRefine -u path/to/refine.cfg}\\
+
+\textbf{Note:} The refinement only uses one GPU. Hence if you are working with a multiple GPU (e.g. 4) machine you can let the refinement calculate the refinement for up to 4 tomograms simultaneously, for that you just need to adjust the CUDA device ID in your cfg file.  
+
+\section{Reconstructing of refined subvolumes}
+\label{Reconstructing of refined subvolumes}
+\subsection{Motivation}
+After the local refinment the calculated shifts need to be applied to the parts. Thus we are using the shifts to reconstruct new Subvolumes containing the clicked particles. The EMSartSubvolumes commands reconstructes the particles for each tomogram individually. Thus the particles can be reconstructed as a 1k, 2k, 4k or 8k volume. 
+\subsection{Input and Expected Output}
+
+\begin{itemize}
+	\item Input
+	\begin{itemize}
+		\item Shift file
+		\item projection file .Alig.st
+		\item motivelist
+		\item CTFfile
+	\end{itemize}
+	\item Output
+	\begin{itemize}
+		\item Refined particles
+	\end{itemize}	
+\end{itemize}
+\subsection{Procedure}
+
+Before starting to reconstruct the particles we need to adjust the latest cfg file (from the refinement). First of all we need to rename the \textbf{ShiftOutputFile} to \textbf{ShiftInputfile}, since it will from now on be treated as a input file. Secondly add the following parameters:\\
+
+\textbf{Batchsize}: 100-1000 (roughly the number of particles in the motivelist, limited by GPU RAM)
+
+\textbf{SubVolPath}: Path were the reconstructed subtomograms are being saved 
+ 
+\textbf{NamingConvention}: TomoParticle\\
+
+Besides these options you can optionally also add the following option.\\ 
+
+\textbf{DownWeightTitltsForWBP = true/false}\\
+
+If set to true during the reconstruction dose weighting will be applied.\\
+
+For the reconstruction of the subvolumes especially the parameters VoxelSizeSubVol and the  SizeSubvol from the cfg file become important. With these two values you can decide what size your reconstructed volumes will have. For example if you are working with a 8k dataset and you want to reconstruct 4 k particles you need to choose as a VoxelSizeSubVol 2.  The SizeSubvol value needs to be adjusted according to your previous boxsize. For instance if the 2k particle boxsize is 64 you now have to change it to 128.\\ 
+
+\textbf{Important}: For the reconstruction of the Subvolumes you must not change the parameters for the ScaleMotivelistPosition and ScaleMotivelistShift. But need to set the \textbf{WBP = true}.\\    
+
+Subsequently you can start the reconstruction of the refined particles by using the following command:\\ 
+
+mpiexec -n 4 EmSartSubVolumes -u path/to/subvol.cfg
+
+\section{Final Averaging}
+\subsection{Motivation}
+To further improve the resolution of the structure, we are performing another round of averaging.
+\subsection{Input and Expected Output}
+\begin{itemize}
+	\item Input
+	\begin{itemize}
+		\item Motivelist  
+		\item refined particles 
+		\item mask 
+		\item ccmask 
+	\end{itemize}
+	\item Output
+	\begin{itemize}
+		\item reference
+	\end{itemize} 
+\end{itemize}
+\subsection{Procedure}
+
+Since the particles are reconstructed with the determined shift from the refinement, in regard to their shifts from the motivelist, we cannot use the same shifts as previously anymore.  Thus we need to set the shifts of the last averaging motivelist list to zero. The shifts in the motl are written in row 11 to 13.\\
+ 
+To set the shifts to zero you can use the following command in matlab. \\
+
+\begin{lstlisting}
+ motl = emread('/home/sprankel/ribosomes/FromScratch/example/averaging/motl_MK/motl_10.em');
+motl(11:13, : ) = 0;
+emwrite(motl,'/home/sprankel/ribosomes/FromScratch/example/averaging/refinement_MK/motl/motl_1.em'); 
+\end{lstlisting}
+
+Subsequently you can directly start by creating your initial starting reference as previously described in \ref{AddParticles}. The output of this step should be at a similar resolution as the structure was before the refinement. Further averaging should improve the resolution.\\
+Run the averaging with a smaller and increment and angular iteration, if you reached the resolution limit for 2k particles you can easily go back to the .cfg files from step \ref{Reconstructing of refined subvolumes} and reconstruct 4k particles. To still be able to use the shifts you determined from the 2k averaging you need to multiply your shifts in the motl by 2. \\
+
+Furthermore to improve the resolution of your structure it also might be helpful to adapt the mask by creating a mask which looks similar to your particle. To do that you can for instance use relion. 
+
+\begin{itemize}
+	\item open latest reference of the averaging in chimera 
+	\item invert .em strucutre via Volume Viewer \textrightarrow{}  Tools \textrightarrow{} Volume Filter \textrightarrow{} Filter type: Scale \textrightarrow{} set scale to -1 
+	\item adjust the threshold before everything becomes noise (value displayed next to color)
+	\item if there is to much noise you can lowpass filter your strucutre before creating a mask
+	\item save map as *.mrc
+	\item open a terminal
+	\item navigate to the folder where your .mrc file is located
+	\item relion\_mask\_create \--\--i filename.mrc \--\--o output\_filename.mrc \--\--angpix pixelsize \--\--extend\_inimask e.g. 3 \--\--width\_soft\_edge e.g. 3 \--\--ini\_threshold value\_from\_chimera
+\end{itemize}
+	
+
+\end{document}
+
+

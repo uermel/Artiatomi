@@ -467,3 +467,18 @@ target_link_libraries(EmSART ${ISA_LIB})
 target_compile_definitions(EmSART PUBLIC NO_OPENCL)
 target_compile_options(EmSART PUBLIC -fpermissive)
 ######################### EmSART #####################################
+
+
+
+######################### Tutorial #####################################
+find_package(LATEX COMPONENTS PDFLATEX)
+include(docs/UseLATEX.cmake)
+
+file(GLOB_RECURSE tutorial_files RELATIVE ${CMAKE_SOURCE_DIR} docs/Tutorial/*.tex)
+
+ADD_LATEX_DOCUMENT(
+        docs/Tutorial/Tutorial.tex
+        INPUTS ${tutorial_files}
+        FORCE_PDF
+)
+######################### Tutorial #####################################
