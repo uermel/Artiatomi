@@ -19,7 +19,7 @@ function [header, endian, fid] = read_header(file)
 %   artia.em.read, artia.em.write
 %
 % Author:
-%   Utz H. Ermel 2019
+%   UE, 2019
     
 
     % Is file or file ID?

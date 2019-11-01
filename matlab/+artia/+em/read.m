@@ -22,7 +22,8 @@ function [data, header] = read(fileName, doPrint)
 % See Also:
 %   :func:`+artia.+em.write`
 %
-% Utz H. Ermel 2019
+% Author:
+%   UE, 2019
 
     % Print action?
     if nargin == 1

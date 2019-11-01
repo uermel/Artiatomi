@@ -4,11 +4,13 @@ function header = default_header(varargin)
 %
 % Usage:
 %   For a default header call
+%
 %       .. code-block:: matlab   
 %       
 %           header = default_header();
 %
 %   To override defaults call
+%
 %       .. code-block:: matlab
 %
 %           header = default_header('HeaderSection1', value, ...
