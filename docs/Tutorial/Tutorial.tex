@@ -28,7 +28,7 @@
 		stringstyle=\color{mylilas},
 		commentstyle=\color{mygreen},%
 		showstringspaces=false,%without this there will be a symbol in the places where there is a space
-		numbers=left,%
+		numbers=none,%
 		numberstyle={\tiny \color{black}},% size of the numbers
 		numbersep=9pt, % this defines how far the numbers are from the text
 		emph=[1]{for,end,break},emphstyle=[1]\color{red}, %some words to emphasise
@@ -364,90 +364,104 @@ Before extracting the objects of interest create a new folder for the averaging.
 
 
 \begin{lstlisting}
-%% Load motl: 
-% Change the filenames to the motivelist you want to use and adjust the tomonr according tou your tomogram numbers 
-% and the amount of tomograms
-motl_filenames = {'/home/sprankel/ribosomes/05/Tomo5_1k_hc_motl.em','/home/sprankel/ribosomes/06/Tomo6_1k_hc_motl.em', ...
-'/home/sprankel/ribosomes/07/Tomo7_1k_hc_motl.em', '/home/sprankel/ribosomes/08/Tomo8_1k_hc_motl.em', ...
-'/home/sprankel/ribosomes/09/Tomo9_1k_hc_motl.em', '/home/sprankel/ribosomes/10/Tomo10_1k_hc_motl.em', ...
-'/home/sprankel/ribosomes/11/Tomo11_1k_hc_motl.em'};
-tomonr = [5, 6, 7, 8, 9, 10, 11];
+% Example script to set up for a SubTomogramAverageMPI run.
+% Loads in motivelists containt picked particle locations, extracts them
+% from the corresponding tomograms, and write the particles and the final 
+% global motivelist out as *.em files. Also creates simple files for the
+% mask, wedge, and ccmask.
+
+%% Load motl:
+% Change the filenames to the motivelist you want to use and adjust the
+% tomonr according to your tomogram numbers and the amount of tomograms
+motl_filenames = {'/path/to/your/project/data/1/Tomo1_motl.em', ...
+'/path/to/your/project/data/2/Tomo2_motl.em.em', ...
+'/path/to/your/project/data/3/Tomo3_motl.em.em', ...
+'/path/to/your/project/data/4/Tomo4_motl.em.em', ...
+'/path/to/your/project/data/5/Tomo5_motl.em.em'};
+
+tomonr = [1, 2, 3, 4, 5];
 
 %% Loop and write stuff into motls
-
+% Set up a global motivelist of all particles
 global_motl = [];
 
 for i = 1:numel(tomonr)
+    % Read motl
+    motl = artia.em.read(motl_filenames{i});
+    
+    % Tomogram number .
+    motl(5,:) = tomonr(i);
 
-% Read motl
-motl = emread(motl_filenames{i});
+    % Particle number
+    motl(6,:) = 1:size(motl, 2);
 
-% Tomo nr.
-motl(5, :) = tomonr(i);
+    % Clean motl
+    motl(1,:) = 0 ;
+    motl(20,:) = 0 ;
+    
+    % Save motl
+    artia.em.write(motl , motl_filenames{i});
 
-% Part number
-motl(6, :) = 1:size(motl, 2);
+    % Append to global motivelist 
+    global_motl = [global_motl motl];
 
-% Clean motl
-motl(1, :) = 0;
-motl(20, :) = 0;
+end;
 
-% Save motl
-emwrite(motl, motl_filenames{i});
+%% Extract particles
 
-% Append to global_motl
-global_motl = [global_motl motl];
+% Low contrast, high resolution tomograms should be used for averaging.
+% Set up an array of tomogram filenames, where the tomogram number is the 
+% filename's index within the array
+tomo_filenames = strings([1, max(tomonr)]);
+for i = 1 : numel(tomonr)
+    tomo_no = tomonr(i);
+    tomo_filenames{tomo_no} = ...
+        sprintf('/path/to/your/project/data/%d/%d_SART_1k_HR.em', tomo_no);
 end
 
-%% Extract parts
+% Extract and write out the particles
+particles_folder = '/path/to/your/project/data/averaging/parts';
+particles_prefix = sprintf('%s/part_', particles_folder);
 
-% Low contrast, high-res tomograms
-% hange the filenames to the folder were your high resolution tomogram is located
-tomo_filenames = {'/home/sprankel/ribosomes/05/Tomo5_2k_ctf.em', '/home/sprankel/ribosomes/06/Tomo6_2k_ctf.em', ...
-'/home/sprankel/ribosomes/07/Tomo7_2k_ctf.em', '/home/sprankel/ribosomes/08/Tomo8_2k_ctf.em', ...
-'/home/sprankel/ribosomes/09/Tomo9_2k_ctf.em', '/home/sprankel/ribosomes/10/Tomo10_2k_ctf.em', ...
-'/home/sprankel/ribosomes/11/Tomo11_2k_ctf.em'};
+% See documentation for artia.particle.extract_write for more details on 
+% what these arguments represent and the values they can take
+% Params used here:
+% motivelistFilename = global_motl
+% upScaleFactor = 1
+% tomogramFilenameArray = tomo_filenames
+% r = 64
+% doRotation = 0
+% doTranslate = 0
+% doNormalize = 1
+% partPref = particles_prefix
+artia.particle.extract_write(global_motl, 1, tomo_filenames, 16, 0, 0, ...
+    1, particles_prefix);
 
-% Extract
-%motl_filenames, down/upscale factor (0.5, 1 , 2), tomo_filenames, radius of the box (32, 64, 128, 256), no rotation = 1,
-% no translation = 1 
-parts = av3_partCreateCellArrayParameters(motl_filenames, 2, tomo_filenames, 64, 1, 1);
+%% Set up other inputs to averaging
+% Mask: Set the directory where your mask should be saved and change the
+% filename according to your parameters
+% Below we create a spherical mask; the sphere function takes as input
+% sphere(dims, radius, sigma, center)
+maskFile = 'other/mask.em';
+mask = artia.mask.sphere([128 128 128], 30, 3, [65 65 65]);
+artia.em.write(mask, maskFile);
 
-% Write out particles
-% For all particles
-particle_folder = '/home/sprankel/ribosomes/averaging/parts_2k/';
+% Wedge: Set the directory where your mask should be saved and change the
+% filename according to your parameters
+% We create a basic, binary missing wedge file here.
+wedgeFile = 'other/wedge.em';
+wedge = artia.wedge.primitive([128 128 128], -60, 60);
+artia.em.write(wedge, wedgeFile);
 
-for i = 1:size(global_motl, 2)
-% Filename 
-partFN = sprintf('%spart_%d_%d.em', particle_folder, global_motl(5, i), global_motl(6, i));
+% CCMask: similar to mask, the cross-correlation mask is used to limit the 
+% transformation of the particles while aligning
+maskCCFile = 'other/maskCC.em';
+maskCC = artia.mask.sphere([128 128 128], 10, 0, [65 65 65]);
+artia.em.write(maskCC, maskCCFile);
 
-% Save particle
-emwrite(parts{i}, partFN);
-end
-
-%% Averaging - additional stuff
-
-% Mask: Set the directory where your mask should be saved and change the filename according to your parameters 
-% you selected for your mask sphereGaussianBoundaries([boxsize x, boxsize y, boxsize z, radius, sigma, [radius +1,
-% radius +1, radius +1] ); 
-maskFile = 'mask_128_30_3.em';
-mask = sphereGaussianBoundaries([128 128 128], 30, 3, [65 65 65]);
-emwrite(mask, maskFile)
-
-% Wedge: Set directory where your wedge file should be saved and change the filename according to your parameters. 
-% createWedge(dimensions x y z, angle1, angle2)
-wedgeFile = 'wedge_128_60.em';
-wedge = createWedge([128 128 128], -60, 60);
-emwrite(wedge, wedgeFile);
-
-% CCMask: similar to mask 
-maskCCFile = 'maskCC_128_10.em';
-maskCC = sphereGaussianBoundaries([128 128 128], 10, 0, [65 65 65]);
-emwrite(maskCC, maskCCFile);
-
-% Motl: Set the path where your motl list should be saved.
-motlFile = '/home/sprankel/ribosomes/averaging/motl_2k/motl_1.em';
-emwrite(global_motl, motlFile);
+% Motl file
+motlFile = '/path/to/your/project/data/averaging/motls/motl_1.em';
+artia.em.write(global_motl, motlFile);
 
 \end{lstlisting}
 
@@ -547,11 +561,11 @@ The example file given here will run the SubTomogramAverage for with iterations 
 After creating your starting reference check how it looks like in Amira. Depending on from which reference your are starting with the AngIter, PhiAngIter, AngIncr, PhiAngIncr should be adjusted. In the example cfg file the averaging will use a increment of 20 degrees with 9 iterations, which means that it will a total of 180 degrees with an increment of 20 are being searched. If you already start with a structure close to yours it suffices to use a smaller increment like 3 for a 2 k dataset and a higher angular iteration like 10 to search a total of 30 degrees.   
 
 To start the averaging you need to connect to a GPU machine and change the directory to:
-/home/kunz/DevelopSicherung/							SubTomogramAverageMPI/ SubTomogramAverageMPI/SubTomogramAverageMPI \\
+/path/to/Artiatomi/SubTomogramAverageMPI/SubTomogramAverageMPI/ \\
 
 And execute:\\ 
 
-\textbf{mpiexec -n 4 SubTomogramAverageMPI -u path/to/cfg/Average.cfg}\\
+\textbf{mpiexec -n 4 ./MakefileAverage/SubTomogramAverageMPI -u path/to/cfg/Average.cfg}\\
 
 In the first 5 iterations the angle increment is high that all possible orientation angles from the particle are being covered. For the subsequent iterations you can step by step decrease the search range (AngIter, PhiAngIter) and the stepsize (AngIncr, PhiAngIncr) to refine the references and obtain a better resolution. After the first iterations are done it is recomandable to visualize the latest reference in amira or another comparable program. After the reference isn’t changing anymore you can proceed with the local refinement. 
 
@@ -635,18 +649,21 @@ As mentioned you need to split your latest motivelist from the subtomogram avera
 For this purpose we are using matlab. \\
 
 \begin{lstlisting}
-motl = emread(‘latest motl file.em'); 
+%% Split latest motivelist into motivelists for each tomogram
+motl = artia.em.read(...
+    '/path/to/your/project/data/averaging/motls/motl_[last_iteration].em');
 
-tomonr = [#,#,#,….]; 
+tomonr = [1, 2, 3, 4, 5];
 
-for i = 1:numel(tomonr) 
-
-idx = motl(5,:) == tomonr(i);
-tomo_motl = motl(:,idx);  
-
-emwrite(tomo_motl, sprintf('/folder/where/the/motl/list/should/be/safedl/tomo%d_motl.em',tomonr(i)));
-
-end 
+for i = 1:numel(tomonr)
+    idx = motl(5,:)==tomonr(i);
+    tomo_motl = motl(:,idx);
+    
+    % Write out the individual motivelists
+    artia.em.write(tomo_motl, ...
+        sprintf('/path/averaging/refinement/motls/%d_ref_motl.em', ...
+            tomonr(i)));
+end
 \end{lstlisting}
 
 This loop will create for each of your used tomograms (defined in tomonr)  a separate motl list, which can be used for the refinement. 
@@ -654,18 +671,17 @@ This loop will create for each of your used tomograms (defined in tomonr)  a sep
 Furthermore we need to overlay the mask and the latest reference with each other to create a reference for the refinement. For this purpose you can use the following commands in matlab.
 
 \begin{lstlisting}
-%% Load mask and ref
-ref = emread('/home/sprankel/ribosomes/FromScratch/example/averaging/ref/ref_10.em'); 
-mask = emread('/home/sprankel/ribosomes/FromScratch/example/averaging/other/mask_128_30_3.em');
-
-%% Overlay mask and ref
+%% Create a refinement reference by overlaying the mask and the latest ref
+% Load mask and latest reference
+ref = artia.em.read('/path/to/data/average/ref/ref[last_iteration].em');
+mask = artia.em.read('/path/to/data/average/other/mask.em');
+% Overlay them
 ref_mask = (ref .* mask);
 avg_ref_mask = mean(ref_mask(:));
 std_ref_mask = std(ref_mask(:));
 
-%% write reference for the refinement
-ref_refinement = (ref_mask - avg_ref_mask) ./ std_ref_mask ;
-emwrite(ref_refinement, '/home/sprankel/ribosomes/FromScratch/example/averaging/refinement/ref_refinement.em'); 
+ref_refinement = (ref_mask - avg_ref_mask) ./ std_ref_mask;
+artia.em.write(ref_refinement, '/path/average/refinement/ref_refinement');
 \end{lstlisting}
 
 Finally you can start the refinement for each of the respective tomograms with the following command.\\
@@ -741,8 +757,13 @@ Since the particles are reconstructed with the determined shift from the refinem
 To set the shifts to zero you can use the following command in matlab. \\
 
 \begin{lstlisting}
- motl = emread('/home/sprankel/ribosomes/FromScratch/example/averaging/motl_MK/motl_10.em');
-motl(11:13, : ) = 0;
+% Example code snippet to clear out the shift values for particles in a
+% motivelist. Necessary to set up for re-averaging based on locally refined
+% particles from EmSARTRefine and EmSartSubVolumes
+
+motl = artia.em.read('/path/to/data/average/motls/motl_10.em');
+motl(11:13, :) = 0;
+artia.em.write(motl, '/path/to/data/average/refinement/motls/motl_1.em');
 emwrite(motl,'/home/sprankel/ribosomes/FromScratch/example/averaging/refinement_MK/motl/motl_1.em'); 
 \end{lstlisting}
 
