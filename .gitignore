@@ -22,3 +22,11 @@ cmake-build-debug
 *.la
 *.lo
 
+#TeX
+*.tks
+*.aux
+*.log
+*.synctex.gz
+*.toc
+*.pdf
+
