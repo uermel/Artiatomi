@@ -12,7 +12,7 @@ function ctfM = ctffind2emsart(inFile, outFile)
 %
 % Returns:
 %   ctfM (double[Mx5]):
-%       CTF parameters for M projection in EmSART convention.
+%       CTF parameters for M projections in EmSART convention.
 %
 % Author:
 %   UE, 2019
