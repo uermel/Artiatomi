@@ -2,38 +2,33 @@
 This is the official Artiatomi cryo electron tomography package
 
 it consists of the following tools or applications:
-- EmSART: The "main" tool, performing tomographic reconstruction 
+- **EmSART**: The "main" tool, performing tomographic reconstruction
   of cryo-EM tilt series. It accepts DM3/4 file series or MRC/ST
   files as input and writes the result in one EM file. MRC output
-  is also implemented but not well tested. Heard of the 
+  is also implemented but not well tested. Core of the
   implemented method is super-sampling SART and three-
   dimensional CTF correction.
   References: 
-  1) Super-sampling SART with ordered subsets.
-     Kunz and Frangakis
-     J Struct Biol. 2014 Nov;188(2):107-15. 
-	 doi: 10.1016/j.jsb.2014.09.010. Epub 2014 Oct 2.
-  2) Three-dimensional CTF correction improves the resolution of 
-     electron tomograms.
-	 Kunz and Frangakis
-	 J Struct Biol. 2017 Feb;197(2):114-122. 
-	 doi: 10.1016/j.jsb.2016.06.016. Epub 2016 Jun 23.
+  1) Kunz, M. & Frangakis, A.S. (2014). _[Super-sampling SART with ordered subsets.](https://doi.org/10.1016/j.jsb.2014.09.010)_
+     J Struct Biol. 2014 Nov;188(2):107-15.
+  2) Kunz, M. & Frangakis, A.S. (2017). _[Three-dimensional CTF correction improves the resolution of electron tomograms.](https://doi.org/10.1016/j.jsb.2016.06.016)_
+	 J Struct Biol. 2017 Feb;197(2):114-122.
 
-  If you use EmSART for reconstruction of your EM data, please 
+  If you use **EmSART** for reconstruction of your EM data, please
   make sure to properly cite the methods used.
   If you develop software based on this implemantation, please
   also cite one of these papers.
-  sub folder: EmSART
-- EmSARTRefine: Finds the individual shift of each sub-volume
+  --> sub folder: EmSART
+- **EmSARTRefine**: Finds the individual shift of each sub-volume
   on each tilt of the tilt-series.
   ref: Paper to be published
   sub folder: EmSART
-- EmSARTSubVolumes: Reconstructs sub-volumes with weighted back-
+- **EmSARTSubVolumes**: Reconstructs sub-volumes with weighted back-
   projection with three-dimensional CTF-correction without the 
   need of reconstructing a full volume. Includes the individual
   shift information.
   sub folder: EmSART
-- MarkerAlignator: A command line tool to align marker files, 
+- **MarkerAlignator**: A command line tool to align marker files,
   provided either as EM-file (old TOM-toolbox format) or a set
   of IMOD marker files (*.fid, *.tlt, *.prexg). In theory, one 
   could also convert the final IMOD alignment files, but this 
@@ -41,7 +36,7 @@ it consists of the following tools or applications:
   we prefer to align the tilt-series independently from the 
   clicked positions in the micrographs.
   sub folder: EmTools/MarkerAlignator
-- ImageStackAligntor: A command line tool to align dose-
+- **ImageStackAligntor**: A command line tool to align dose-
   fractionation stacks.
   The first step consists of minimizing the consistency error of
   a shift-matrix (ref: Electron counting and beam-induced motion 
@@ -51,16 +46,19 @@ it consists of the following tools or applications:
   other aligned frames until convergence. To avoid interpolation
   artifacts, we also search only for full-pixel shifts.
   sub folder: EmTools/ImageStackAlignator
-- Clicker: A GUI tool to visualize tilt series and click gold beads.
+- **Clicker**: A GUI tool to visualize tilt series and click gold beads.
   sub folder: Clicker
-- SubTomogramAveraging: This application performs sub-tomogram
+- **SubTomogramAveraging**: This application performs sub-tomogram
   averaging as done in the old TOM-toolbox, with full GPU acceleration
   and the capabilility to run on a compute cluster using MPI.
   sub folder: SubTomogramAverageMPI
 
 # Compilation:
 All development was done on Windows and Visual Studio in varying 
-versions. For Linux, each tool has a hand written make file.
+versions. For Linux, each tool has a hand written make file for now.
+Some applications can be built using cmake.
+
+
 
 # Dependcies:
 - Cuda 8.0 
