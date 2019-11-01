@@ -1,28 +1,25 @@
 function mask=sphere(dims,radius,sigma,center)
-% sphereGaussianBoundaries masks volume with sphere of radius r around center
-%   vol=sphereGaussianBoundaries(vol, radius,sigma,center)
+% artia.mask.sphere creates a spherical density, optionally with a gaussian
+% border. Density is positive.
 %
-%INPUT
-%   vol          : volume
-%   radius       : radius determining radius of sphere
-%   sigma       : smoothing of mask; if entered mask will be smoothened;
-%                  every voxel outside radius gets smoothened by a gaussian
-%                  function exp(-((r-radius)/simga)^2)
-%   center       : vector determining center of sphere
+% Parameters:
+%   dims (double[3]): 
+%       The box dimensions.
+%   radius (double):
+%       The radius of the sphere.
+%   sigma (double):
+%       if ~= 0: every voxel outside radius gets smoothened by a gaussian
+%                function exp(-((r-radius)/simga)^2)
+%   center (double[3]):
+%       The center of the sphere inside the box.
 %
-%OUTPUT
-%   vol          : masked volume
+% Returns:
+%   mask (double[dims]):
+%       The box containing the sphere.
 %
-%EXAMPLE
-%  
-%   yyy = sphereGaussianBoundaries([64 64 64],4,10,[16 16 1]);
-%   imagesc(yyy);
-
+% Author:
+%   FF, 2004; JR, 2019
 %
-%08/14/02 FF
-%last revision 
-%25/03/04 FF
-% JR
 
 narginchk(1,4)
 %error(nargchk(1,4,nargin))

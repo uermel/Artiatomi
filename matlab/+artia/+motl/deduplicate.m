@@ -1,31 +1,26 @@
-function [newmotl,removedparticles]=deduplicate(varargin)
-%removeOverlappingMotlPositions removes overlapping points out of a motivelist
+function [newmotl,removedparticles]=deduplicate(motl, tolerance)
+% artia.motl.deduplicate removes duplicated particles from a particle list.
+% 
+% Parameters:
+%   motl (str/double[20xN]):
+%       Path to the particle list or particle list matrix.
+%   tolerance (double):
+%       Tolerance radius.
 %
-%Syntax: [newmotl, removedpoints]=removeOverlappingMotlPositions(motlfilename,radius);
-%       newmotl = the new motivelist with overlapping points removed
-%       removedpoints = list of indizes of the removed points
-%       motlfilename = filename to the motivelist with overlapping points
-%       radius = tolerance radius
+% Returns:
+%   newmotl (double[20xM]):
+%       Deduplicated particle list.
+%   removedparticles (doule[20xK]):
+%       Removed particles.
+%
+% Author:
+%   ASF
 %
 
-switch(nargin)
-    
-    case 0
-        error('Error: Not enough input arguments');      
-    case 1
-        filename=varargin{1};
-        tolerance=0;
-    case 2
-        filename=varargin{1};
-        tolerance=varargin{2};
-        
-        
-end
-
-if ischar(filename)
-    motl=emread(filename);
+if ischar(motl)
+    motl = emread(motl);
 else
-    motl=filename;
+    motl = motl;
 end
 
 newmotl=motl;

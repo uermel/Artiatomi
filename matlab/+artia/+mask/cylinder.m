@@ -1,4 +1,29 @@
 function mask = cylinder(dims, radius, sigma, center, steps, stepSize)
+% artia.mask.cylinder creates a elliptical, cylindrical density, optionally with an 
+% approximately gaussian border. Density is positive. Gaussian is
+% approximated by dilating the ellipse/cylinder edge at small increments.
+% Cylinder is created along z-axis.
+%
+% Parameters:
+%   dims (double[1]/double[3]):
+%       The box dimensions. If one-dimensional, box is assumed cubic.
+%   radius (double[3]):
+%       Radii of the 2 elliptical axes and height of the cylinder. 
+%   sigma (double):
+%       if ~= 0: every voxel outside radius gets smoothened by a gaussian
+%                function exp(-((r-radius)/simga)^2)
+%   steps (int):
+%       Number of incremental steps at which to approximate the gaussian.
+%   stepSize (double):
+%       Size of the incremental steps.
+%
+% Returns:
+%   mask (double):
+%       The box containing the cylinder.
+% 
+% Author:
+%   UE, 2019
+%
     
     if nargin < 5
         steps = dims(1)/2*10;
@@ -8,9 +33,9 @@ function mask = cylinder(dims, radius, sigma, center, steps, stepSize)
         stepSize = 0.1;
     end
     
-    if numel(dims) == 1
-        dims = [dims dims dims];
-    end
+    %if numel(dims) == 1
+    %    dims = [dims dims dims];
+    %end
     
     if numel(center) == 1
         center = [center center center];

@@ -1,4 +1,27 @@
 function write(marker, fileName)
+% artia.marker.write writes a marker-file matlab structure to marker-file
+% format (extended EM). 
+%
+% Parameters:
+%   marker (struct):
+%       Struct with fields:
+%           marker.ali
+%           marker.model
+%           marker.dimX
+%           marker.dimY
+%           marker.dimZ
+%           marker.aliScore
+%           marker.beamDeclination
+%           marker.magAnisoFactor
+%           marker.magAnisoAngle
+%           marker.imageSizeX
+%           marker.imageSizeY
+%   fileName (str):
+%       Path to the output file.
+%
+% Author:
+%   UE, 2019
+%
 
     % Get ali (data) dimension
     [xdim, ydim, zdim] = size(marker.ali);

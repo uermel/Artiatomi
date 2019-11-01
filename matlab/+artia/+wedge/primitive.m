@@ -1,18 +1,21 @@
 function wedge = primitive(dims, minTilt, maxTilt)
-%   wedge=createWedge(dims,angle,angle2)
+% artia.wedge.primitive creates basic, binary missing wedge files given the
+% minimum and maximum tilt angle of a tilt series. Tilt axis is y-axis.
 %
-%   WEDGE produces a wedge shaped array.
-%   This array can be used as a window filter in Fourier space...
+% Parameters:
+%   dims (double[3]):
+%       Box size (of the particles)
+%   minTilt (double):
+%       minimum tilt angle of the series (degrees)
+%   maxTilt (double):
+%       maximum tilt angle of the series (degrees)
 %
-%   dims    Dimensions of the image where the wedge has to be created
-%   angle   semi angle of missing wedge in deg (minimum angle +64)
-%   angle2  In case of an aymmetric wedge (maximum  angle e.g. -64)
-%   wedge   output - filter
-%   Direction of the wedge towards y axis
-
-%Orientation has not been tested: Use eventually: mirror(w,'z')
-
-%ASF 07 01 06 Asymmetric wedges
+% Returns:
+%   wedge (double[dims]):
+%       The wedge file.
+%
+% Author:
+%   ASF, 2006
 
 %warning off MATLAB:divideByZero;
 warning off;

@@ -2,50 +2,58 @@ function [average] = extract_write(motivelistFilename, upScaleFactor, tomogramFi
 %extractParts creates a cell-array of sub-tomograms from a motivelist and 
 %and an array of tomogram filenames and averages the particles
 %
-%USAGE
+% Usage:
 %   [cellPart, average] = extractParts(motivelistFilename, upScaleFactor, tomogramFilenameArray, r, noRotation, noTranslation, noNormalization);
 %
-%PARAMETERS
-%   motivelistFilename......Motivelist filename (Entries of row 5 specify 
-%                           cell of tomo filename array). See example
-%                           below.
-%   upScaleFactor...........Multiplier for coordinates and shifts
-%   tomogramFilenameArray...array of tomogram filenames (Filenames should
-%                           be placed at the index corresponding to the entry 
-%                           in row 5 of the motivelist. (i.e. for motl(5, i) == 4, 
-%                           the filename should be placed at tomogramFilenameArray{4}). 
-%                           See example below. 
-%   r.......................radius of the particle
-%   doRotate..............if "0" no rotation will be performed
-%   doTranslate...........if "0" no translation will be performed
-%   doNormalize.........if "0" no normalization will be performed
+% Parameters:
+%   motivelistFilename (str/double) 
+%       Motivelist filename or matrix (Entries of row 5 specify cell of tomo 
+%       filename array). See example below.
+%   upScaleFactor (double):
+%       Multiplier for coordinates and shifts.
+%   tomogramFilenameArray
+%       array of tomogram filenames (Filenames should
+%       be placed at the index corresponding to the entry 
+%       in row 5 of the motivelist. (i.e. for motl(5, i) == 4, 
+%       the filename should be placed at tomogramFilenameArray{4}). 
+%       See example below. 
+%   r (double):
+%       Radius of the box to be extracted.
+%   doRotate (bool):
+%       If true, particles will be rotated according to motl(17:19).
+%   doTranslate (bool):
+%       If true, particles will be translated according to motl(11:13).
+%   doNormalize
+%       If true, mean will be subtracted from each particle (recommended).
 %
-%OUTPUT
-%   cellPart................cell array of particles      
-%   average.................averaged particle
+% Returns:
+%   average (double[r*2 x r*2 x r*2]
+%       Average of all particles.
 %
-%EXAMPLE
-%    % example motivelist
-%    motl = zeros(20,5);
-%    
-%    % example tomogram numbers
-%    motl(5, :) = [1 3 5 7 9];
+% Example:
+%   .. codeblock matlab
+%         % example motivelist
+%         motl = zeros(20,5);
+% 
+%         % example tomogram numbers
+%         motl(5, :) = [1 3 5 7 9];
+% 
+%         % save
+%         emwrite(motl, motivelistFilename);
+% 
+%         % example filename array
+%         tomogramFilenameArray = {};
+%         tomogramFilenameArray{1} = '/path/to/file1.em';
+%         tomogramFilenameArray{3} = '/path/to/file3.em';
+%         tomogramFilenameArray{5} = '/path/to/file5.em';
+%         tomogramFilenameArray{7} = '/path/to/file7.em';
+%         tomogramFilenameArray{9} = '/path/to/file9.em';
+% 
+%         % run the function
+%         [cellPart, average] = extractParts(motivelistFilename, 1, tomogramFilenameArray, 32, 1, 1, 1);
 %
-%    % save
-%    emwrite(motl, motivelistFilename);
-%
-%    % example filename array
-%    tomogramFilenameArray = {};
-%    tomogramFilenameArray{1} = '/path/to/file1.em';
-%    tomogramFilenameArray{3} = '/path/to/file3.em';
-%    tomogramFilenameArray{5} = '/path/to/file5.em';
-%    tomogramFilenameArray{7} = '/path/to/file7.em';
-%    tomogramFilenameArray{9} = '/path/to/file9.em';
-%
-%    % run the function
-%    [cellPart, average] = extractParts(motivelistFilename, 1, tomogramFilenameArray, 32, 1, 1, 1);
-%
-% UE 2018
+% Authors:
+%   UE 2018
     
     % Read file if necessary
     if ischar(motivelistFilename)

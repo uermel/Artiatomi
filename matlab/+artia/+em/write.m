@@ -31,6 +31,10 @@ function emfid = write(data, fileName, varargin)
 %       Dimensions in the header are corrected. If false, a new header is
 %       written first, overwriting any existing content. Default: false
 %
+%   returnFid (bool):
+%       If true, em-file isn't closed after writing header and data and
+%       matlab file-ID is returned.
+%
 % Author:
 %   Utz H. Ermel 2019
 

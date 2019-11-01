@@ -1,5 +1,29 @@
 function mask = ellipse(dims, radius, sigma, center, steps, stepSize)
-    
+% artia.mask.ellipse creates a elliptical density, optionally with an 
+% approximately gaussian border. Density is positive. Gaussian is
+% approximated by dilating the ellipse edge at small increments.
+%
+% Parameters:
+%   dims (double[1]/double[2]):
+%       The box dimensions. If one-dimensional, box is assumed cubic.
+%   radius (double[1]/double[2]):
+%       Radii of the 2 elliptical axes. If one-dimensional, ellipse is a
+%       circle. 
+%   sigma (double):
+%       if ~= 0: every voxel outside radius gets smoothened by a gaussian
+%                function exp(-((r-radius)/simga)^2)
+%   steps (int):
+%       Number of incremental steps at which to approximate the gaussian.
+%   stepSize (double):
+%       Size of the incremental steps.
+%
+% Returns:
+%   mask (double):
+%       The box containing the ellipsoid.
+% 
+% Author:
+%   UE, 2019
+%    
     if nargin < 5
         steps = dims(1)/2*10;
     end

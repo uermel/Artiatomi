@@ -1,7 +1,29 @@
 function outMotl = apply_transforms(transforms, inMotl)
+% artia.motl.apply_transforms transforms the orientation and translations
+% of particles in a particle list given a list of successive
+% transformations on the reference volume.
+%
+% Parameters:
+%   transforms (struct):
+%       Matlab struct describing the transformations.
+%   inMotl (str/double[20xN]):
+%       Path to particle list file or particle list matrix.
+%
+% Returns:
+%   outMotl (double[20xN]):
+%       The particle list with transformed
+%       coordinates/orientations/translations.
+%
+% Author:
+%   UE, 2019
 
     % File
-    inMotl = nameOrFile(inMotl, 'em');
+    if ischar(inMotl)
+        inMotl = emread(inMotl);
+    else
+        inMotl = inMotl;
+    end
+
     
     % Apply transforms in order
     for j = 1:numel(transforms)
