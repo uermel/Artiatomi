@@ -24,7 +24,6 @@ find_library(NPPC_LIBRARY nppc  ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
 find_library(NPPI_LIBRARY nppi ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
 
 set(CUDA_LIBS ${CUDA_LIBRARIES})
-message("${CUDA_LIBS}")
 ######################### CUDA #############################
 
 ######################### OpenCL/GL #############################
