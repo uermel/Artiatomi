@@ -235,7 +235,7 @@ public:
 	void MPIBroadcast(float** buffers, int bufferCount);
 #ifdef REFINE_MODE
 	void CopyProjectionToSubVolumeProjection();
-	float2 GetDisplacement(bool MultiPeakDetection);
+	float2 GetDisplacement(bool MultiPeakDetection, float* CCValue = NULL);
 	void rotVol(Cuda::CudaDeviceVariable& vol, float phi, float psi, float theta);
 	void setRotVolData(float* data);
 	float* GetCCMap();

@@ -1743,7 +1743,7 @@ void Reconstructor::ConvertVolumeFP16(float * slice, int z)
 }
 //#define WRITEDEBUG 1
 #ifdef REFINE_MODE
-float2 Reconstructor::GetDisplacement(bool MultiPeakDetection)
+float2 Reconstructor::GetDisplacement(bool MultiPeakDetection, float* CCValue)
 {
 	float2 shift;
 	shift.x = 0;
@@ -1879,6 +1879,10 @@ float2 Reconstructor::GetDisplacement(bool MultiPeakDetection)
 		float maxVal;
 		meanval.CopyDeviceToHost(&maxVal, sizeof(float));
 		printf("\nMaxVal: %f", maxVal);
+		if (CCValue != NULL)
+		{
+			*CCValue = maxVal;
+		}
 
 		if (MultiPeakDetection)
 		{

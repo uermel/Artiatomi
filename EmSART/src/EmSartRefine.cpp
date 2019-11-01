@@ -75,6 +75,14 @@ typedef struct {
 	float3 m[3];
 } float3x3;
 
+typedef struct {
+	int particleNr;
+	int particleNrInTomo;
+	int tomoNr;
+	int obtainedShiftFromID;
+	float CCValue;
+} groupRelations;
+
 void MatrixVector3Mul(float3x3& M, float xIn, float yIn, float& xOut, float& yOut)
 {
 	xOut = M.m[0].x * xIn + M.m[0].y * yIn + M.m[0].z * 1.f;
@@ -381,6 +389,8 @@ int main(int argc, char* argv[])
 		bool* processedParticle = new bool[ml.DimY];
 		memset(processedParticle, 0, ml.DimY * sizeof(bool));
 		float* minDistOfProcessedParticles = new float[ml.DimY];
+		groupRelations* groupRelationList = new groupRelations[ml.DimY];
+		memset(groupRelationList, 0, ml.DimY * sizeof(groupRelations));
 		
 		
 		EMFile reconstructedVol(aConfig.OutVolumeFile);
@@ -973,11 +983,12 @@ int main(int argc, char* argv[])
 				}
 
 				float2 shift;
+				float ccValue;
 				float* ccMap;
 				float* ccMapMulti;
 				if (mpi_part == 0)
 				{
-					shift = reconstructor.GetDisplacement(aConfig.MultiPeakDetection);
+					shift = reconstructor.GetDisplacement(aConfig.MultiPeakDetection, &ccValue);
 					ccMap = reconstructor.GetCCMap();
 					if (aConfig.MultiPeakDetection)
 					{
@@ -1035,6 +1046,11 @@ int main(int argc, char* argv[])
 							int totalIdx = ml.GetGlobalIdx(m);
 							//printf("Set values at: %d, %d\n", index, motlIdx); fflush(stdout);
 							sf.SetValue(index, totalIdx, shift);
+							groupRelationList[totalIdx].particleNr = m.partNr;
+							groupRelationList[totalIdx].particleNrInTomo = m.partNrInTomo;
+							groupRelationList[totalIdx].tomoNr = m.tomoNr;
+							groupRelationList[totalIdx].obtainedShiftFromID = group;
+							groupRelationList[totalIdx].CCValue = ccValue;
 						}
 					}
 					else //save shift only for the first entry in the group
@@ -1042,21 +1058,27 @@ int main(int argc, char* argv[])
 						motive m = motives[0];
 						int count = 0;
 						vector<pair<int, float> > closeIndx;
+						int totalIdx = ml.GetGlobalIdx(m);
 						for (int motlIdx = 1; motlIdx < motives.size(); motlIdx++)
 						{
 							motive m2 = motives[motlIdx];
 							float d = ml.GetDistance(m, m2);
-							int totalIdx = ml.GetGlobalIdx(m2);
-							if (d <= aConfig.SpeedUpDistance && d < minDistOfProcessedParticles[totalIdx])
+							int totalIdx2 = ml.GetGlobalIdx(m2);
+							if (d <= aConfig.SpeedUpDistance && d < minDistOfProcessedParticles[totalIdx2])
 							{
-								sf.SetValue(index, totalIdx, shift);
-								processedParticle[totalIdx] = true;
-								minDistOfProcessedParticles[totalIdx] = d;
-								closeIndx.push_back(pair<int, float>(totalIdx, d));
+								sf.SetValue(index, totalIdx2, shift);
+								processedParticle[totalIdx2] = true;
+								minDistOfProcessedParticles[totalIdx2] = d;
+								closeIndx.push_back(pair<int, float>(totalIdx2, d));
 								count++;
+
+								groupRelationList[totalIdx2].particleNr = m2.partNr;
+								groupRelationList[totalIdx2].particleNrInTomo = m2.partNrInTomo;
+								groupRelationList[totalIdx2].tomoNr = m2.tomoNr;
+								groupRelationList[totalIdx2].obtainedShiftFromID = totalIdx;
+								groupRelationList[totalIdx2].CCValue = ccValue;
 							}
 						}
-						int totalIdx = ml.GetGlobalIdx(m);
 
 						if (mpi_part == 0 && i == 0)
 						{
@@ -1093,6 +1115,14 @@ int main(int argc, char* argv[])
 		if (mpi_part == 0)
 		{
 			sf.OpenAndWrite();
+
+			ofstream fs;
+			fs.open(aConfig.ShiftOutputFile + ".relations");
+			for (size_t i = 0; i < ml.DimY; i++)
+			{
+				fs << groupRelationList[i].particleNr << "; " << groupRelationList[i].particleNrInTomo << "; " << groupRelationList[i].particleNrInTomo << "; " << groupRelationList[i].obtainedShiftFromID << "; " << groupRelationList[i].CCValue << std::endl;
+			}
+			fs.close();
 		}
 
 		//emwrite(aConfig.ShiftOutputFile.c_str(), (float*)extraShifts, 2, projSource->DimZ);
