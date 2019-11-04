@@ -21,7 +21,7 @@ function distorted = induceMagAniso(coords, amount, angle, dims)
 %
     % Get distortion matrices -- these are the matrices for correcting
     % distortion, so inversion of the stretch is necessary later on
-    [Sh2, Ro2, St, Ro1, Sh1] = distortionMatrices(angle, amount, dims(1), dims(2));
+    [Sh2, Ro2, St, Ro1, Sh1] = artia.geo.distortionMatrices(angle, amount, dims(1), dims(2));
     
     % Transpose if necessary
     if size(coords, 2) ~= 2
