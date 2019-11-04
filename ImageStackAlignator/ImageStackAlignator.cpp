@@ -867,7 +867,8 @@ int main(int argc, char* argv[])
 		delete[] totalShifts;
 	}
 
-	delete[] output;
+	// Free output
+	FileReader::DeleteData(output, outputType);
 
 	CudaContext::DestroyInstance(ctx);
 	

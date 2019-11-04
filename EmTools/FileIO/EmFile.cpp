@@ -31,9 +31,14 @@ EmFile::EmFile(string aFileName)
 }
 
 EmFile::~EmFile()
-{
-	if (_data)
-		delete[] _data;
+{	
+	// Delete existing data
+	// Need to figure out type of data array first
+	DataType_enum dataType = this->GetDataType();
+
+	// Free data block
+	FileReader::DeleteData(_data, dataType);
+
 	_data = NULL;
 }
 

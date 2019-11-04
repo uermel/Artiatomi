@@ -37,8 +37,13 @@ MRCFile::~MRCFile()
 		delete[] _extHeaders;
 	_extHeaders = NULL;
 
-	if (_data)
-		delete[] _data;
+	// Delete existing data
+	// Need to figure out type of data array first
+	DataType_enum dataType = this->GetDataType();
+
+	// Free data block
+	FileReader::DeleteData(_data, dataType);
+
 	_data = NULL;
 }
 
@@ -516,7 +521,7 @@ DataType_enum MRCFile::GetDataType()
 	case MRCMODE_UI2:
 		return DT_USHORT;
 	case MRCMODE_RGB:
-		return DT_UNKNOWN;
+		return DT_RGB;
 	default:
 		return DT_UNKNOWN;
 	}

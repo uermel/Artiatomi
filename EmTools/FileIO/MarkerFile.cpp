@@ -152,7 +152,10 @@ void MarkerFile::AddMarker()
 	float* newData = new float[MARKERFILE_X_DIMENSION  * (count + 1) * GetTotalProjectionCount()];
 	memset(newData, 0, MARKERFILE_X_DIMENSION  * (count + 1) * GetTotalProjectionCount() * sizeof(float));
 	memcpy(newData, _data, MARKERFILE_X_DIMENSION  * (count)* GetTotalProjectionCount() * sizeof(float));
-	delete[] _data;
+	
+	// Assume marker files are using float data
+	delete[] (float *)_data;
+
 	_data = newData;
 	_fileHeader.DimZ++;
 	for (int itilt = 0; itilt < GetTotalProjectionCount(); itilt++)
@@ -200,7 +203,9 @@ void MarkerFile::RemoveMarker(int idx)
 			}
 		}
 	}
-    delete[] _data;
+	
+	// Assume marker files are using float data
+	delete[] (float *)_data;;
     _data = newData;
     _fileHeader.DimZ--;
 

@@ -384,3 +384,91 @@ size_t FileReader::Tell()
 	else
 		return mIStream->tellg();
 }
+
+void FileReader::DeleteData(void * data, DataType_enum dataType) 
+{
+
+	// Delete existing data
+	if (data) {
+		// Just need to cast pointer to type with same size as intended
+		switch (dataType)
+		{	
+			// Image unsigned bytes
+			case DT_UCHAR:
+				delete[] (uchar *)data;
+			// Image unsigned shorts
+			case DT_USHORT: 
+				delete[] (ushort *)data;
+			// Image unsigned long ints
+			case DT_UINT: 
+				delete[] (uint *)data;
+			// Image unsigned long long ints
+			case DT_ULONG: 
+				delete[] (ulong64 *)data;
+			// Image floats
+			case DT_FLOAT:
+				delete[] (float *)data;
+			// Double-precision float
+			case DT_DOUBLE:
+				delete[] (double *)data;
+			// Signed byte
+			case DT_CHAR:
+				delete[] (signed char *)data;
+			// Image signed short integer
+			case DT_SHORT:
+				delete[] (short *)data;
+			// Image signed int
+			case DT_INT:
+				delete[] (long *)data;
+			// Image signed long long int
+			case DT_LONG:
+				delete[] (long64 *)data;
+			// 8 bytes (two floats for one pixel in TIFF)
+			case DT_FLOAT2:
+				delete[] (float2_t *)data;
+			// 4 bytes (two signed shorts)
+			case DT_SHORT2:
+				delete[] (short2_t *)data;
+			// 6 bytes (3 signed shorts)
+			case DT_SHORT3:
+				delete[] (short3_t *)data;
+			// 8 bytes (4 signed shorts)
+			case DT_SHORT4:
+				delete[] (short4_t *)data;
+			// 16 bytes (2 doubles)
+			case DT_DOUBLE2:
+				delete[] (double2_t *)data;
+			// 12 bytes (3 floats)
+			case DT_FLOAT3:
+				delete[] (float3_t *)data;
+			// 16 bytes (4 floats)
+			case DT_FLOAT4:
+				delete[] (float4_t *)data;
+			// Two bytes
+			case DT_UCHAR2:
+				delete[] (uchar2_t *)data;
+			// 3 bytes
+			case DT_UCHAR3:
+				delete[] (uchar3_t *)data;
+			// 4 bytes
+			case DT_UCHAR4:
+				delete[] (uchar4_t *)data;
+			// 2 unsigned shorts for one pixel in TIFF
+			case DT_USHORT2:
+				delete[] (ushort2_t *)data;
+			// 3 unsigned shorts for one pixel in TIFF
+			case DT_USHORT3:
+				delete[] (ushort3_t *)data;
+			// 4 unsigned shorts for one pixel in TIFF
+			case DT_USHORT4:
+				delete[] (ushort4_t *)data;
+			// Image RGB data - 3 unsigned chars
+			case DT_RGB:
+				delete[] (rgb_t *)data;
+			default:
+				// If no data type, just use char * for now
+				// TODO: figure out best way to handle this
+				delete[] (char *)data;
+		}
+	}
+}

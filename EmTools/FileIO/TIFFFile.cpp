@@ -1302,8 +1302,12 @@ TIFFFile::TIFFFile(string aFileName)
 
 TIFFFile::~TIFFFile()
 {
-	if (_data)
-		delete[] _data;
+	// Need to figure out type of data array first
+	DataType_enum dataType = this->GetDataType();
+
+	// Free data block
+	FileReader::DeleteData(_data, dataType);
+	
 	_data = NULL;
 
 	for (size_t i = 0; i < _imageFileDirectories.size(); i++)

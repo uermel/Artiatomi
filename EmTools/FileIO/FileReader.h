@@ -69,6 +69,9 @@ public:
 	
 	void(*readStatusCallback)(FileReaderStatus );
 
+	//! Given the void pointer to the data block of a file, frees up the data block from heap.
+	static void DeleteData(void *data, DataType_enum dataType);
+
 protected:
 	long64 ReadI8LE();
 	long64 ReadI8BE();
