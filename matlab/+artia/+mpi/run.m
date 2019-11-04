@@ -19,6 +19,8 @@ function [status, result] = run(command, nodes, config, varargin)
 %       Value Pair remoteHost. Requires passwordless ssh setup.
 %   remoteHost (str):
 %       The remote host to run the command on.
+%   execDir (str):
+%       Directory where the process should be run.
 %
 % Returns:
 %   status (int): 
@@ -34,18 +36,23 @@ function [status, result] = run(command, nodes, config, varargin)
     defs.suppressOutput.val = true;
     defs.runRemote.val = false;
     defs.remoteHost.val = '';
+    defs.execDir.val = '';
     artia.sys.getOpts(varargin, defs);
     
+    com = sprintf('mpiexec -n %d %s -u %s', nodes, command, config);
+    
+    if ~isempty(execDir)
+        com = sprintf('cd %s; %s', execDir, com);
+    end
+    
     if runRemote
-        com = sprintf('ssh -t %s mpiexec -n %d %s -u %s', remoteHost, nodes, command, config);
-    else
-        com = sprintf('mpiexec -n %d %s -u %s', nodes, command, config);
+        com = sprintf('ssh -t %s "%s"', remoteHost, com);
     end
     
     if suppressOutput
         [status, result] = system(com);
     else
-        [status, result] = system(com)
+        system(com)
     end
 end
 
