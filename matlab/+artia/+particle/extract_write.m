@@ -66,7 +66,7 @@ function [average] = extract_write(motivelistFilename, upScaleFactor, tomogramFi
     numberOfTomograms= numel(tomos);
     
     % Test size of tomo array
-    assert(size(tomogramFilenameArray,2) > max(motl(5,:)), 'Tomogram array smaller than largest TomoNr in Motivelist.')
+    assert(size(tomogramFilenameArray,2) >= max(motl(5,:)), 'Tomogram array smaller than largest TomoNr in Motivelist.')
 
     fprintf('%g tomograms are processed\n',numberOfTomograms);
     average= zeros(2*r,2*r,2*r);
