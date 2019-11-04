@@ -44,9 +44,9 @@ function [ali, model] = project3D(xyz, ali, phi, reconDim, imageDim, voxelSize, 
     %tx = (motive_list(8,:) - 0.5 + motive_list(11,:) - reconDim(1)/2) * voxelSize - volumeShifts(1);
     %ty = (motive_list(9,:) - 0.5 + motive_list(12,:) - reconDim(2)/2) * voxelSize - volumeShifts(2);
     %tz = (motive_list(10,:)- 0.5 + motive_list(13,:) - reconDim(3)/2) * voxelSize - volumeShifts(3);
-    %tx = (x(8,:) - 0.5 + motive_list(11,:) - reconDim(1)/2) * voxelSize - volumeShifts(1);
-    %ty = (y(9,:) - 0.5 + motive_list(12,:) - reconDim(2)/2) * voxelSize - volumeShifts(2);
-    %tz = (z(10,:)- 0.5 + motive_list(13,:) - reconDim(3)/2) * voxelSize - volumeShifts(3);
+    %tx = (xyz(1,:) - 0.5  - reconDim(1)/2) * voxelSize - volumeShifts(1);
+    %ty = (xyz(2,:) - 0.5  - reconDim(2)/2) * voxelSize - volumeShifts(2);
+    %tz = (xyz(3,:)- 0.5  - reconDim(3)/2) * voxelSize - volumeShifts(3);
 
     
     % Rotate 90 degrees and mirror along new y-axis to transform to world
@@ -55,7 +55,7 @@ function [ali, model] = project3D(xyz, ali, phi, reconDim, imageDim, voxelSize, 
     %y = -tx';
     %z = tz';
     
-    model = recon2real(xyz, reconDim, voxelSize, volumeShifts);
+    model = artia.geo.recon2real(xyz, reconDim, voxelSize, volumeShifts);
     x = model(1, :)';
     y = model(2, :)';
     z = model(3, :)';

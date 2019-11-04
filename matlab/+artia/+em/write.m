@@ -44,8 +44,8 @@ function emfid = write(data, fileName, varargin)
     defs.dataType.val = 'float32';
     defs.header.val = [];
     defs.doAppend.val = false;
-    defs.returnFid = false;
-    artia.sys.getOpts(varargin, defs)
+    defs.returnFid.val = false;
+    artia.sys.getOpts(varargin, defs);
     
     % Data size
     [xdim, ydim, zdim] = size(data);

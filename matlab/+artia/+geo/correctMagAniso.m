@@ -20,7 +20,7 @@ function undistorted = correctMagAniso(coords, amount, angle, dims)
 %   UE, 2019
 %
     % Get distortion matrices 
-    [Sh2, Ro2, St, Ro1, Sh1] = distortionMatrices(angle, amount, dims(1), dims(2));
+    [Sh2, Ro2, St, Ro1, Sh1] = artia.geo.distortionMatrices(angle, amount, dims(1), dims(2));
     
     % Transpose if necessary
     if size(coords, 2) ~= 2
