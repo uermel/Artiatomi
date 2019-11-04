@@ -1,8 +1,12 @@
-function ctfM = gctf2emsart(starFile, outFile, varargin)
+function ctfM = gctf2emsart_batch(starFile, outFile, varargin)
 % artia.ctf.gctf2emsart converts the output STAR-file of GCTF to emsart convention.
 % This function assumes, that GCTF is run in batch on the individual
 % projection images, yielding one STAR-file containing all projections. 
 % The input values can be sorted using different methods.
+%
+% Suggested workflow is to store all projections in one directory, run GCTF in
+% batch on all those file and use the STAR-output option. Then convert the
+% STAR-file using this function.
 %
 % Parameters:
 %   starFile (str):
