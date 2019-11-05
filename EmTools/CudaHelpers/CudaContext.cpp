@@ -200,8 +200,9 @@ CUmodule Cuda::CudaContext::LoadModulePTX(const void* aModuleImage, uint aMaxReg
 	int indexSet = 0;
 	char infoBuffer[1025];
 	char compilerBuffer[1025];
-	uint compilerBufferSize = 1024;
-	uint infoBufferSize = 1024;
+	// Assume 64-bit system now, which requires long long ints to get size equal to pointers
+	ulong64 compilerBufferSize = 1024;
+	ulong64 infoBufferSize = 1024;
 	infoBuffer[1024] = 0;
 	compilerBuffer[1024] = 0;
 	int indexInfoBufferSize = 0;
@@ -238,7 +239,9 @@ CUmodule Cuda::CudaContext::LoadModulePTX(const void* aModuleImage, uint aMaxReg
 	{
 		jitOptionCount += 1;
 		ptxOptions[indexSet] = CU_JIT_MAX_REGISTERS;
-		jitValues[indexSet] = (void*)aMaxRegCount;
+
+		// Assume 64-bit system now, which requires long long ints to get size equal to pointers
+		jitValues[indexSet] = (void*)(ulong64)aMaxRegCount;
 		indexSet++;
 	}
 	
