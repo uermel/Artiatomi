@@ -376,7 +376,7 @@ size_t MemoryPool::AllocateCudaDevice(std::shared_ptr<BufferRequest> request)
 	{
 		size_t pitch = request->mTypeSize * request->mWidth;
 
-		CUdeviceptr ptr = NULL;
+		CUdeviceptr ptr = (CUdeviceptr)NULL;
 		auto erg = Cuda::CudaThreadBoundContext::Run(cuMemAlloc, &ptr, pitch);
 		cudaSafeCall(erg.get());
 
@@ -403,7 +403,7 @@ size_t MemoryPool::AllocateCudaDevice(std::shared_ptr<BufferRequest> request)
 	{
 		size_t pitch = 0;
 		
-		CUdeviceptr ptr = NULL;
+		CUdeviceptr ptr = (CUdeviceptr)NULL;
 
 		if (Cuda::CudaPitchedDeviceVariable::IsReallyPitched((uint)request->mTypeSize))
 		{
@@ -441,7 +441,7 @@ size_t MemoryPool::AllocateCudaDevice(std::shared_ptr<BufferRequest> request)
 	{
 		size_t pitch = 0;
 
-		CUdeviceptr ptr = NULL;
+		CUdeviceptr ptr = (CUdeviceptr)NULL;
 		if (Cuda::CudaPitchedDeviceVariable::IsReallyPitched((uint)request->mTypeSize))
 		{
 			auto erg = Cuda::CudaThreadBoundContext::Run(cuMemAllocPitch, &ptr, &pitch, request->mTypeSize * request->mWidth, request->mHeight * request->mDepth, (uint)request->mTypeSize);
