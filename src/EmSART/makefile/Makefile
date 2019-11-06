@@ -17,4 +17,4 @@ $(EXECUTABLE): $(OBJECTS)
 	$(CC) $(CFLAGS) $(INCLUDES) $< -o $@
 
 clean:
-	rm EmSART $(OBJECTS)
+	rm -f EmSART $(OBJECTS)
