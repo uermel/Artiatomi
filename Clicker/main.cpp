@@ -26,6 +26,8 @@
 #include <QSurfaceFormat>
 #include <QFont>
 #include <QMessageBox>
+#include <QStyle>
+#include <QDesktopWidget>
 #include "tiltseriescontroller.h"
 
 int main(int argc, char *argv[])
@@ -49,6 +51,14 @@ int main(int argc, char *argv[])
     QSurfaceFormat::setDefaultFormat(f);
     w.setCorner(Qt::TopLeftCorner, Qt::LeftDockWidgetArea);
     w.setCorner(Qt::TopRightCorner, Qt::RightDockWidgetArea);
+    w.setGeometry(    
+        QStyle::alignedRect(
+            Qt::LeftToRight,
+            Qt::AlignCenter,
+            w.size(),
+            a.desktop()->availableGeometry()
+        )
+    );
     w.show();
 
     if (argc > 1) //open image file?

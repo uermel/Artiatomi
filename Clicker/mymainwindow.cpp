@@ -207,6 +207,8 @@ MyMainWindow::MyMainWindow(QWidget *parent) :
     //connect(ui->actionDelete_all_markers_in_projection, SIGNAL(triggered(bool)), ts, SLOT(DeleteAllMarkersFromCurrentImage()));
     connect(mTimer, SIGNAL(timeout()), this, SLOT(HandleTimerTick()));
     mTimer->setSingleShot(false);
+    // Set to corresponding interval of default slider value
+    mTimer->setInterval(301);
 
     ui->txt_ContrastCenter->setMinRange(0);
     ui->txt_ContrastCenter->setMaxRange(1);
@@ -691,7 +693,7 @@ void MyMainWindow::HandleCCImageChanged(QImage &img1, QImage &img2)
 void MyMainWindow::HandleTimerStartStop(bool start)
 {
     if (start)
-    {
+    {   
         mTimer->start();
     }
     else
@@ -767,7 +769,13 @@ void MyMainWindow::HandleTimerTick()
 
 void MyMainWindow::HandleTimerIntervalChanged(int value)
 {
-    mTimer->setInterval(value);
+    // Convert from slider speed to interval value
+    int maxSpeed = 500;
+    int minSpeed = 1;
+    int maxInterval = 500;
+    int interval = (int)(maxInterval * (1 - (float)value / maxSpeed)) + 1;
+    
+    mTimer->setInterval(interval);
 }
 
 void MyMainWindow::HandleAlignmentReport(QString report)
