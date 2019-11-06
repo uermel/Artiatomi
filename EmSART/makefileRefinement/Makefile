@@ -17,4 +17,4 @@ $(EXECUTABLE): $(OBJECTS)
 	$(CC) $(CFLAGS) $(INCLUDES) $< -o $@
 
 clean:
-	rm EmSARTRefine $(OBJECTS)
+	rm -f EmSARTRefine $(OBJECTS)
