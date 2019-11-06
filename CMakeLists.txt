@@ -4,9 +4,9 @@ project(Artiatomi LANGUAGES CUDA CXX)
 set(CMAKE_CXX_STANDARD 14)
 
 
-set(EMTOOLS_PATH "EmTools" CACHE PATH "Path to EmTools source.")
-set(CLICKER_PATH "Clicker" CACHE PATH "Path to Clicker source.")
-set(ISA_PATH "ImageStackAlignator" CACHE PATH "Path to ImageStackAlignator source.")
+set(EMTOOLS_PATH "src/EmTools" CACHE PATH "Path to EmTools source.")
+set(CLICKER_PATH "src/Clicker" CACHE PATH "Path to Clicker source.")
+set(ISA_PATH "src/ImageStackAlignator" CACHE PATH "Path to ImageStackAlignator source.")
 set(CUDA_PATH "/usr/local/cuda-8.0" CACHE PATH "Path to cuda 8 root")
 
 ######################### CUDA #############################
