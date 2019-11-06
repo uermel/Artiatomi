@@ -45,32 +45,33 @@ using namespace Cuda;
 #define LOG(a, ...) (MKLog::Get()->Log(LL_INFO, a, __VA_ARGS__))
 
 static void computeError(float *p, float *hx, int m, int n, void *adata)
-{
-	int s = (int)adata;
+{	
+	// Pointers now 64-bits long for 64-bit systems
+	ulong64 s = (ulong64)adata;
 	float2* p2 = (float2*)p;
 	float2** mat = new float2*[s];
-	for (size_t i = 0; i < s; i++)
+	for (ulong64 i = 0; i < s; i++)
 	{
 		mat[i] = new float2[s];
 	}
 
-	for (int i = 0; i < s; i++)
+	for (ulong64 i = 0; i < s; i++)
 	{
-		for (int j = i + 1; j < s; j++)
+		for (ulong64 j = i + 1; j < s; j++)
 		{
 			mat[i][j] = make_float2(0, 0);
 
-			for (int k = i; k < j; k++)
+			for (ulong64 k = i; k < j; k++)
 			{
 				mat[i][j].x += p2[k].x;
 				mat[i][j].y += p2[k].y;
 			}
 		}
 	}
-	int c = 0;
-	for (int i = 0; i < s; i++)
+	ulong64 c = 0;
+	for (ulong64 i = 0; i < s; i++)
 	{
-		for (int j = i + 1; j < s; j++)
+		for (ulong64 j = i + 1; j < s; j++)
 		{
 			hx[c] = mat[i][j].x;
 			c++;
@@ -79,7 +80,7 @@ static void computeError(float *p, float *hx, int m, int n, void *adata)
 		}
 	}
 
-	for (size_t i = 0; i < s; i++)
+	for (ulong64 i = 0; i < s; i++)
 	{
 		delete[] mat[i];
 	}
@@ -409,7 +410,7 @@ int main(int argc, char* argv[])
 			opt[1] = opt[2] = opt[3] = 1E-17f;
 			opt[4] = 1E-06f;
 
-			res = LEVMAR_DIF(&computeError, start, measurements, (z - 1) * 2, nUnkowns * 2, 1000, opt, info, NULL, NULL, (void*)z);
+			res = LEVMAR_DIF(&computeError, start, measurements, (z - 1) * 2, nUnkowns * 2, 1000, opt, info, NULL, NULL, (void*)(ulong64)z);
 			
 			cout << "finished: Reason   = " << info[6] << ", Iterations: " << info[5] << endl;
 			cout << "finished: FunEvals = " << info[7] << ", e: " << info[1] << ", e_init: " << info[0] << endl;

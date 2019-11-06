@@ -76,7 +76,7 @@ CudaCrossCorrelator::CudaCrossCorrelator(int aSize, CUmodule module) :
 	rowSumH = new float[aSize];
 
 	int n[] = { aSize, aSize };
-	int inembed[] = { aSize, mc1.GetPitch() / sizeof(float) };
+	int inembed[] = { aSize, (int)(mc1.GetPitch() / sizeof(float)) };
 	int onembed[] = { aSize, (aSize / 2 + 1) };
 
 	cufftPlanMany(&plan, 2, n, inembed, 1, 1, onembed, 1, 1, cufftType::CUFFT_R2C, 1);
