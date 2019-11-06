@@ -483,7 +483,7 @@ cl_mem CreateBuffer(cl_context ctx, uint texID, cl_mem oldBuffer)
 
 
 //    cl_mem ret = clCreateImage(ctx, CL_MEM_READ_WRITE, &format2, &desc, 0, &err);
-    cl_mem ret = clCreateFromGLTexture2D(ctx, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, texID, &err);
+    cl_mem ret = clCreateFromGLTexture(ctx, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, texID, &err);
     if (err != CL_SUCCESS)
     {
         throw OpenCL::OpenCLException("Failed to map OpenGL texture to OpenCL buffer.");

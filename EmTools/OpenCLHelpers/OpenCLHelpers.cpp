@@ -292,7 +292,7 @@ namespace OpenCL
 		// 2D
 		clGetSupportedImageFormats(cxGPUContext, CL_MEM_READ_ONLY,
 			CL_MEM_OBJECT_IMAGE2D,
-			NULL, NULL, &uiNumSupportedFormats);
+			0, NULL, &uiNumSupportedFormats);
 		cl_image_format* ImageFormats = new cl_image_format[uiNumSupportedFormats];
 		clGetSupportedImageFormats(cxGPUContext, CL_MEM_READ_ONLY,
 			CL_MEM_OBJECT_IMAGE2D,
@@ -433,7 +433,7 @@ namespace OpenCL
 #else
 			clGetGLContextInfoKHR_fn getGLContextInfo = NULL;
 			getGLContextInfo = (clGetGLContextInfoKHR_fn)clGetExtensionFunctionAddressForPlatform(platform, "clGetGLContextInfoKHR");
-			printf("");
+
 			if (getGLContextInfo)
 			{
 				size_t retSize = 0;
@@ -572,7 +572,7 @@ namespace OpenCL
 	int buildInfo(cl_program program, char** logBuffer)
 	{
 		size_t lenBuffer;
-		clGetProgramBuildInfo(program, OpenCLThreadBoundContext::GetDeviceID(), CL_PROGRAM_BUILD_LOG, NULL, NULL, &lenBuffer);
+		clGetProgramBuildInfo(program, OpenCLThreadBoundContext::GetDeviceID(), CL_PROGRAM_BUILD_LOG, 0, NULL, &lenBuffer);
 		*logBuffer = new char[lenBuffer];
 		return clGetProgramBuildInfo(program, OpenCLThreadBoundContext::GetDeviceID(), CL_PROGRAM_BUILD_LOG, lenBuffer, *logBuffer, NULL);
 	}

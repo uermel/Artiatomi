@@ -40,6 +40,7 @@
 #endif
 #ifndef NO_OPENCL
 #define USE_OPENCL
+#define CL_USE_DEPRECATED_OPENCL_1_2_APIS //NVIDIA has limited OpenCL 2 support
 #endif
 #define USE_SSE
 
