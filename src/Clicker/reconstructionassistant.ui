@@ -366,6 +366,9 @@
          <property name="checked">
           <bool>true</bool>
          </property>
+         <property name="toolTip">
+          <string>The number of standard deviations a pixel is allowed to differ from the mean.</string>
+         </property>
         </widget>
        </item>
        <item row="2" column="1">
@@ -402,7 +405,10 @@
        <item row="5" column="3">
         <widget class="FloatLineEdit" name="txt_ScaleFactor">
          <property name="text">
-          <string>1000.000</string>
+          <string>1.000</string>
+         </property>
+         <property name="toolTip">
+          <string>Scale factor is needed for 16 bit volume storage format. Can be set to 1 for 32-bit floats.</string>
          </property>
         </widget>
        </item>
@@ -504,6 +510,9 @@
            <property name="text">
             <string>Threshold: </string>
            </property>
+         <property name="toolTip">
+          <string>The number of standard deviations a pixel is allowed to differ from the mean.</string>
+         </property>
           </widget>
          </item>
          <item>
@@ -516,6 +525,9 @@
            </property>
            <property name="text">
             <string>10</string>
+           </property>
+           <property name="toolTip">
+            <string>The number of standard deviations a pixel is allowed to differ from the mean.</string>
            </property>
           </widget>
          </item>
