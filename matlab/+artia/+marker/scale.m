@@ -38,8 +38,8 @@ function marker = scale(marker, pixelSize, newPixelSize, varargin)
     % Scale marker
     marker.ali([2:3, 5:6], :, :) = marker.ali([2:3, 5:6], :, :) .* fac;
     marker.model = marker.model .* fac;
-    marker.ImSizeX = marker.ImSizeX * fac;
-    marker.ImSizeY = marker.ImSizeY * fac;
+    marker.imageSizeX = marker.imageSizeX * fac;
+    marker.imageSizeY = marker.imageSizeY * fac;
     
     % Save if necessary
     if ~isempty(outFile)
