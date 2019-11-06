@@ -30,3 +30,5 @@ cmake-build-debug
 *.toc
 *.pdf
 
+### IDE ###
+.idea
