@@ -33,7 +33,7 @@
 //#include "../MKLog/MKLog.h"
 
 // Self
-//#include "kernel.h"
+#include "ImageStackAlignatorKernels/kernel.cu.h"
 #include "Kernels.h"
 #include "CudaCrossCorrelator.h"
 #include "AlignmentOptions.h"
@@ -138,8 +138,9 @@ int main(int argc, char* argv[])
 	}
 
 	CudaContext* ctx = CudaContext::CreateInstance(options.DeviceID);
-
-	CUmodule mod = ctx->LoadModule("kernel.ptx");
+	
+	CUmodule mod = ctx->LoadModulePTX(KernelCC, 0, false, false);
+	// CUmodule mod = ctx->LoadModule("kernel.ptx");
 	CudaCrossCorrelator cc(size, mod);
 	CreateMaskKernel createMask(mod);
 	createMask.SetComputeSize(width, height);
