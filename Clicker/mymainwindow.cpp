@@ -208,7 +208,7 @@ MyMainWindow::MyMainWindow(QWidget *parent) :
     connect(mTimer, SIGNAL(timeout()), this, SLOT(HandleTimerTick()));
     mTimer->setSingleShot(false);
     // Set to corresponding interval of default slider value
-    mTimer->setInterval(301);
+    mTimer->setInterval(1);
 
     ui->txt_ContrastCenter->setMinRange(0);
     ui->txt_ContrastCenter->setMaxRange(1);
@@ -774,7 +774,7 @@ void MyMainWindow::HandleTimerIntervalChanged(int value)
     int minSpeed = 1;
     int maxInterval = 500;
     int interval = (int)(maxInterval * (1 - (float)value / maxSpeed)) + 1;
-    
+
     mTimer->setInterval(interval);
 }
 
