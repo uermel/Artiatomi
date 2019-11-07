@@ -70,7 +70,10 @@ ReconstructionAssistant::ReconstructionAssistant(TiltSeriesController* ts, QWidg
     ui->txt_MagAnisoAngle->setValue(angle);
 
     ui->txt_SIRTCount->setMaximum(ts->GetImageCount());
-    ui->txt_BadPixelValue->setValue(4 * roundf(ts->GetMeanStd()));
+
+    // Doesn't seem to be valid currently
+    // ui->txt_BadPixelValue->setValue(4 * roundf(ts->GetMeanStd()));
+    ui->txt_BadPixelValue->setValue(10);
 
     ts->GetMarkerMinMaxZ(mZMin, mZMax);
     ui->tabWidget->setCurrentIndex(0);
