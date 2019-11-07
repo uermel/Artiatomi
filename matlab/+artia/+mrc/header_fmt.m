@@ -109,7 +109,7 @@ function fmt = header_fmt()
     % MAP statement + machine stamp 209-224
     fmt.cmap =              {208,        4,          '*char',         'MAP '};
     fmt.stamp =             {212,        1,          'uint32',        16708};
-    fmt.rms =               {216,        1,          'float32',       1};
+    fmt.rms =               {216,        1,          'float32',       0};
     fmt.nlabel =            {220,        1,          'int32',         0};
     
     % Labels 225-1024

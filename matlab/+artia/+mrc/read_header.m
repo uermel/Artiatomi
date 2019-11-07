@@ -51,7 +51,7 @@ function [header, endian] = read_header(fileName)
     fseek(fid, 208, 'bof');
     cmap = fread(fid, 4, '*char');
     
-    if strcmp(cmap, 'MAP ')
+    if all(cmap' == 'MAP ')
         % Correct ordering found, go back to beginning of file
         endian = potEndian;
         fseek(fid, 0, 'bof');

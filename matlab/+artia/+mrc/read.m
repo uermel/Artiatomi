@@ -40,7 +40,7 @@ function [data, header] = read(fileName, doPrint)
     % Open file
     fid = fopen(fileName,'r',endian);
 
-    % Skip header (512 bytes)
+    % Skip header (1024+header.next bytes)
     fread(fid, 1024+header.next, 'int8');
     pixs = xdim*ydim*zdim;
 

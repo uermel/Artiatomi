@@ -32,10 +32,11 @@ function fid = write_header(header, file)
     header_fmt.extended{3} = 'float32';
     
     for i = 1:numel(names)
+        ftell(fid)
         fwrite(fid, header.(names{i}), header_fmt.(names{i}){3});
     end
     
-    
+    ftell(fid)
     % Close file if filename was supplied
     if ischar(file)
         fclose(fid);
