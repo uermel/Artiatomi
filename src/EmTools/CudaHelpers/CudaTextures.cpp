@@ -498,6 +498,31 @@ namespace Cuda
 		cudaSafeCall(cuParamSetTexRef(mKernel->GetCUfunction(), CU_PARAM_TR_DEFAULT, mTexref));
 	}
 
+	void CudaTextureLinearPitched2D::Bind(CudaKernel* aKernel, string aTexName, CUaddress_mode aAddressMode0, CUaddress_mode aAddressMode1,
+		CUfilter_mode aFilterMode, uint aTexRefSetFlag, CudaPitchedDeviceVariable* aDevVar, CUarray_format aFormat, uint aNumChannels)
+	{
+		CUtexref texref;
+		cudaSafeCall(cuModuleGetTexRef(&texref, aKernel->GetCUmodule(), aTexName.c_str()));
+		cudaSafeCall(cuTexRefSetAddressMode(texref, 0, aAddressMode0));
+		cudaSafeCall(cuTexRefSetAddressMode(texref, 1, aAddressMode1));
+		cudaSafeCall(cuTexRefSetFilterMode(texref, aFilterMode));
+		cudaSafeCall(cuTexRefSetFlags(texref, aTexRefSetFlag));
+		cudaSafeCall(cuTexRefSetFormat(texref, aFormat, aNumChannels));
+
+		uint channelSize = Cuda::GetChannelSize(aFormat);
+		size_t sizeInBytes = aDevVar->GetHeight() * aDevVar->GetWidth() * channelSize * aNumChannels;
+
+		CUDA_ARRAY_DESCRIPTOR arraydesc;
+		memset(&arraydesc, 0, sizeof(arraydesc));
+		arraydesc.Format = aFormat;
+		arraydesc.Height = aDevVar->GetHeight();
+		arraydesc.NumChannels = aNumChannels;
+		arraydesc.Width = aDevVar->GetWidth();
+
+		cudaSafeCall(cuTexRefSetAddress2D(texref, &arraydesc, aDevVar->GetDevicePtr(), aDevVar->GetPitch()));
+		cudaSafeCall(cuParamSetTexRef(aKernel->GetCUfunction(), CU_PARAM_TR_DEFAULT, texref));
+	}
+
 	CudaTextureLinearPitched2D::~CudaTextureLinearPitched2D()
 	{
 		if (mCleanUp && mDevVar)
@@ -655,6 +680,20 @@ namespace Cuda
 			delete mArray;
 			mArray = NULL;
 		}
+	}
+
+	void CudaTextureArray3D::BindToTexRef()
+	{
+		cudaSafeCall(cuModuleGetTexRef(&mTexref, mKernel->GetCUmodule(), mName.c_str()));
+		cudaSafeCall(cuTexRefSetAddressMode(mTexref, 0, mAddressMode0));
+		cudaSafeCall(cuTexRefSetAddressMode(mTexref, 1, mAddressMode1));
+		cudaSafeCall(cuTexRefSetAddressMode(mTexref, 2, mAddressMode2));
+		cudaSafeCall(cuTexRefSetFilterMode(mTexref, mFilterMode));
+		cudaSafeCall(cuTexRefSetFlags(mTexref, mTexRefSetFlag));
+		cudaSafeCall(cuTexRefSetFormat(mTexref, mArrayFormat, mNumChannels));
+
+		cudaSafeCall(cuTexRefSetArray(mTexref, mArray->GetCUarray(), mTexRefSetFlag));
+		cudaSafeCall(cuParamSetTexRef(mKernel->GetCUfunction(), CU_PARAM_TR_DEFAULT, mTexref));
 	}
 
 

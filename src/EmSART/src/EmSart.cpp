@@ -25,27 +25,29 @@
 #ifdef USE_MPI
 #include <mpi.h>
 #endif
-#include "default.h"
+#include "EmSartDefault.h"
 #include "Projection.h"
 #include "Volume.h"
 //#include "Kernels.h"
-#include "cuda/CudaArrays.h"
-#include "cuda/CudaContext.h"
-#include "cuda/CudaTextures.h"
-#include "cuda/CudaKernel.h"
-#include "cuda/CudaDeviceProperties.h"
+//#include <CudaArrays.h>
+#include <CudaContext.h>
+//#include <CudaTextures.h>
+//#include <CudaKernel.h>
+//#include <CudaDeviceProperties.h>
 #include "utils/Config.h"
 //#include "utils/CudaConfig.h"
-#include "utils/Matrix.h"
-#include "io/Dm4FileStack.h"
-#include "io/MRCFile.h"
+//#include "utils/Matrix.h"
+//#include "io/Dm4FileStack.h"
+//#include "io/MRCFile.h"
+#include "io/FileSource.h"
 #ifdef USE_MPI
 #include "io/MPISource.h"
 #endif
-#include "io/MarkerFile.h"
+#include <MarkerFile.h>
+//#include "io/MarkerFile.h"
 #include "io/writeBMP.h"
-#include "io/mrcHeader.h"
-#include "io/emHeader.h"
+//#include "io/mrcHeader.h"
+//#include "io/emHeader.h"
 #include "io/CtfFile.h"
 #include <time.h>
 #include <cufft.h>
@@ -306,24 +308,14 @@ int main(int argc, char* argv[])
 		//Load projection data file
 		if (mpi_part == 0)
 		{
-			if (aConfig.GetFileReadMode() == Configuration::Config::FRM_DM4)
+			if (aConfig.GetFileReadMode() == Configuration::Config::FRM_DM4 ||
+				aConfig.GetFileReadMode() == Configuration::Config::FRM_MRC)
 			{
-				projSource = new Dm4FileStack(aConfig.ProjectionFile);
 				printf("\nLoading projections...\n");
-				if (!projSource->OpenAndRead())
-				{
-					printf("Error: cannot read projections from %s.\n", aConfig.ProjectionFile.c_str());
-					WaitForInput(-1);
-				}
-				projSource->ReadHeaderInfo();
+				projSource = new FileSource(aConfig.ProjectionFile);
+				
 
-				printf("Loaded %d dm4 projections.\n\n", projSource->DimZ);
-			}
-			else if(aConfig.GetFileReadMode() == Configuration::Config::FRM_MRC)
-			{
-				//Load projection data file
-				projSource = new MRCFile(aConfig.ProjectionFile);
-				((MRCFile*)projSource)->OpenAndReadHeader();
+				printf("Loaded %d projections.\n\n", projSource->GetProjectionCount());
 			}
 			else
 			{
@@ -334,11 +326,11 @@ int main(int argc, char* argv[])
 			}
 
 #ifdef USE_MPI
-			float pixelsize = projSource->PixelSize[0];
+			float pixelsize = projSource->GetPixelSize();
 			int dims[4];
-			dims[0] = projSource->DimX;
-			dims[1] = projSource->DimY;
-			dims[2] = projSource->DimZ;
+			dims[0] = projSource->GetWidth();
+			dims[1] = projSource->GetHeight();
+			dims[2] = projSource->GetProjectionCount();
 			dims[3] = *((int*)&pixelsize);
 			MPI_Bcast(dims, 4, MPI_INT, 0, MPI_COMM_WORLD);
 #endif
@@ -353,7 +345,7 @@ int main(int argc, char* argv[])
 #endif
 		
 		//Load marker/alignment file
-		MarkerFile markers(aConfig.MarkerFile, aConfig.ReferenceMarker);
+		MarkerFile markers(aConfig.MarkerFile /*, aConfig.ReferenceMarker*/);
 
 		//Create projection object to handle projection data
 		Projection proj(projSource, &markers);
@@ -512,12 +504,12 @@ int main(int argc, char* argv[])
 				log << "Normalizing projections by mean [im = (im - mean) / mean]" << endl;
 
 			log << "Scaling projection values by: " << aConfig.ProjectionScaleFactor << endl;
-			log << "Pixel size is: " << proj.GetPixelSize(0) << " nm" << endl;
+			log << "Pixel size is: " << proj.GetPixelSize() << " nm" << endl;
 
 			log << "Projection statistics:" << endl;
 			
 			printf("\r\n");
-			for (int i = 0; i < projSource->DimZ; i++)
+			for (int i = 0; i < projSource->GetProjectionCount(); i++)
 			{
 				if (!markers.CheckIfProjIndexIsGood(i))
 				{
@@ -532,15 +524,15 @@ int main(int argc, char* argv[])
 				//projSource->GetProjection(i) always points to an array with an element size of 4 bytes,
 				//Even if original data is stored in shorts! We can therfor cast data and keep the same pointer.
 				char* imgUS = projSource->GetProjection(i);
-				float tilt = projSource->TiltAlpha[i];
-				float weight = 1.0f / cos(tilt / 180.0f * M_PI);
+				/*float tilt = projSource->TiltAlpha[i];
+				float weight = 1.0f / cos(tilt / 180.0f * M_PI);*/
 				
 				//Check if data format is supported
-				if (projSource->GetDataType() != FDT_SHORT &&
-					projSource->GetDataType() != FDT_USHORT && 
-					projSource->GetDataType() != FDT_INT &&
-					projSource->GetDataType() != FDT_UINT &&
-					projSource->GetDataType() != FDT_FLOAT)
+				if (projSource->GetDataType() != DT_SHORT &&
+					projSource->GetDataType() != DT_USHORT && 
+					projSource->GetDataType() != DT_INT &&
+					projSource->GetDataType() != DT_UINT &&
+					projSource->GetDataType() != DT_FLOAT)
 				{
 					cerr << "Projections have wrong data type: supported types are: short, ushort, int, uint and float.";
 					log << SimpleLogger::LOG_ERROR;
@@ -563,7 +555,7 @@ int main(int argc, char* argv[])
 /////////////////////////////////////
 
 
-        if (mpi_part == 0)printf("\nPixel size is: %f nm, Cs: %.2f mm, Voltage: %.2f kV\n", proj.GetPixelSize(0), aConfig.Cs, aConfig.Voltage);
+        if (mpi_part == 0)printf("\nPixel size is: %f nm, Cs: %.2f mm, Voltage: %.2f kV\n", proj.GetPixelSize(), aConfig.Cs, aConfig.Voltage);
 
         int SIRTcount = aConfig.SIRTCount;
 		if (aConfig.WBP_NoSART)
@@ -740,9 +732,9 @@ int main(int argc, char* argv[])
 					header.MY = (int)dims.y;
 					header.MZ = (int)dims.z;
 
-					header.Xlen = proj.GetPixelSize(0) * dims.x * aConfig.VoxelSize.x * 10.0f;
-					header.Ylen = proj.GetPixelSize(0) * dims.y * aConfig.VoxelSize.y * 10.0f;
-					header.Zlen = proj.GetPixelSize(0) * dims.z * aConfig.VoxelSize.z * 10.0f;
+					header.Xlen = proj.GetPixelSize() * dims.x * aConfig.VoxelSize.x * 10.0f;
+					header.Ylen = proj.GetPixelSize() * dims.y * aConfig.VoxelSize.y * 10.0f;
+					header.Zlen = proj.GetPixelSize() * dims.z * aConfig.VoxelSize.z * 10.0f;
 
 					header.MAPC = MRCAXIS_X;
 					header.MAPR = MRCAXIS_Y;
@@ -762,7 +754,7 @@ int main(int argc, char* argv[])
 					header.DimX = (int)dims.x;
 					header.DimY = (int)dims.y;
 					header.DimZ = (int)dims.z;
-					header.ObjectPixelSize = (int)(proj.GetPixelSize(0) * aConfig.VoxelSize.x * 1000);
+					header.ObjectPixelSize = (int)(proj.GetPixelSize() * aConfig.VoxelSize.x * 1000);
 
 					mVol->write((char*)&header, sizeof(EmHeader));
 					sizeDataType = sizeof(float);

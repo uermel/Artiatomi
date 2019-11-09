@@ -24,7 +24,7 @@
 #ifndef CONSTANTS_H
 #define CONSTANTS_H
 
-#include "../default.h"
+//#include "../EmSartDefault.h"
 
 /**
 	Defines some constants, which are used throughout the whole renderer.

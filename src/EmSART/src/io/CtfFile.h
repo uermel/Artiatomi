@@ -23,10 +23,13 @@
 
 #ifndef CTFFILE_H
 #define CTFFILE_H
+#ifdef EMFILE_H
+//hallo
+#endif
+#include <EmFile.h>
+//#include "EMFile.h"
 
-#include "EMFile.h"
-
-class CtfFile : private EMFile
+class CtfFile : private EmFile
 {
 public:
 	CtfFile(string aFileName);

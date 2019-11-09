@@ -33,7 +33,7 @@
 //#include "../MKLog/MKLog.h"
 
 // Self
-#include "ImageStackAlignatorKernels/kernel.cu.h"
+#include "ImageStackAlignatorKernels/kernel.cu.h" //generetad while compilation
 #include "Kernels.h"
 #include "CudaCrossCorrelator.h"
 #include "AlignmentOptions.h"

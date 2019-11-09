@@ -51,12 +51,12 @@ motive::motive() :
 }
 
 MotiveList::MotiveList(string filename, float aBinningFactorClick, float aBinningShift)
-	: EMFile(filename), binningFactorClick(aBinningFactorClick), binningFactorShift(aBinningShift)
+	: EmFile(filename), binningFactorClick(aBinningFactorClick), binningFactorShift(aBinningShift)
 {
-	EMFile::OpenAndRead();
-	EMFile::ReadHeaderInfo();
+	EmFile::OpenAndRead();
+	//EmFile::ReadHeaderInfo();
 
-	for (int i = 0; i < DimY; i++)
+	for (int i = 0; i < _fileHeader.DimY; i++)
 	{
 		motive m = GetAt(i);
 
@@ -79,7 +79,7 @@ MotiveList::MotiveList(string filename, float aBinningFactorClick, float aBinnin
 motive MotiveList::GetAt(int index)
 {
 	motive m;
-	memcpy(&m, _data + index * sizeof(m), sizeof(m));
+	memcpy(&m, (char*)_data + index * sizeof(m), sizeof(m));
 	m.xCoord *= binningFactorClick;
 	m.yCoord *= binningFactorClick;
 	m.x_Coord *= binningFactorClick;
@@ -102,7 +102,12 @@ void MotiveList::SetAt(int index, motive& m)
 	m.x_Shift /= binningFactorShift;
 	m.y_Shift /= binningFactorShift;
 	m.z_Shift /= binningFactorShift;
-	memcpy(_data + index * sizeof(m), &m, sizeof(m));
+	memcpy((char*)_data + index * sizeof(m), &m, sizeof(m));
+}
+
+int MotiveList::GetParticleCount()
+{
+	return _fileHeader.DimY;
 }
 
 #ifdef REFINE_MODE
@@ -144,7 +149,7 @@ std::vector<motive> MotiveList::GetNeighbours(int index, int count)
 	std::vector<motive> ret;
 	std::vector<std::pair<float, int> > dists;
 
-	for (int i = 0; i < DimY; i++) 
+	for (int i = 0; i < _fileHeader.DimY; i++)
 	{
 		float dist = GetDistance(i, index);
 		dists.push_back(pair<float, int>(dist, i));
@@ -153,9 +158,9 @@ std::vector<motive> MotiveList::GetNeighbours(int index, int count)
 	//actual index is first element as it has distance zero!
 	sort(dists.begin(), dists.end());
 
-	if (count > DimY) //don't run over the end of the motive list if particle count is larger than the motive list.
+	if (count > _fileHeader.DimY) //don't run over the end of the motive list if particle count is larger than the motive list.
 	{
-		count = DimY;
+		count = _fileHeader.DimY;
 	}
 
 	for (int i = 0; i < count; i++)
@@ -171,7 +176,7 @@ std::vector<motive> MotiveList::GetNeighbours(int index, float maxDist)
 	std::vector<motive> ret;
 
 	ret.push_back(GetAt(index)); //actual index is first element.
-	for (int i = 0; i < DimY; i++)
+	for (int i = 0; i < _fileHeader.DimY; i++)
 	{
 		if (GetDistance(i, index) <= maxDist && i != index)
 		{
@@ -190,7 +195,7 @@ std::vector<supportMotive> MotiveList::GetNeighbours(int index, float maxDist, v
 	motive curr = GetAt(index);
 	for (int s = 0; s < supporters.size(); s++)
 	{
-		for (int i = 0; i < supporters[s].DimY; i++)
+		for (int i = 0; i < supporters[s]._fileHeader.DimY; i++)
 		{
 			motive m = supporters[s].GetAt(i);
 			if (GetDistance(m, curr) <= maxDist)
@@ -213,7 +218,7 @@ std::vector<motive> MotiveList::GetNeighbours(int groupNr)
 	int idx = GetGroupIdx(groupNr);
 	if (idx < 0) return ret;
 
-	for (int i = 0; i < DimY; i++)
+	for (int i = 0; i < _fileHeader.DimY; i++)
 	{
 		motive m = GetAt(i);
 		if (m.classNo == idx)
@@ -232,9 +237,9 @@ int MotiveList::GetGroupCount(Configuration::Config & aConfig)
 	case Configuration::Config::GM_BYGROUP:
 		return (int)groupIndices.size();
 	case Configuration::Config::GM_MAXDIST:
-		return DimY;
+		return _fileHeader.DimY;
 	case Configuration::Config::GM_MAXCOUNT:
-		return DimY;
+		return _fileHeader.DimY;
 	}
 	return 0;
 }
@@ -248,7 +253,7 @@ int MotiveList::GetGroupIdx(int groupNr)
 }
 int MotiveList::GetGlobalIdx(motive & m)
 {
-	for (int i = 0; i < DimY; i++)
+	for (int i = 0; i < _fileHeader.DimY; i++)
 	{
 		motive m2 = GetAt(i);
 		if (m2.isEqual(m))

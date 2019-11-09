@@ -184,11 +184,11 @@ void Reconstructor::GetDefocusMinMax(float ray, int index, float & defocusMin, f
 	float distanceTo0 = ray + DIST; //in pixel
 	if (config.IgnoreZShiftForCTF)
 	{
-		distanceTo0 = (round(distanceTo0 * proj.GetPixelSize(index) * config.CTFSliceThickness) / config.CTFSliceThickness) + config.CTFSliceThickness / 2.0f;
+		distanceTo0 = (round(distanceTo0 * proj.GetPixelSize() * config.CTFSliceThickness) / config.CTFSliceThickness) + config.CTFSliceThickness / 2.0f;
 	}
 	else
 	{
-		distanceTo0 = (round(distanceTo0 * proj.GetPixelSize(index) * config.CTFSliceThickness) / config.CTFSliceThickness) + config.CTFSliceThickness / 2.0f - (config.VolumeShift.z * proj.GetPixelSize(index) * cosf(tiltAngle)); //in nm
+		distanceTo0 = (round(distanceTo0 * proj.GetPixelSize() * config.CTFSliceThickness) / config.CTFSliceThickness) + config.CTFSliceThickness / 2.0f - (config.VolumeShift.z * proj.GetPixelSize() * cosf(tiltAngle)); //in nm
 	}
 	if (config.SwitchCTFDirectionForIMOD)
 	{
@@ -239,20 +239,20 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 	magAnisotropyInv(GetMagAnistropyMatrix(1.0f / aConfig.MagAnisotropyAmount, aConfig.MagAnisotropyAngleInDeg, proj.GetWidth(), proj.GetHeight()))
 {
 	//Set kernel work dimensions for 2D images:
-	fpKernel.SetWorkSize(proj.GetWidth(), proj.GetHeight(), 1);
-	slicerKernel.SetWorkSize(proj.GetWidth(), proj.GetHeight(), 1);
-	volTravLenKernel.SetWorkSize(proj.GetWidth(), proj.GetHeight(), 1);
-	compKernel.SetWorkSize(proj.GetWidth(), proj.GetHeight(), 1);
-	cropKernel.SetWorkSize(proj.GetWidth(), proj.GetHeight(), 1);
+	fpKernel.SetComputeSize(proj.GetWidth(), proj.GetHeight(), 1);
+	slicerKernel.SetComputeSize(proj.GetWidth(), proj.GetHeight(), 1);
+	volTravLenKernel.SetComputeSize(proj.GetWidth(), proj.GetHeight(), 1);
+	compKernel.SetComputeSize(proj.GetWidth(), proj.GetHeight(), 1);
+	cropKernel.SetComputeSize(proj.GetWidth(), proj.GetHeight(), 1);
 
-	wbp.SetWorkSize(proj.GetMaxDimension() / 2 + 1, proj.GetMaxDimension(), 1);
-	ctf.SetWorkSize(proj.GetMaxDimension() / 2 + 1, proj.GetMaxDimension(), 1);
-	fourFilterKernel.SetWorkSize(proj.GetMaxDimension() / 2 + 1, proj.GetMaxDimension(), 1);
-	doseWeightingKernel.SetWorkSize(proj.GetMaxDimension() / 2 + 1, proj.GetMaxDimension(), 1);
-	conjKernel.SetWorkSize(proj.GetMaxDimension() / 2 + 1, proj.GetMaxDimension(), 1);
-	cts.SetWorkSize(proj.GetMaxDimension(), proj.GetMaxDimension(), 1);
-	maxShiftKernel.SetWorkSize(proj.GetMaxDimension(), proj.GetMaxDimension(), 1);
-	convVolKernel.SetWorkSize(config.RecDimensions.x, config.RecDimensions.y, 1);
+	wbp.SetComputeSize(proj.GetMaxDimension() / 2 + 1, proj.GetMaxDimension(), 1);
+	ctf.SetComputeSize(proj.GetMaxDimension() / 2 + 1, proj.GetMaxDimension(), 1);
+	fourFilterKernel.SetComputeSize(proj.GetMaxDimension() / 2 + 1, proj.GetMaxDimension(), 1);
+	doseWeightingKernel.SetComputeSize(proj.GetMaxDimension() / 2 + 1, proj.GetMaxDimension(), 1);
+	conjKernel.SetComputeSize(proj.GetMaxDimension() / 2 + 1, proj.GetMaxDimension(), 1);
+	cts.SetComputeSize(proj.GetMaxDimension(), proj.GetMaxDimension(), 1);
+	maxShiftKernel.SetComputeSize(proj.GetMaxDimension(), proj.GetMaxDimension(), 1);
+	convVolKernel.SetComputeSize(config.RecDimensions.x, config.RecDimensions.y, 1);
 	
 	//Alloc device variables
 	realprojUS_d.Alloc(proj.GetWidth() * sizeof(int), proj.GetHeight(), sizeof(int));
@@ -262,8 +262,8 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 	filterImage_d.Alloc(proj.GetWidth() * sizeof(float), proj.GetHeight(), sizeof(float));
 
 #ifdef REFINE_MODE
-	maxShiftWeightedKernel.SetWorkSize(proj.GetMaxDimension(), proj.GetMaxDimension(), 1);
-	findPeakKernel.SetWorkSize(proj.GetMaxDimension(), proj.GetMaxDimension(), 1);
+	maxShiftWeightedKernel.SetComputeSize(proj.GetMaxDimension(), proj.GetMaxDimension(), 1);
+	findPeakKernel.SetComputeSize(proj.GetMaxDimension(), proj.GetMaxDimension(), 1);
 
 
 	projSubVols_d.Alloc(proj.GetWidth() * sizeof(float), proj.GetHeight(), sizeof(float));
@@ -512,7 +512,7 @@ void Reconstructor::ForwardProjectionCTF(Volume<TVol>* vol, CudaTextureObject3D&
 		float t_in, t_out;
 		GetDefocusDistances(t_in, t_out, index, vol);
 
-		for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize(index))
+		for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize())
 		{
 			dist_d.Memset(0);
 
@@ -527,7 +527,7 @@ void Reconstructor::ForwardProjectionCTF(Volume<TVol>* vol, CudaTextureObject3D&
 				fflush(stdout);
 			}
 			//printf("\n");
-			runtime = slicerKernel(x, y, dist_d, ray, ray + config.CTFSliceThickness / proj.GetPixelSize(index), texVol);
+			runtime = slicerKernel(x, y, dist_d, ray, ray + config.CTFSliceThickness / proj.GetPixelSize(), texVol);
 
 #ifdef USE_MPI
 			if (!noSync)
@@ -731,10 +731,10 @@ void Reconstructor::ForwardProjectionCTFROI(Volume<TVol>* vol, CudaTextureObject
 
 		float t_in, t_out;
 		GetDefocusDistances(t_in, t_out, index, vol);
-		/*t_in -= 2*config.CTFSliceThickness / proj.GetPixelSize(index);
-		t_out += 2*config.CTFSliceThickness / proj.GetPixelSize(index);*/
+		/*t_in -= 2*config.CTFSliceThickness / proj.GetPixelSize();
+		t_out += 2*config.CTFSliceThickness / proj.GetPixelSize();*/
 
-		for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize(index))
+		for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize())
 		{
 			dist_d.Memset(0);
 
@@ -749,7 +749,7 @@ void Reconstructor::ForwardProjectionCTFROI(Volume<TVol>* vol, CudaTextureObject
 				fflush(stdout);
 			}
 			//printf("\n");
-			runtime = slicerKernel(x, y, dist_d, ray, ray + config.CTFSliceThickness / proj.GetPixelSize(index), texVol, roiMin, roiMax);
+			runtime = slicerKernel(x, y, dist_d, ray, ray + config.CTFSliceThickness / proj.GetPixelSize(), texVol, roiMin, roiMax);
 
 #ifdef USE_MPI
 			if (!noSync)
@@ -871,7 +871,7 @@ template<class TVol>
 void Reconstructor::BackProjectionNoCTF(Volume<TVol>* vol, int proj_index, float SIRTCount)
 {
 	float3 volDim = vol->GetSubVolumeDimension(mpi_part);
-	bpKernel.SetWorkSize((int)volDim.x, (int)volDim.y, (int)volDim.z);
+	bpKernel.SetComputeSize((int)volDim.x, (int)volDim.y, (int)volDim.z);
 
 	int2 pA, pB, pC, pD;
 
@@ -904,7 +904,7 @@ void Reconstructor::BackProjectionNoCTF(Volume<TVol>* vol, vector<Volume<TVol>*>
 		proj.SetExtraShift(proj_index, vecExtraShifts[batch]);
 
 		float3 volDim = subVolumes[batch]->GetSubVolumeDimension(0);
-		bpKernel.SetWorkSize((int)volDim.x, (int)volDim.y, (int)volDim.z);
+		bpKernel.SetComputeSize((int)volDim.x, (int)volDim.y, (int)volDim.z);
 		
 		SetConstantValues(bpKernel, *(subVolumes[batch]), proj, proj_index, 0, magAnisotropy, magAnisotropyInv);
 
@@ -920,7 +920,7 @@ template<class TVol>
 void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, int proj_index, float SIRTcount)
 {
 	float3 volDim = vol->GetSubVolumeDimension(mpi_part);
-	bpKernel.SetWorkSize((int)volDim.x, (int)volDim.y, (int)volDim.z);
+	bpKernel.SetComputeSize((int)volDim.x, (int)volDim.y, (int)volDim.z);
 	float runtime;
 	int x = proj.GetWidth();
 	int y = proj.GetHeight();
@@ -931,7 +931,7 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, int proj_index, float S
 	float t_in, t_out;
 	GetDefocusDistances(t_in, t_out, proj_index, vol);
 
-	for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize(proj_index))
+	for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize())
 	{
 		SetConstantValues(bpKernel, *vol, proj, proj_index, mpi_part, magAnisotropy, magAnisotropyInv);
 
@@ -964,7 +964,7 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, int proj_index, float S
 
 		cropKernel(dist_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
 
-		runtime = bpKernel(x, y, config.Lambda / SIRTcount, config.OverSampling, 1.0f / (float)(config.OverSampling), filterImage_d, ray, ray + config.CTFSliceThickness / proj.GetPixelSize(proj_index));
+		runtime = bpKernel(x, y, config.Lambda / SIRTcount, config.OverSampling, 1.0f / (float)(config.OverSampling), filterImage_d, ray, ray + config.CTFSliceThickness / proj.GetPixelSize());
 	}
 }
 template void Reconstructor::BackProjectionCTF(Volume<unsigned short>* vol, int proj_index, float SIRTCount);
@@ -977,7 +977,7 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& 
 	size_t batchSize = subVolumes.size();
 	//TODO
 	//float3 volDim = vol->GetSubVolumeDimension(mpi_part);
-	bpKernel.SetWorkSize(config.SizeSubVol, config.SizeSubVol, config.SizeSubVol);
+	bpKernel.SetComputeSize(config.SizeSubVol, config.SizeSubVol, config.SizeSubVol);
 	float runtime;
 	int x = proj.GetWidth();
 	int y = proj.GetHeight();
@@ -988,7 +988,7 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& 
 	float t_in, t_out;
 	GetDefocusDistances(t_in, t_out, proj_index, vol);
 
-	for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize(proj_index))
+	for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize())
 	{
 		float defocusAngle = defocus.GetAstigmatismAngle(proj_index);
 		float defocusMin;
@@ -1022,12 +1022,12 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& 
 			proj.SetExtraShift(proj_index, vecExtraShifts[batch]);
 
 			float3 volDim = subVolumes[batch]->GetSubVolumeDimension(0);
-			bpKernel.SetWorkSize((int)volDim.x, (int)volDim.y, (int)volDim.z);
+			bpKernel.SetComputeSize((int)volDim.x, (int)volDim.y, (int)volDim.z);
 
 			SetConstantValues(bpKernel, *(subVolumes[batch]), proj, proj_index, 0, magAnisotropy, magAnisotropyInv);
 
 			//Most of the time, no volume should get hit...
-			runtime = bpKernel(x, y, 1.0f, config.OverSampling, 1.0f / (float)(config.OverSampling), filterImage_d, ray, ray + config.CTFSliceThickness / proj.GetPixelSize(proj_index));
+			runtime = bpKernel(x, y, 1.0f, config.OverSampling, 1.0f / (float)(config.OverSampling), filterImage_d, ray, ray + config.CTFSliceThickness / proj.GetPixelSize());
 		}
 	}
 }
@@ -1162,29 +1162,29 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 		return;
 	}
 
-	if (projSource->GetDataType() == FDT_SHORT)
+	if (projSource->GetDataType() == DT_SHORT)
 	{
 		//printf("SIGNED SHORT\n");
 		cudaSafeCall(cuMemcpyHtoD(realprojUS_d.GetDevicePtr(), img_h, proj.GetWidth() * proj.GetHeight() * sizeof(short)));
 		nppSafeCall(nppiConvert_16s32f_C1R((Npp16s*)realprojUS_d.GetDevicePtr(), proj.GetWidth() * sizeof(short), (Npp32f*)realproj_d.GetDevicePtr(), realproj_d.GetPitch(), roiAll));
 	}
-	else if (projSource->GetDataType() == FDT_USHORT)
+	else if (projSource->GetDataType() == DT_USHORT)
 	{
 		//printf("UNSIGNED SHORT\n");
 		cudaSafeCall(cuMemcpyHtoD(realprojUS_d.GetDevicePtr(), img_h, proj.GetWidth() * proj.GetHeight() * sizeof(short)));
 		nppSafeCall(nppiConvert_16u32f_C1R((Npp16u*)realprojUS_d.GetDevicePtr(), proj.GetWidth() * sizeof(short), (Npp32f*)realproj_d.GetDevicePtr(), realproj_d.GetPitch(), roiAll));
 	}
-	else if (projSource->GetDataType() == FDT_INT)
+	else if (projSource->GetDataType() == DT_INT)
 	{
 		realprojUS_d.CopyHostToDevice(img_h);
 		nppSafeCall(nppiConvert_32s32f_C1R((Npp32s*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), (Npp32f*)realproj_d.GetDevicePtr(), realproj_d.GetPitch(), roiAll));
 	}
-	else if (projSource->GetDataType() == FDT_UINT)
+	else if (projSource->GetDataType() == DT_UINT)
 	{
 		realprojUS_d.CopyHostToDevice(img_h);
 		nppSafeCall(nppiConvert_32u32f_C1R((Npp32u*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), (Npp32f*)realproj_d.GetDevicePtr(), realproj_d.GetPitch(), roiAll));
 	}
-	else if (projSource->GetDataType() == FDT_FLOAT)
+	else if (projSource->GetDataType() == DT_FLOAT)
 	{
 		realproj_d.CopyHostToDevice(img_h);
 	}
@@ -1286,7 +1286,7 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 		}
 		if (config.DoseWeighting)
 		{
-			//cout << "Dose: " << config.AccumulatedDose[proj_index] << "; Pixelsize: " << proj.GetPixelSize(proj_index) * 10.0f << endl;
+			//cout << "Dose: " << config.AccumulatedDose[proj_index] << "; Pixelsize: " << proj.GetPixelSize() * 10.0f << endl;
 			/*Npp32fc* temp = new Npp32fc[roiFFT.width * roiFFT.height];
 			float* temp2 = new float[roiFFT.width * roiFFT.height];
 			fft_d.CopyDeviceToHost(temp);
@@ -1295,7 +1295,7 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 				temp2[i] = sqrtf(temp[i].re * temp[i].re + temp[i].im * temp[i].im);
 			}
 			emwrite("before.em", temp2, roiFFT.width, roiFFT.height);*/
-			doseWeightingKernel(fft_d, roiFFT.width * sizeof(Npp32fc), proj.GetMaxDimension(), config.AccumulatedDose[proj_index], proj.GetPixelSize(proj_index) * 10.0f);
+			doseWeightingKernel(fft_d, roiFFT.width * sizeof(Npp32fc), proj.GetMaxDimension(), config.AccumulatedDose[proj_index], proj.GetPixelSize() * 10.0f);
 			/*fft_d.CopyDeviceToHost(temp);
 			for (size_t i = 0; i < roiFFT.width * roiFFT.height; i++)
 			{
@@ -1498,14 +1498,14 @@ void Reconstructor::PrintGeometry(Volume<TVol>* vol, int index)
 				if (t > t_out) t_out = t;
 			}
 
-	for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize(index))
+	for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize())
 	{
 		dist_d.Memset(0);
 
 		float defocusAngle = defocus.GetAstigmatismAngle(index);
 		float defocusMin;
 		float defocusMax;
-		GetDefocusMinMax(ray + config.CTFSliceThickness / proj.GetPixelSize(index) * 0.5f, index, defocusMin, defocusMax);
+		GetDefocusMinMax(ray + config.CTFSliceThickness / proj.GetPixelSize() * 0.5f, index, defocusMin, defocusMax);
 
 		printf("Defocus: %-8d nm\n", (int)defocusMin);
 		

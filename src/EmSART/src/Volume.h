@@ -24,7 +24,7 @@
 #ifndef VOLUME_H
 #define VOLUME_H
 
-#include "default.h"
+#include "EmSartDefault.h"
 #define MEMSIZE (4UL * 1024UL * 1024UL * 1024UL) //2 GB
 
 template<typename tVoxel>

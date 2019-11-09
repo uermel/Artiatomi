@@ -25,27 +25,25 @@
 #ifdef USE_MPI
 #include <mpi.h>
 #endif
-#include "default.h"
+#include "EmSartDefault.h"
 #include "Projection.h"
 #include "Volume.h"
 //#include "Kernels.h"
-#include "cuda/CudaArrays.h"
-#include "cuda/CudaContext.h"
-#include "cuda/CudaTextures.h"
-#include "cuda/CudaKernel.h"
-#include "cuda/CudaDeviceProperties.h"
+
+#include <CudaContext.h>
 #include "utils/Config.h"
 //#include "utils/CudaConfig.h"
-#include "utils/Matrix.h"
-#include "io/Dm4FileStack.h"
-#include "io/MRCFile.h"
+//#include "utils/Matrix.h"
+//#include "io/Dm4FileStack.h"
+//#include "io/MRCFile.h"
+#include "io/FileSource.h"
 #ifdef USE_MPI
 #include "io/MPISource.h"
 #endif
-#include "io/MarkerFile.h"
+#include <MarkerFile.h>
 #include "io/writeBMP.h"
-#include "io/mrcHeader.h"
-#include "io/emHeader.h"
+//#include "io/mrcHeader.h"
+//#include "io/emHeader.h"
 #include "io/CtfFile.h"
 #include "io/MotiveListe.h"
 #include "io/ShiftFile.h"
@@ -308,24 +306,14 @@ int main(int argc, char* argv[])
 		//Load projection data file
 		if (mpi_part == 0)
 		{
-			if (aConfig.GetFileReadMode() == Configuration::Config::FRM_DM4)
+			if (aConfig.GetFileReadMode() == Configuration::Config::FRM_DM4 ||
+				aConfig.GetFileReadMode() == Configuration::Config::FRM_MRC)
 			{
-				projSource = new Dm4FileStack(aConfig.ProjectionFile);
 				printf("\nLoading projections...\n");
-				if (!projSource->OpenAndRead())
-				{
-					printf("Error: cannot read projections from %s.\n", aConfig.ProjectionFile.c_str());
-					WaitForInput(-1);
-				}
-				projSource->ReadHeaderInfo();
+				projSource = new FileSource(aConfig.ProjectionFile);
 
-				printf("Loaded %d dm4 projections.\n\n", projSource->DimZ);
-			}
-			else if (aConfig.GetFileReadMode() == Configuration::Config::FRM_MRC)
-			{
-				//Load projection data file
-				projSource = new MRCFile(aConfig.ProjectionFile);
-				((MRCFile*)projSource)->OpenAndReadHeader();
+
+				printf("Loaded %d projections.\n\n", projSource->GetProjectionCount());
 			}
 			else
 			{
@@ -336,11 +324,11 @@ int main(int argc, char* argv[])
 			}
 
 #ifdef USE_MPI
-			float pixelsize = projSource->PixelSize[0];
+			float pixelsize = projSource->GetPixelSize();
 			int dims[4];
-			dims[0] = projSource->DimX;
-			dims[1] = projSource->DimY;
-			dims[2] = projSource->DimZ;
+			dims[0] = projSource->GetWidth();
+			dims[1] = projSource->GetHeight();
+			dims[2] = projSource->GetProjectionCount();
 			dims[3] = *((int*)&pixelsize);
 			MPI_Bcast(dims, 4, MPI_INT, 0, MPI_COMM_WORLD);
 #endif
@@ -355,17 +343,17 @@ int main(int argc, char* argv[])
 #endif
 
 		//Load marker/alignment file
-		MarkerFile markers(aConfig.MarkerFile, aConfig.ReferenceMarker);
+		MarkerFile markers(aConfig.MarkerFile /*, aConfig.ReferenceMarker*/);
 
 		//Create projection object to handle projection data
 		Projection proj(projSource, &markers);
 
 		MotiveList ml(aConfig.MotiveList, aConfig.ScaleMotivelistPosition, aConfig.ScaleMotivelistShift);
 		
-		EMFile reconstructedVol(aConfig.OutVolumeFile);
+		EmFile reconstructedVol(aConfig.OutVolumeFile);
 		reconstructedVol.OpenAndReadHeader();
-		reconstructedVol.ReadHeaderInfo();
-		dim3 volDims = make_dim3(reconstructedVol.DimX, reconstructedVol.DimY, reconstructedVol.DimZ);
+		//reconstructedVol.ReadHeaderInfo();
+		dim3 volDims = make_dim3(reconstructedVol.GetFileHeader().DimX, reconstructedVol.GetFileHeader().DimY, reconstructedVol.GetFileHeader().DimZ);
 
 		//Create volume dataset (host)
 		Volume<float> *volSubVol = NULL; //this is a subVol filled with zeros to reset the storage on GPU
@@ -513,12 +501,12 @@ int main(int argc, char* argv[])
 				log << "Normalizing projections by mean [im = (im - mean) / mean]" << endl;
 
 			log << "Scaling projection values by: " << aConfig.ProjectionScaleFactor << endl;
-			log << "Pixel size is: " << proj.GetPixelSize(0) << " nm" << endl;
+			log << "Pixel size is: " << proj.GetPixelSize() << " nm" << endl;
 
 			log << "Projection statistics:" << endl;
 
 			printf("\r\n");
-			for (int i = 0; i < projSource->DimZ; i++)
+			for (int i = 0; i < projSource->GetProjectionCount(); i++)
 			{
 				if (!markers.CheckIfProjIndexIsGood(i))
 				{
@@ -533,15 +521,13 @@ int main(int argc, char* argv[])
 				//projSource->GetProjection(i) always points to an array with an element size of 4 bytes,
 				//Even if original data is stored in shorts! We can therfor cast data and keep the same pointer.
 				char* imgUS = projSource->GetProjection(i);
-				float tilt = projSource->TiltAlpha[i];
-				float weight = 1.0f / cos(tilt / 180.0f * M_PI);
-
+				
 				//Check if data format is supported
-				if (projSource->GetDataType() != FDT_SHORT &&
-					projSource->GetDataType() != FDT_USHORT &&
-					projSource->GetDataType() != FDT_INT &&
-					projSource->GetDataType() != FDT_UINT &&
-					projSource->GetDataType() != FDT_FLOAT)
+				if (projSource->GetDataType() != DT_SHORT &&
+					projSource->GetDataType() != DT_USHORT &&
+					projSource->GetDataType() != DT_INT &&
+					projSource->GetDataType() != DT_UINT &&
+					projSource->GetDataType() != DT_FLOAT)
 				{
 					cerr << "Projections have wrong data type: supported types are: short, ushort, int, uint and float.";
 					log << SimpleLogger::LOG_ERROR;
@@ -564,7 +550,7 @@ int main(int argc, char* argv[])
 		/////////////////////////////////////
 
 
-		if (mpi_part == 0)printf("\nPixel size is: %f nm, Cs: %.2f mm, Voltage: %.2f kV\n", proj.GetPixelSize(0), aConfig.Cs, aConfig.Voltage);
+		if (mpi_part == 0)printf("\nPixel size is: %f nm, Cs: %.2f mm, Voltage: %.2f kV\n", proj.GetPixelSize(), aConfig.Cs, aConfig.Voltage);
 
 		int SIRTcount = aConfig.SIRTCount;
 		if (aConfig.WBP_NoSART)
@@ -622,7 +608,7 @@ int main(int argc, char* argv[])
 		//}
 		
 		//Process particles in batches:
-		for (int batch = 0; batch < ml.DimY; batch += aConfig.BatchSize)
+		for (int batch = 0; batch < ml.GetParticleCount(); batch += aConfig.BatchSize)
 		{
 			//Reset all sub-volumes on GPU to zero:
 			for (size_t i = 0; i < aConfig.BatchSize; i += mpi_size)
@@ -648,7 +634,7 @@ int main(int argc, char* argv[])
 				for (int pInBatch = 0; pInBatch < aConfig.BatchSize; pInBatch += mpi_size)
 				{
 					int motlIdx = batch + pInBatch + mpi_part; //now we are on each node on the right index in motl! We should never see a NULL in the vectors!
-					if (motlIdx >= ml.DimY)
+					if (motlIdx >= ml.GetParticleCount())
 					{
 						continue; //make sure we won't pass beyond the end of the motivelist...
 					}
@@ -699,7 +685,7 @@ int main(int argc, char* argv[])
 			for (int pInBatch = 0; pInBatch < aConfig.BatchSize; pInBatch += mpi_size)
 			{
 				int motlIdx = batch + pInBatch + mpi_part; //now we are on each node on the right index in motl! We should never see a NULL in the vectors!
-				if (motlIdx >= ml.DimY)
+				if (motlIdx >= ml.GetParticleCount())
 				{
 					continue; //make sure we won't pass beyond the end of the motivelist...
 				}

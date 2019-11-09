@@ -32,3 +32,6 @@ cmake-build-debug
 
 ### IDE ###
 .idea
+
+#auto generated cuda kernel header files
+.cu.h

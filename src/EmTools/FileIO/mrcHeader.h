@@ -43,7 +43,9 @@ enum MrcMode_Enum : uint
 	//! Image unsigned shorts
 	MRCMODE_UI2  = 6,
 	//! Image RGB
-	MRCMODE_RGB  = 16
+	MRCMODE_RGB  = 16,
+	//! half float
+	MRCMODE_HALF = 64
 };
 
 //! X, Y or Z Axis

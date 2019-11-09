@@ -25,7 +25,7 @@
 #define SIMPLELOGGER_H
 
 #include "UtilsDefault.h"
-#include "../io/FileIOException.h"
+#include <FileIOException.h>
 #include <ctime>
 
 using namespace std;
@@ -50,7 +50,7 @@ public:
 	friend SimpleLogger& operator<<(SimpleLogger& logger, const int4& val);
 	friend SimpleLogger& operator<<(SimpleLogger& logger, const float3& val);
 	friend SimpleLogger& operator<<(SimpleLogger& logger, const float4& val);
-	friend SimpleLogger& operator<<(SimpleLogger& logger, const FileDataType_enum& val);
+	friend SimpleLogger& operator<<(SimpleLogger& logger, const DataType_enum& val);
 	friend SimpleLogger& operator<<(SimpleLogger& logger, ostream& (*f)(std::ostream&));
 
 private:
@@ -76,7 +76,7 @@ SimpleLogger& operator<<(SimpleLogger& logger, const int3& val);
 SimpleLogger& operator<<(SimpleLogger& logger, const int4& val);
 SimpleLogger& operator<<(SimpleLogger& logger, const float3& val);
 SimpleLogger& operator<<(SimpleLogger& logger, const float4& val);
-SimpleLogger& operator<<(SimpleLogger& logger, const FileDataType_enum& val);
+SimpleLogger& operator<<(SimpleLogger& logger, const DataType_enum& val);
 SimpleLogger& operator<<(SimpleLogger& logger, ostream& (*f)(std::ostream&) );
 
 #endif

@@ -65,6 +65,18 @@ public:
 	*/
 	bool OpenAndReadHeader();
 
+	//! Opens the file File#mFileName and writes the entire content.
+	/*!
+		\throw FileIOException
+	*/
+	bool OpenAndWrite();
+
+	//! Opens the file File#mFileName and writes only the header.
+	/*!
+	\throw FileIOException
+	*/
+	bool OpenAndWriteHeader();
+
 	//! Determines if a given image dimension and datatype can be written to a EM file
 	static bool CanWriteAsEM(int aDimX, int aDimY, int aDimZ, DataType_enum aDatatype);
 
@@ -101,6 +113,11 @@ public:
 
 	//! Returns the inner data pointer shifted to image plane idx.
 	void* GetData(size_t idx);
+
+	static void AddSlice(string aFileName, float* data, int width, int height);
 };
+
+void emwrite(string aFileName, float* data, int width, int height);
+void emwrite(string aFileName, float* data, int width, int height, int depth);
 
 #endif

@@ -107,50 +107,50 @@ SimpleLogger& operator<<(SimpleLogger& logger, const char* val)
 	return logger;
 }
 
-SimpleLogger& operator<<(SimpleLogger& logger, const FileDataType_enum& val)
+SimpleLogger& operator<<(SimpleLogger& logger, const DataType_enum& val)
 {
 	if (logger._currentLevel >= logger._level && !logger._off)
 	{
 		logger.printLevel();
 		switch (val)
 		{
-		case FDT_UNKNOWN: 
+		case DT_UNKNOWN: 
 			logger._stream << "UNKNOWN";
 			break;
-		case FDT_UCHAR: 
+		case DT_UCHAR: 
 			logger._stream << "UCHAR";
 			break;
-		case FDT_USHORT: 
+		case DT_USHORT: 
 			logger._stream << "USHORT";
 			break;
-		case FDT_UINT: 
+		case DT_UINT: 
 			logger._stream << "UINT32";
 			break;
-		case FDT_ULONG: 
+		case DT_ULONG: 
 			logger._stream << "UINT64";
 			break;
-		case FDT_FLOAT: 
+		case DT_FLOAT: 
 			logger._stream << "FLOAT";
 			break;
-		case FDT_DOUBLE: 
+		case DT_DOUBLE: 
 			logger._stream << "DOUBLE";
 			break;
-		case FDT_CHAR: 
+		case DT_CHAR: 
 			logger._stream << "CHAR";
 			break;
-		case FDT_SHORT: 
+		case DT_SHORT: 
 			logger._stream << "SHORT";
 			break;
-		case FDT_INT: 
+		case DT_INT: 
 			logger._stream << "INT32";
 			break;
-		case FDT_LONG: 
+		case DT_LONG: 
 			logger._stream << "INT64";
 			break;
-		case FDT_FLOAT2: 
+		case DT_FLOAT2: 
 			logger._stream << "FLOAT2";
 			break;
-		case FDT_SHORT2: 
+		case DT_SHORT2: 
 			logger._stream << "SHORT2";
 			break;
 		}

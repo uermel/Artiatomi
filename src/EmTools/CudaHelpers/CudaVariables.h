@@ -27,7 +27,7 @@
 #include "CudaDefault.h"
 #ifdef USE_CUDA
 #include "CudaException.h"
-#include "../MemoryPool/BufferRequest.h"
+//#include "../MemoryPool/BufferRequest.h"
 
 namespace Cuda
 {
@@ -55,7 +55,12 @@ namespace Cuda
 		CudaDeviceVariable(size_t aSizeInBytes);
 		CudaDeviceVariable(const CUdeviceptr& aDevPtr, bool aIsOwner);
 		CudaDeviceVariable(CudaDeviceVariable& aDevVar, bool aIsOwner = false);
-		CudaDeviceVariable(BufferRequest& aBufferRequest);
+
+		//! Initializes the object but doesn't allocate GPU memory. Inner ptr is 0;
+		CudaDeviceVariable();
+
+		//! Reallocates the inner CUdeviceptr. If inner ptr isn't 0 it is freed before. If not isOwner it takes over ownership
+		void Alloc(size_t aSizeInBytes);
 
 		//! CudaDeviceVariable destructor
 		//CudaDeviceVariable destructor
@@ -133,7 +138,13 @@ namespace Cuda
 		CudaPitchedDeviceVariable(size_t aWidthInBytes, size_t aHeight, uint aElementSize);
 		CudaPitchedDeviceVariable(CudaPitchedDeviceVariable& aDevVar, bool aIsOwner = false);
 		CudaPitchedDeviceVariable(CUdeviceptr aPtr, size_t aWidthInBytes, size_t aHeight, size_t aPitch, uint aElementSize, bool aIsOwner = false);
-		CudaPitchedDeviceVariable(BufferRequest& aBufferRequest);
+		//CudaPitchedDeviceVariable(BufferRequest& aBufferRequest);
+
+		//! Initializes the object but doesn't allocate GPU memory. Inner ptr is 0;
+		CudaPitchedDeviceVariable();
+
+		//! Reallocates the inner CUdeviceptr. If inner ptr isn't 0 it is freed before. If not isOwner it takes over ownership
+		void Alloc(size_t aWidthInBytes, size_t aHeight, uint aElementSize);
 
 		//! CudaPitchedDeviceVariable destructor
 		//CudaPitchedDeviceVariable destructor

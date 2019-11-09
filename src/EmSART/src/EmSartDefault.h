@@ -21,8 +21,8 @@
 ////////////////////////////////////////////////////////////////////////
 
 
-#ifndef DEFAULT_H
-#define DEFAULT_H
+#ifndef EMSARTDEFAULT_H
+#define EMSARTDEFAULT_H
 
 #ifndef _USE_MATH_DEFINES
 #define _USE_MATH_DEFINES
@@ -61,7 +61,7 @@ typedef unsigned char uchar;
 #include <sstream>
 #include <vector_types.h>
 #include <vector_functions.h>
-#include "cuda/cutil_math_.h"
+#include <cutil_math_.h>
 
 inline dim3 make_dim3(uint a, uint b, uint c)
 {

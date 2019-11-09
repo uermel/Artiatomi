@@ -24,7 +24,7 @@
 #ifndef MOTIVELIST_H
 #define MOTIVELIST_H
 
-#include "EMFile.h"
+#include <EmFile.h>
 #ifdef SUBVOLREC_MODE
 #include "../utils/Config.h"
 #endif
@@ -72,7 +72,7 @@ struct supportMotive
 	int index;
 };
 
-class MotiveList : public EMFile
+class MotiveList : public EmFile
 {
 	float binningFactorClick;
 	float binningFactorShift;
@@ -85,6 +85,8 @@ public:
 	motive GetAt(int index);
 
 	void SetAt(int index, motive& m);
+
+	int GetParticleCount();
 
 #ifdef REFINE_MODE
 	float GetDistance(int aIndex1, int aIndex2);

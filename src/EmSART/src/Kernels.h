@@ -24,12 +24,12 @@
 #ifndef KERNELS_H
 #define KERNELS_H
 
-#include "default.h"
-#include "cuda/CudaArrays.h"
-#include "cuda/CudaContext.h"
-#include "cuda/CudaTextures.h"
-#include "cuda/CudaKernel.h"
-#include "cuda/CudaDeviceProperties.h"
+#include "EmSartDefault.h"
+#include <CudaArrays.h>
+#include <CudaContext.h>
+#include <CudaTextures.h>
+#include <CudaKernel.h>
+#include <CudaDeviceProperties.h>
 #include "Projection.h"
 #include "Volume.h"
 

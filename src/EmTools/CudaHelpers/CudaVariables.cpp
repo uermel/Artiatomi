@@ -44,10 +44,27 @@ namespace Cuda
 		
 	}
 
-	CudaDeviceVariable::CudaDeviceVariable(BufferRequest & aBufferRequest) :
-		mDevPtr((CUdeviceptr)aBufferRequest.mPtr), mSizeInBytes(aBufferRequest.mRequestedSizeInBytes), mIsOwner(false)
+	CudaDeviceVariable::CudaDeviceVariable()
+		: mDevPtr(0), mSizeInBytes(0)
 	{
 	}
+
+	void CudaDeviceVariable::Alloc(size_t aSizeInBytes)
+	{
+		if (mDevPtr != 0 && mIsOwner)
+		{
+			cudaSafeCall(cuMemFree(mDevPtr));
+			mDevPtr = 0;
+		}
+		cudaSafeCall(cuMemAlloc(&mDevPtr, aSizeInBytes));
+		mIsOwner = true;
+		mSizeInBytes = aSizeInBytes;
+	}
+
+	/*CudaDeviceVariable::CudaDeviceVariable(BufferRequest & aBufferRequest) :
+		mDevPtr((CUdeviceptr)aBufferRequest.mPtr), mSizeInBytes(aBufferRequest.mRequestedSizeInBytes), mIsOwner(false)
+	{
+	}*/
 
 	
 	CudaDeviceVariable::~CudaDeviceVariable()
@@ -140,15 +157,26 @@ namespace Cuda
 	
 	}
 
-	CudaPitchedDeviceVariable::CudaPitchedDeviceVariable(BufferRequest & aBufferRequest) :
-		mDevPtr((CUdeviceptr)aBufferRequest.mPtr), 
-		mPitch(aBufferRequest.mAllocatedPitch),
-		mSizeInBytes(aBufferRequest.mAllocatedPitch * aBufferRequest.mHeight * aBufferRequest.mDepth), 
-		mElementSize((uint)aBufferRequest.mTypeSize),
-		mHeight(aBufferRequest.mHeight * aBufferRequest.mDepth),
-		mIsOwner(false)
+	CudaPitchedDeviceVariable::CudaPitchedDeviceVariable()
+		: mPitch(0), mHeight(0), mWidthInBytes(0), mElementSize(0), mDevPtr(0)
 	{
+	}
 
+	void CudaPitchedDeviceVariable::Alloc(size_t aWidthInBytes, size_t aHeight, uint aElementSize)
+	{
+		if (mDevPtr != 0 && mIsOwner)
+		{
+			cudaSafeCall(cuMemFree(mDevPtr));
+			mDevPtr = 0;
+		}
+		mPitch = 0;
+		mHeight = aHeight;
+		mWidthInBytes = aWidthInBytes;
+		mElementSize = aElementSize;
+
+		cudaSafeCall(cuMemAllocPitch(&mDevPtr, &mPitch, mWidthInBytes, mHeight, mElementSize));
+		mSizeInBytes = aHeight * mPitch;
+		mIsOwner = true;
 	}
 
 	CudaPitchedDeviceVariable::~CudaPitchedDeviceVariable()

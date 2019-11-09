@@ -76,7 +76,9 @@ enum EmDataType_Enum : char
 	//! Complex (8 bytes)
 	EMDATATYPE_COMPLEX = 8,
 	//! Double (8 bytes)
-	EMDATATYPE_DOUBLE = 9
+	EMDATATYPE_DOUBLE = 9,
+	//! Half float
+	EMDATATYPE_HALF = 10
 };
 
 

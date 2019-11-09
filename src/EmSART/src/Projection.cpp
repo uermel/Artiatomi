@@ -25,13 +25,13 @@
 #include "utils/Config.h"
 #include <algorithm>
 
-Projection::Projection(ProjectionSource* aMrc, MarkerFile* aMarkers)
-	: mrc(aMrc), markers(aMarkers), extraShifts(new float2[aMrc->DimZ])
+Projection::Projection(ProjectionSource* aPs, MarkerFile* aMarkers)
+	: ps(aPs), markers(aMarkers), extraShifts(new float2[aPs->GetProjectionCount()])
 {
 	float2 zero;
 	zero.x = 0;
 	zero.y = 0;
-	for (size_t i = 0; i < aMrc->DimZ; i++)
+	for (size_t i = 0; i < aPs->GetProjectionCount(); i++)
 	{
 		extraShifts[i] = zero;
 	}
@@ -49,32 +49,32 @@ Projection::~Projection()
 dim3 Projection::GetDimension()
 {
 	dim3 dim;
-	dim.x = mrc->DimX;
-	dim.y = mrc->DimY;
+	dim.x = ps->GetWidth();
+	dim.y = ps->GetHeight();
 	dim.z = 1;
 	return dim;
 }
 
 int Projection::GetWidth()
 {
-	return mrc->DimX;
+	return ps->GetWidth();
 }
 
 int Projection::GetHeight()
 {
-	return mrc->DimY;
+	return ps->GetHeight();
 }
 
 int Projection::GetMaxDimension()
 {
-	return max(mrc->DimX, mrc->DimY);
+	return max(ps->GetWidth(), ps->GetHeight());
 }
 
-float Projection::GetPixelSize(int index)
+float Projection::GetPixelSize()
 {
     //return 0.282f;
-    if (index > mrc->DimZ || index < 0) return 0;
-	return mrc->PixelSize[index] / 10.0f;  //Angstrom to nm
+    //if (index > ps->GetProjectionCount() || index < 0) return 0;
+	return ps->GetPixelSize(); // --> already in nm! / 10.0f;  //Angstrom to nm
 }
 
 Matrix<float> Projection::RotateMatrix(uint aIndex, Matrix<float>& matrix)
@@ -142,30 +142,52 @@ Matrix<float> Projection::RotateMatrix(uint aIndex, Matrix<float>& matrix)
 	//return (mPsi * (mAdjust.Transpose() * (mPhi.Transpose() * (mTheta * (mPhi * (mAdjust * matrix))))));
 }
 
+Matrix<float> Projection::float3ToMatrix(float3 val)
+{
+	Matrix<float> ret(3, 1); //column vector
+
+	float* values = ret.GetData();
+	values[0] = val.x;
+	values[1] = val.y;
+	values[2] = val.z;
+
+	return ret;
+}
+float3 Projection::matrixToFloat3(Matrix<float>& val)
+{
+	float3 ret;
+	float* values = val.GetData();
+	ret.x = values[0];
+	ret.y = values[1];
+	ret.z = values[2];
+
+	return ret;
+}
+
 float3 Projection::GetPosition(uint aIndex)
 {
 	float3 pos;
-	if ((*markers)(MFI_MagnifiactionX, aIndex, 0) > 0.8f && 
-		(*markers)(MFI_MagnifiactionY, aIndex, 0) > 0.8f)
+	if ((*markers)(MFI_Magnifiaction, aIndex, 0) > 0.8f && 
+		(*markers)(MFI_Magnifiaction, aIndex, 0) > 0.8f)
 	{
-		pos.x = -0.5f * mrc->DimX * (*markers)(MFI_MagnifiactionX, aIndex, 0);
-		pos.y = -0.5f * mrc->DimY * (*markers)(MFI_MagnifiactionY, aIndex, 0);
+		pos.x = -0.5f * ps->GetWidth() * (*markers)(MFI_Magnifiaction, aIndex, 0);
+		pos.y = -0.5f * ps->GetHeight() * (*markers)(MFI_Magnifiaction, aIndex, 0);
 		pos.z = DIST;
 	}
 	else
 	{
-		pos.x = -0.5f * mrc->DimX;
-		pos.y = -0.5f * mrc->DimY;
+		pos.x = -0.5f * ps->GetWidth();
+		pos.y = -0.5f * ps->GetHeight();
 		pos.z = DIST;
 	}
 	float shiftX = (*markers)(MFI_X_Shift, aIndex, 0) + extraShifts[aIndex].x;
 	float shiftY = (*markers)(MFI_Y_Shift, aIndex, 0) + extraShifts[aIndex].y;
 
-	Matrix<float> vec(pos);
+	Matrix<float> vec = float3ToMatrix(pos);
 
 	Matrix<float> posRot = RotateMatrix(aIndex, vec);
 
-	pos = posRot.GetAsFloat3();
+	pos = matrixToFloat3(posRot);
 
 	float3 up = GetPixelUPitch(aIndex);
 	float3 vp = GetPixelVPitch(aIndex);
@@ -178,10 +200,10 @@ float3 Projection::GetPixelUPitch(uint aIndex)
 {
 	float3 u;
 	
-	if ((*markers)(MFI_MagnifiactionX, aIndex, 0) > 0.8f && 
-		(*markers)(MFI_MagnifiactionY, aIndex, 0) > 0.8f)
+	if ((*markers)(MFI_Magnifiaction, aIndex, 0) > 0.8f && 
+		(*markers)(MFI_Magnifiaction, aIndex, 0) > 0.8f)
 	{
-		u.x = 1 * (*markers)(MFI_MagnifiactionX, aIndex, 0);	
+		u.x = 1 * (*markers)(MFI_Magnifiaction, aIndex, 0);	
 	}
 	else
 	{
@@ -190,11 +212,11 @@ float3 Projection::GetPixelUPitch(uint aIndex)
 	u.y = 0;
 	u.z = 0;
 
-	Matrix<float> vec(u);
+	Matrix<float> vec = float3ToMatrix(u);
 
 	Matrix<float> posRot = RotateMatrix(aIndex, vec);
 
-	u = posRot.GetAsFloat3();
+	u = matrixToFloat3(posRot);
 	return u;
 
 }
@@ -203,10 +225,10 @@ float3 Projection::GetPixelVPitch(uint aIndex)
 {
 	float3 v;
 	v.x = 0;
-	if ((*markers)(MFI_MagnifiactionX, aIndex, 0) > 0.8f && 
-		(*markers)(MFI_MagnifiactionY, aIndex, 0) > 0.8f)
+	if ((*markers)(MFI_Magnifiaction, aIndex, 0) > 0.8f && 
+		(*markers)(MFI_Magnifiaction, aIndex, 0) > 0.8f)
 	{
-		v.y = 1 * (*markers)(MFI_MagnifiactionY, aIndex, 0);
+		v.y = 1 * (*markers)(MFI_Magnifiaction, aIndex, 0);
 	}
 	else
 	{
@@ -214,11 +236,11 @@ float3 Projection::GetPixelVPitch(uint aIndex)
 	}
 	v.z = 0;
 
-	Matrix<float> vec(v);
+	Matrix<float> vec = float3ToMatrix(v);
 
 	Matrix<float> posRot = RotateMatrix(aIndex, vec);
 
-	v = posRot.GetAsFloat3();
+	v = matrixToFloat3(posRot);
 
 	return v;
 }
@@ -454,46 +476,46 @@ float2 Projection::GetMedianShift()
 	return shift;
 }
 
-float Projection::GetMean(float* data)
-{
-	int width = GetWidth();
-	int height = GetHeight();
-	float pixelCount = width * height;
-	float mean = 0;
+//float Projection::GetMean(float* data)
+//{
+//	int width = GetWidth();
+//	int height = GetHeight();
+//	float pixelCount = width * height;
+//	float mean = 0;
+//
+//	for (int i = 0; i < width; i++)
+//		for (int j = 0; j < height; j++)
+//		{
+//			mean += data[j * width + i];
+//		}
+//
+//	return mean / pixelCount;
+//}
 
-	for (int i = 0; i < width; i++)
-		for (int j = 0; j < height; j++)
-		{
-			mean += data[j * width + i];
-		}
+//float Projection::GetMean(int index)
+//{
+//	float* data = ps->GetProjectionFloat(index);
+//	float mean = GetMean(data);
+//	delete[] data;
+//	return mean;
+//}
 
-	return mean / pixelCount;
-}
-
-float Projection::GetMean(int index)
-{
-	float* data = mrc->GetProjectionFloat(index);
-	float mean = GetMean(data);
-	delete[] data;
-	return mean;
-}
-
-void Projection::Normalize(float* data, float mean)
-{
-	int width = GetWidth();
-	int height = GetHeight();
-    float normVal = 1.0f;//Configuration::Config::GetConfig().ProjNormVal;
-	//subtract mean and norm to mean * 0.8f - 1.6f
-	for (int i = 0; i < width; i++)
-		for (int j = 0; j < height; j++)
-		{
-			data[j * width + i] = ((data[j * width + i] - mean) / mean * normVal);
-		}
-}
+//void Projection::Normalize(float* data, float mean)
+//{
+//	int width = GetWidth();
+//	int height = GetHeight();
+//    float normVal = 1.0f;//Configuration::Config::GetConfig().ProjNormVal;
+//	//subtract mean and norm to mean * 0.8f - 1.6f
+//	for (int i = 0; i < width; i++)
+//		for (int j = 0; j < height; j++)
+//		{
+//			data[j * width + i] = ((data[j * width + i] - mean) / mean * normVal);
+//		}
+//}
 
 void Projection::CreateProjectionIndexList(ProjectionListType type, int* projectionCount, int** indexList)
 {
-	if (mrc == NULL) return;
+	if (ps == NULL) return;
 
 	int counter;
 	int temp;
@@ -504,7 +526,7 @@ void Projection::CreateProjectionIndexList(ProjectionListType type, int* project
 		*projectionCount = markers->GetProjectionCount();
 		*indexList = new int[*projectionCount];
 		counter = 0;
-		for (int i = 0; i < mrc->DimZ; i++)
+		for (int i = 0; i < ps->GetProjectionCount(); i++)
 		{
 			if (markers->CheckIfProjIndexIsGood(i))
 			{
@@ -519,7 +541,7 @@ void Projection::CreateProjectionIndexList(ProjectionListType type, int* project
 		*projectionCount = markers->GetProjectionCount();
 		(*indexList) = new int[*projectionCount];
 		counter = 0;
-		for (int i = 0; i < mrc->DimZ; i++)
+		for (int i = 0; i < ps->GetProjectionCount(); i++)
 		{
 			if (markers->CheckIfProjIndexIsGood(i))
 			{
@@ -542,7 +564,7 @@ void Projection::CreateProjectionIndexList(ProjectionListType type, int* project
 		*projectionCount = markers->GetProjectionCount();
 		(*indexList) = new int[*projectionCount];
 		counter = 0;
-		for (int i = 0; i < mrc->DimZ; i++)
+		for (int i = 0; i < ps->GetProjectionCount(); i++)
 		{
 			if (markers->CheckIfProjIndexIsGood(i))
 			{
@@ -579,7 +601,7 @@ void Projection::CreateProjectionIndexList(ProjectionListType type, int* project
 		*projectionCount += *projectionCount / 2;
 		(*indexList) = new int[*projectionCount];
 		counter = 0;
-		for (int i = 0; i < mrc->DimZ; i++)
+		for (int i = 0; i < ps->GetProjectionCount(); i++)
 		{
 			if (markers->CheckIfProjIndexIsGood(i))
 			{
@@ -1064,7 +1086,7 @@ void Projection::ComputeHitPoint(float posX, float posY, float posZ, uint index,
 
 float2 Projection::GetExtraShift(size_t index)
 {
-	if (index < mrc->DimZ)
+	if (index < ps->GetProjectionCount())
 	{
 		return extraShifts[index];
 	}
@@ -1079,7 +1101,7 @@ float2 Projection::GetExtraShift(size_t index)
 
 void Projection::SetExtraShift(size_t index, float2 extraShift)
 {
-	if (index < mrc->DimZ)
+	if (index < ps->GetProjectionCount())
 	{
 		extraShifts[index] = extraShift;
 	}
@@ -1087,7 +1109,7 @@ void Projection::SetExtraShift(size_t index, float2 extraShift)
 
 void Projection::AddExtraShift(size_t index, float2 extraShift)
 {
-	if (index < mrc->DimZ)
+	if (index < ps->GetProjectionCount())
 	{
 		extraShifts[index].x += extraShift.x*0.5f;
 		extraShifts[index].y += extraShift.y*0.5f;

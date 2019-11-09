@@ -24,11 +24,14 @@
 #ifndef PROJECTION_H
 #define PROJECTION_H
 
-#include "default.h"
-#include "io/MRCFile.h"
-#include "io/Dm4FileStack.h"
-#include "io/MarkerFile.h"
-#include "utils/Matrix.h"
+#include "EmSartDefault.h"
+#include "io/ProjectionSource.h"
+//#include "io/MRCFile.h"
+//#include "io/Dm4FileStack.h"
+#include <MarkerFile.h>
+//#include "io/MarkerFile.h"
+#include <Matrix.h>
+//#include "utils/Matrix.h"
 #include "cuda_kernels/Constants.h"
 #include "Volume.h"
 
@@ -42,13 +45,17 @@ enum ProjectionListType
 
 class Projection
 {
+private:
+	Matrix<float> float3ToMatrix(float3 val);
+	float3 matrixToFloat3(Matrix<float>& val);
+
 protected:
-	ProjectionSource* mrc;
+	ProjectionSource* ps;
 	MarkerFile* markers;
 	float2* extraShifts;
 
 public:
-	Projection(ProjectionSource* aMrc, MarkerFile* aMarkers);
+	Projection(ProjectionSource* aPs, MarkerFile* aMarkers);
 	~Projection();
 
 	dim3 GetDimension();
@@ -64,12 +71,12 @@ public:
 	float2 GetMinimumTiltShift();
 	float2 GetMeanShift();
 	float2 GetMedianShift();
-	float GetMean(float* data);
+	/*float GetMean(float* data);
 	float GetMean(int index);
-	void Normalize(float* data, float mean);
+	void Normalize(float* data, float mean);*/
 	Matrix<float> RotateMatrix(uint aIndex, Matrix<float>& matrix);
 	void CreateProjectionIndexList(ProjectionListType type, int* projectionCount, int** indexList);
-	float GetPixelSize(int index);
+	float GetPixelSize();
 
 	void ComputeHitPoints(Volume<unsigned short>& vol, uint index, int2& pA, int2& pB, int2& pC, int2& pD);
 	void ComputeHitPoints(Volume<float>& vol, uint index, int2& pA, int2& pB, int2& pC, int2& pD);

@@ -25,6 +25,7 @@
 #define CUDACROSSCORRELATOR_H
 
 #include <cufft.h>
+#include <nppdefs.h> //Need to import nppdefs.h before nppi.h, because of wrong extern "C" statement inside nppi.h
 #include <nppi.h>
 
 // EmTools

@@ -25,7 +25,7 @@
 #define SHIFTFILE_H
 
 #include "IODefault.h"
-#include "EMFile.h"
+#include <EmFile.h>
 
 
 using namespace std;
@@ -36,7 +36,7 @@ using namespace std;
 \date   September 2011
 \version 1.0
 */
-class ShiftFile : public EMFile
+class ShiftFile : public EmFile
 {
 protected:
 public:

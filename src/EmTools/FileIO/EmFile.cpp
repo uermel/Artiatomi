@@ -124,6 +124,104 @@ bool EmFile::OpenAndReadHeader()
 	return ok;
 }
 
+bool EmFile::OpenAndWrite()
+{
+	bool res = FileWriter::OpenWrite(true);
+	if (!res)
+	{
+		throw FileIOException(FileReader::mFileName, "Cannot open file for writing.");
+	}
+
+	//make shure that file header is set to little endian:
+	_fileHeader.MachineCoding = EMMACHINE_PC;
+	FileWriter::mIsLittleEndian = true;
+	FileWriter::mFile->seekp(0);
+
+	FileWriter::mFile->write((char*)&_fileHeader, sizeof(_fileHeader));
+	size_t sizeData = GetDataSize();
+
+	FileWriter::mFile->write((char*)_data, sizeData);
+	bool ok = FileWriter::mFile->good();
+	FileWriter::CloseWrite();
+	if (!ok)
+	{
+		throw FileIOException(FileReader::mFileName, "An error occurred while writing to file.");
+	}
+	return ok;
+
+}
+
+bool EmFile::OpenAndWriteHeader()
+{
+	//don't delete previous file
+	bool res = FileWriter::OpenWrite(false);
+	if (!res)
+	{
+		throw FileIOException(FileReader::mFileName, "Cannot open file for writing.");
+	}
+
+	//make shure that file header is set to little endian:
+	_fileHeader.MachineCoding = EMMACHINE_PC;
+
+	FileWriter::mIsLittleEndian = true;
+	FileWriter::mFile->seekp(0);
+
+	FileWriter::mFile->write((char*)&_fileHeader, sizeof(_fileHeader));
+
+	bool ok = FileWriter::mFile->good();
+	FileWriter::CloseWrite();
+	if (!ok)
+	{
+		throw FileIOException(FileReader::mFileName, "An error occurred while writing to file.");
+	}
+	return ok;
+}
+
+void EmFile::AddSlice(string aFileName, float* data, int width, int height)
+{
+	bool exists = false;
+	if (FILE* file = fopen(aFileName.c_str(), "r"))
+	{
+		fclose(file);
+		exists = true;
+	}
+
+	if (!exists)
+	{
+		emwrite(aFileName, data, width, height);
+	}
+	else
+	{
+		EmFile em(aFileName);
+		em.OpenAndReadHeader();
+
+		if (em.GetFileHeader().DimX != width ||
+			em.GetFileHeader().DimY != height)
+		{
+			throw FileIOException(aFileName, "Image dimensions do not fit.");
+		}
+		em.GetFileHeader().DimZ++;
+		
+		em.OpenAndWriteHeader();
+
+		//append data
+		em.FileWriter::mFile->open(aFileName.c_str(), fstream::out | fstream::binary | fstream::app);
+		bool ok = em.FileWriter::mFile->is_open() && em.FileWriter::mFile->good();
+		if (!ok)
+		{
+			throw FileIOException(aFileName, "Could not append slice to file.");
+		}
+
+		em.FileWriter::mFile->write((char*)data, width * height * sizeof(float));
+		ok = em.FileWriter::mFile->is_open() && em.FileWriter::mFile->good();
+		if (!ok)
+		{
+			throw FileIOException(aFileName, "Could not append slice to file.");
+		}
+		em.FileWriter::mFile->close();
+	}
+}
+
 bool EmFile::CanWriteAsEM(int aDimX, int aDimY, int aDimZ, DataType_enum aDatatype)
 {
 	if (aDimX < 32767 && aDimY < 32767 && aDimZ < 32767 && aDimX > 0 && aDimY > 0 && aDimZ > 0)
@@ -346,4 +444,39 @@ void* EmFile::GetData(size_t aIndex)
 
 	size_t projectionSize = (size_t)_fileHeader.DimX * (size_t)_fileHeader.DimY * (size_t)_GetDataTypeSize(_fileHeader.DataType);
 	return reinterpret_cast<char*>(_data) + aIndex * projectionSize;
+}
+
+void emwrite(string aFileName, float* data, int width, int height)
+{
+	EmFile::InitHeader(aFileName, width, height, 0, DT_FLOAT);
+	EmFile::WriteRawData(aFileName, data, (size_t)width * (size_t)height * sizeof(float));
+	//EmFile em(aFileName);
+	//em.GetFileHeader().DimX = width;
+	//em.GetFileHeader().DimY = height;
+	//em.GetFileHeader().DimZ = 1;
+	//em.SetDataType(DT_FLOAT);
+	//em.SetData((char*)data);
+	//em.OpenAndWrite();
+	////Set inner pointer NULL to avoid that it gets deleted!
+	//em.SetData(NULL);
+}
+
+void emwrite(string aFileName, float* data, int width, int height, int depth)
+{
+	EmFile::InitHeader(aFileName, width, height, depth, 0, DT_FLOAT);
+	EmFile::WriteRawData(aFileName, data, (size_t)width * (size_t)height * (size_t)depth * sizeof(float));
+	//float* dat = new float[width * height];
+	//for (int i = 0; i < width; i++)
+	//    for (int j = 0; j < height; j++)
+	//        //dat[j * width + i] = data[(height - i -1) * height + j];
+	//        dat[j * width + i] = data[j * width + i];
+	//EmFile em(aFileName);
+	//em.GetFileHeader().DimX = width;
+	//em.GetFileHeader().DimY = height;
+	//em.GetFileHeader().DimZ = depth;
+	//em.SetDataType(FDT_FLOAT);
+	//em.SetData((char*)data);
+	//em.OpenAndWrite();
+	////Set inner pointer NULL to avoid that it gets deleted!
+	//em.SetData(NULL);
 }

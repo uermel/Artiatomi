@@ -45,6 +45,7 @@
 #include "Constants.h"
 #include "DeviceVariables.cuh"
 #include "float.h"
+#include "cutil_math.h"
 
 //texture< ushort, 3, cudaReadModeNormalizedFloat > t_dataset;
 //texture< float, 3, cudaReadModeElementType > t_dataset;

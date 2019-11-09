@@ -25,23 +25,23 @@
 
 
 ShiftFile::ShiftFile(string aFileName)
-	: EMFile(aFileName)
+	: EmFile(aFileName)
 {
 	OpenAndRead();
-	ReadHeaderInfo();
+	//ReadHeaderInfo();
 }
 
 ShiftFile::ShiftFile(string aFileName, int aProjectionCount, int aMotiveCount)
-	: EMFile(aFileName)
+	: EmFile(aFileName)
 {
-	DimX = aMotiveCount;
-	DimY = aProjectionCount;
-	DimZ = 2;
-	_fileHeader.DimX = DimX;
-	_fileHeader.DimY = DimY;
-	_fileHeader.DimZ = DimZ;
+	//DimX = aMotiveCount;
+	//DimY = aProjectionCount;
+	//DimZ = 2;
+	_fileHeader.DimX = aMotiveCount;
+	_fileHeader.DimY = aProjectionCount;
+	_fileHeader.DimZ = 2;
 	
-	SetDataType(FDT_FLOAT);
+	//SetDataType(FDT_FLOAT);
 	_fileHeader.DataType = EMDATATYPE_FLOAT;
 	
 	_data = new char[aProjectionCount * aMotiveCount * 2 * sizeof(float)]; //x and y coordinate
@@ -50,7 +50,7 @@ ShiftFile::ShiftFile(string aFileName, int aProjectionCount, int aMotiveCount)
 
 float* ShiftFile::GetData()
 {
-	return (float*)EMFile::GetData();
+	return (float*)EmFile::GetData();
 }
 
 int ShiftFile::GetMotiveCount()
@@ -68,14 +68,14 @@ float2 ShiftFile::operator() (const int aProjection, const int aMotive)
 	float2 erg;
 
 	float* fdata = (float*)_data;
-	erg.x = -fdata[0 * DimX * DimY + aProjection * DimX + aMotive];
-	erg.y = -fdata[1 * DimX * DimY + aProjection * DimX + aMotive];
+	erg.x = -fdata[0 * _fileHeader.DimX * _fileHeader.DimY + aProjection * _fileHeader.DimX + aMotive];
+	erg.y = -fdata[1 * _fileHeader.DimX * _fileHeader.DimY + aProjection * _fileHeader.DimX + aMotive];
 	return erg;
 }
 
 void ShiftFile::SetValue(const int aProjection, const int aMotive, float2 aVal)
 {
 	float* fdata = (float*)_data;
-	fdata[0 * DimX * DimY + aProjection * DimX + aMotive] = aVal.x;
-	fdata[1 * DimX * DimY + aProjection * DimX + aMotive] = aVal.y;
+	fdata[0 * _fileHeader.DimX * _fileHeader.DimY + aProjection * _fileHeader.DimX + aMotive] = aVal.x;
+	fdata[1 * _fileHeader.DimX * _fileHeader.DimY + aProjection * _fileHeader.DimX + aMotive] = aVal.y;
 }

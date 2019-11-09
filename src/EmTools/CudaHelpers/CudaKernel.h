@@ -150,6 +150,7 @@ namespace Cuda
 		/*!
 			\param aX Grid X dimension.
 			\param aY Grid Y dimension.
+			\param aZ Grid Z dimension.
 		*/
 		//Set the kernels block grid dimensions before first launch.
 		void SetGridDimensions(uint aX, uint aY, uint aZ);
@@ -219,7 +220,12 @@ namespace Cuda
 		//Launches the kernel. Returns kernel runtime in [ms]
 		virtual float operator()(int dummy, ...);
 
+		//!Set the kernels block grid dimensions before first launch according to work load dimensions and block sizes
+		//Set the kernels block grid dimensions before first launch according to work load dimensions and block sizes
 		void SetComputeSize(dim3 computeDimensions);
+
+		//!Set the kernels block grid dimensions before first launch according to work load dimensions and block sizes
+		//Set the kernels block grid dimensions before first launch according to work load dimensions and block sizes
 		void SetComputeSize(uint x, uint y = 1, uint z = 1);
 	};
 }

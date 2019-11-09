@@ -24,12 +24,12 @@
 #ifndef CUDAKERNELBINARYS_H
 #define CUDAKERNELBINARYS_H
 
-#include "cuda_kernels/BackProjectionSquareOS.h"
-#include "cuda_kernels/Compare.h"
-#include "cuda_kernels/CopyToSquare.h"
-#include "cuda_kernels/ctf.h"
-#include "cuda_kernels/ForwardProjectionRayMarcher_TL.h"
-#include "cuda_kernels/ForwardProjectionSlicer.h"
-#include "cuda_kernels/wbpWeighting.h"
+#include "cuda_kernels/BackProjectionSquareOS.cu.h"
+#include "cuda_kernels/Compare.cu.h"
+#include "cuda_kernels/CopyToSquare.cu.h"
+#include "cuda_kernels/ctf.cu.h"
+#include "cuda_kernels/ForwardProjectionRayMarcher_TL.cu.h"
+#include "cuda_kernels/ForwardProjectionSlicer.cu.h"
+#include "cuda_kernels/wbpWeighting.cu.h"
 
 #endif

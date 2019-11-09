@@ -1112,7 +1112,7 @@ void SetConstantValues(CTFKernel& kernel, Projection& proj, int index, float cs,
     kernel.SetConstantValue("c_ampContrast", &_ampContrast);
     float _phaseContrast = sqrtf(1 - _ampContrast * _ampContrast);
     kernel.SetConstantValue("c_phaseContrast", &_phaseContrast);
-    float _pixelsize = proj.GetPixelSize(index);// * 100.0f;
+    float _pixelsize = proj.GetPixelSize();// * 100.0f;
     //_pixelsize = round(_pixelsize) / 100.0f;
 
     _pixelsize = _pixelsize * powf(10, -9);

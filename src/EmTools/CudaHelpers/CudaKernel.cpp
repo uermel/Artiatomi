@@ -134,11 +134,11 @@ namespace Cuda
 		mGridDim.z = aZ;
 	}
 
-	void CudaKernel::SetGridDimensions(dim3 aBlockDim)
+	void CudaKernel::SetGridDimensions(dim3 aGridDim)
 	{
-		mGridDim.x = aBlockDim.x;
-		mGridDim.y = aBlockDim.y;
-		mGridDim.z = aBlockDim.z;
+		mGridDim.x = aGridDim.x;
+		mGridDim.y = aGridDim.y;
+		mGridDim.z = aGridDim.z;
 	}
 
 	void CudaKernel::SetDynamicSharedMemory(uint aSizeInBytes)

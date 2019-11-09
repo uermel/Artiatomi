@@ -322,6 +322,9 @@ namespace Cuda
 		CudaTextureLinearPitched2D(CudaKernel* aKernel, string aTexName, CUaddress_mode aAddressMode0, CUaddress_mode aAddressMode1, 
 			CUfilter_mode aFilterMode, uint aTexRefSetFlag, CudaPitchedDeviceVariable* aDevVar, CUarray_format aFormat, uint aNumChannels);
 		
+		static void Bind(CudaKernel* aKernel, string aTexName, CUaddress_mode aAddressMode0, CUaddress_mode aAddressMode1,
+			CUfilter_mode aFilterMode, uint aTexRefSetFlag, CudaPitchedDeviceVariable* aDevVar, CUarray_format aFormat, uint aNumChannels);
+
 		//! CudaTextureLinearPitched2D destructor
 		//CudaTextureLinearPitched2D destructor
 		~CudaTextureLinearPitched2D();
@@ -425,6 +428,7 @@ namespace Cuda
 		string GetName();
 		CudaKernel* GetCudaKernel();
 		CudaArray3D* GetArray();
+		void BindToTexRef();
 	};
 
 	
