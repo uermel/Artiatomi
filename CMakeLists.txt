@@ -603,6 +603,8 @@ target_compile_options(EmSARTSubVols PUBLIC -fpermissive)
 
 ######################### Tutorial #####################################
 find_package(LATEX COMPONENTS PDFLATEX)
+
+if(LATEX_FOUND)
 include(docs/UseLATEX.cmake)
 
 file(GLOB_RECURSE tutorial_files RELATIVE ${CMAKE_SOURCE_DIR} docs/Tutorial/*.tex)
@@ -612,4 +614,5 @@ ADD_LATEX_DOCUMENT(
         INPUTS ${tutorial_files}
         FORCE_PDF
 )
+endif()
 ######################### Tutorial #####################################
