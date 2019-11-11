@@ -343,7 +343,7 @@ int main(int argc, char* argv[])
 #endif
 
 		//Load marker/alignment file
-		MarkerFile markers(aConfig.MarkerFile /*, aConfig.ReferenceMarker*/);
+		MarkerFile markers(aConfig.MarkerFile, aConfig.ReferenceMarker);
 
 		//Create projection object to handle projection data
 		Projection proj(projSource, &markers);

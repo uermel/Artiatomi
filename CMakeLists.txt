@@ -3,6 +3,9 @@ project(Artiatomi LANGUAGES CUDA CXX)
 
 set(CMAKE_BUILD_TYPE Release)
 
+set(CUDA_COMPILE_OPTIONS --use_fast_math)
+#set(CUDA_COMPILE_OPTIONS -g -G -lineinfo) #to debug kernels
+
 set(CMAKE_CXX_STANDARD 14)
 
 
@@ -373,7 +376,7 @@ endif()
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 # PTX-Kernel file
-cuda_compile_ptx(ISA_PTX_FILES ${ISA_PATH}/ImageStackAlignatorKernels/kernel.cu)
+cuda_compile_ptx(ISA_PTX_FILES ${ISA_PATH}/ImageStackAlignatorKernels/kernel.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${ISA_PATH}/ImageStackAlignatorKernels/kernel.cu.h COMMAND ${BIN2C_EXEC} -p 0 --name KernelCC ${ISA_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${ISA_PATH}/ImageStackAlignatorKernels/kernel.cu.h DEPENDS ${ISA_PTX_FILES})
 add_custom_target(isa_ptx_header ALL
         DEPENDS ${CMAKE_SOURCE_DIR}/${ISA_PATH}/ImageStackAlignatorKernels/kernel.cu.h ${ISA_PATH}/ImageStackAlignatorKernels/kernel.cu
@@ -440,49 +443,49 @@ set(EMSARTCOMMON_LIB
 		)
 	
 # PTX-Kernel file
-cuda_compile_ptx(BP_PTX_FILES ${EMSART_PATH}/cuda_kernels/BackProjectionSquareOS.cu)
+cuda_compile_ptx(BP_PTX_FILES ${EMSART_PATH}/cuda_kernels/BackProjectionSquareOS.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/BackProjectionSquareOS.cu.h 
 				   COMMAND ${BIN2C_EXEC} -p 0 --name KernelBackProjectionOS ${BP_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/BackProjectionSquareOS.cu.h DEPENDS ${BP_PTX_FILES})
 add_custom_target(bp_ptx_header ALL
         DEPENDS ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/BackProjectionSquareOS.cu.h ${EMSART_PATH}/cuda_kernels/BackProjectionSquareOS.cu
         SOURCES ${EMSART_PATH}/cuda_kernels/BackProjectionSquareOS.cu)
 		
-cuda_compile_ptx(FPRM_PTX_FILES ${EMSART_PATH}/cuda_kernels/ForwardProjectionRayMarcher_TL.cu)
+cuda_compile_ptx(FPRM_PTX_FILES ${EMSART_PATH}/cuda_kernels/ForwardProjectionRayMarcher_TL.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ForwardProjectionRayMarcher_TL.cu.h 
 				   COMMAND ${BIN2C_EXEC} -p 0 --name KernelForwardProjectionRayMarcher_TL ${FPRM_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ForwardProjectionRayMarcher_TL.cu.h DEPENDS ${FPRM_PTX_FILES})
 add_custom_target(fprm_ptx_header ALL
         DEPENDS ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ForwardProjectionRayMarcher_TL.cu.h ${EMSART_PATH}/cuda_kernels/ForwardProjectionRayMarcher_TL.cu
         SOURCES ${EMSART_PATH}/cuda_kernels/ForwardProjectionRayMarcher_TL.cu)
 		
-cuda_compile_ptx(FPD_PTX_FILES ${EMSART_PATH}/cuda_kernels/ForwardProjectionSlicer.cu)
+cuda_compile_ptx(FPD_PTX_FILES ${EMSART_PATH}/cuda_kernels/ForwardProjectionSlicer.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ForwardProjectionSlicer.cu.h 
 				   COMMAND ${BIN2C_EXEC} -p 0 --name KernelForwardProjectionSlicer ${FPD_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ForwardProjectionSlicer.cu.h DEPENDS ${FPD_PTX_FILES})
 add_custom_target(fpd_ptx_header ALL
         DEPENDS ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ForwardProjectionSlicer.cu.h ${EMSART_PATH}/cuda_kernels/ForwardProjectionSlicer.cu
         SOURCES ${EMSART_PATH}/cuda_kernels/ForwardProjectionSlicer.cu)
 		
-cuda_compile_ptx(CTF_PTX_FILES ${EMSART_PATH}/cuda_kernels/ctf.cu)
+cuda_compile_ptx(CTF_PTX_FILES ${EMSART_PATH}/cuda_kernels/ctf.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ctf.cu.h 
 				   COMMAND ${BIN2C_EXEC} -p 0 --name Kernelctf ${CTF_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ctf.cu.h DEPENDS ${CTF_PTX_FILES})
 add_custom_target(ctf_ptx_header ALL
         DEPENDS ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ctf.cu.h ${EMSART_PATH}/cuda_kernels/ctf.cu
         SOURCES ${EMSART_PATH}/cuda_kernels/ctf.cu)
 		
-cuda_compile_ptx(CTS_PTX_FILES ${EMSART_PATH}/cuda_kernels/CopyToSquare.cu)
+cuda_compile_ptx(CTS_PTX_FILES ${EMSART_PATH}/cuda_kernels/CopyToSquare.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/CopyToSquare.cu.h 
 				   COMMAND ${BIN2C_EXEC} -p 0 --name KernelCopyToSquare ${CTS_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/CopyToSquare.cu.h DEPENDS ${CTS_PTX_FILES})
 add_custom_target(cts_ptx_header ALL
         DEPENDS ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/CopyToSquare.cu.h ${EMSART_PATH}/cuda_kernels/CopyToSquare.cu
         SOURCES ${EMSART_PATH}/cuda_kernels/CopyToSquare.cu)
 		
-cuda_compile_ptx(COMPARE_PTX_FILES ${EMSART_PATH}/cuda_kernels/Compare.cu)
+cuda_compile_ptx(COMPARE_PTX_FILES ${EMSART_PATH}/cuda_kernels/Compare.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/Compare.cu.h 
 				   COMMAND ${BIN2C_EXEC} -p 0 --name KernelCompare ${COMPARE_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/Compare.cu.h DEPENDS ${COMPARE_PTX_FILES})
 add_custom_target(compare_ptx_header ALL
         DEPENDS ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/Compare.cu.h ${EMSART_PATH}/cuda_kernels/Compare.cu
         SOURCES ${EMSART_PATH}/cuda_kernels/Compare.cu)
 		
-cuda_compile_ptx(WBP_PTX_FILES ${EMSART_PATH}/cuda_kernels/wbpWeighting.cu)
+cuda_compile_ptx(WBP_PTX_FILES ${EMSART_PATH}/cuda_kernels/wbpWeighting.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/wbpWeighting.cu.h 
 				   COMMAND ${BIN2C_EXEC} -p 0 --name KernelWbpWeighting ${WBP_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/wbpWeighting.cu.h DEPENDS ${WBP_PTX_FILES})
 add_custom_target(wbp_ptx_header ALL

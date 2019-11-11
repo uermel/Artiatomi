@@ -61,7 +61,7 @@ void FileSource::FileLoadStatusUpdate(FileReader::FileReaderStatus status)
 	float progress = (float)status.bytesRead / (float)status.bytesToRead * 100.0f;
 
 	printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
-	printf("Loading projections: %.2f %", progress);
+	printf("Loading projections: %.2f %%", progress);
 	fflush(stdout);
 }
 

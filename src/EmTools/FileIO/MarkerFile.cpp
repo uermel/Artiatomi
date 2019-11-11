@@ -30,8 +30,8 @@
 #define MARKERFILE_X_DIMENSION 10
 #define INVALID_MARKER_POSITION -1
 
-MarkerFile::MarkerFile(string aFileName)
-	: EmFile(aFileName), mMagAnisotropyAmount(1), mMagAnisotropyAngle(0), mMagAnisotropy(Matrix<float>(3,3))
+MarkerFile::MarkerFile(string aFileName, int aRefMarker)
+	: EmFile(aFileName), mMagAnisotropyAmount(1), mMagAnisotropyAngle(0), mMagAnisotropy(Matrix<float>(3,3)), mRefMarker(aRefMarker)
 {
 	OpenAndRead();
 
@@ -142,7 +142,6 @@ Marker & MarkerFile::operator()(const int aProjection, const int aMarker)
 
 bool MarkerFile::CheckIfProjIndexIsGood(const int index)
 {
-	int mRefMarker = 0;
 	return ((*this)(MFI_X_Coordinate, index, mRefMarker) > INVALID_MARKER_POSITION && (*this)(MFI_Y_Coordinate, index, mRefMarker) > INVALID_MARKER_POSITION);
 }
 

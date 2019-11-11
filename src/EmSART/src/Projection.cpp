@@ -408,7 +408,7 @@ int Projection::GetMinimumTiltIndex()
 {
 	float minTilt = FLT_MAX;
 	int minTiltIndex = 0;
-	int projCount = markers->GetProjectionCount();
+	int projCount = markers->GetTotalProjectionCount();
 
 	for (int i = 0; i < projCount; i++)
 	{
@@ -438,43 +438,43 @@ float2 Projection::GetMinimumTiltShift()
 }
 
 
-float2 Projection::GetMeanShift()
-{
-	float2 shift;
-	shift.x = 0;
-	shift.y = 0;
-
-    int tiltCount = markers->GetProjectionCount();
-    for (int i = 0; i < tiltCount; i++)
-    {
-        shift.x += (*markers)(MFI_X_Shift, i, 0);
-        shift.y += (*markers)(MFI_Y_Shift, i, 0);
-    }
-    shift.x /= (float)tiltCount;
-    shift.y /= (float)tiltCount;
-	return shift;
-}
-
-
-float2 Projection::GetMedianShift()
-{
-	float2 shift;
-    int tiltCount = markers->GetProjectionCount();
-    float* x = new float[tiltCount];
-    float* y = new float[tiltCount];
-
-    for (int i = 0; i < tiltCount; i++)
-    {
-        x[i] = (*markers)(MFI_X_Shift, i, 0);
-        y[i] = (*markers)(MFI_Y_Shift, i, 0);
-    }
-    std::sort(x, x + tiltCount);
-    std::sort(y, y + tiltCount);
-
-    shift.x = x[tiltCount/2];
-    shift.y = y[tiltCount/2];
-	return shift;
-}
+//float2 Projection::GetMeanShift()
+//{
+//	float2 shift;
+//	shift.x = 0;
+//	shift.y = 0;
+//
+//    int tiltCount = markers->GetTotalProjectionCount();
+//    for (int i = 0; i < tiltCount; i++)
+//    {
+//        shift.x += (*markers)(MFI_X_Shift, i, 0);
+//        shift.y += (*markers)(MFI_Y_Shift, i, 0);
+//    }
+//    shift.x /= (float)tiltCount;
+//    shift.y /= (float)tiltCount;
+//	return shift;
+//}
+//
+//
+//float2 Projection::GetMedianShift()
+//{
+//	float2 shift;
+//    int tiltCount = markers->GetTotalProjectionCount();
+//    float* x = new float[tiltCount];
+//    float* y = new float[tiltCount];
+//
+//    for (int i = 0; i < tiltCount; i++)
+//    {
+//        x[i] = (*markers)(MFI_X_Shift, i, 0);
+//        y[i] = (*markers)(MFI_Y_Shift, i, 0);
+//    }
+//    std::sort(x, x + tiltCount);
+//    std::sort(y, y + tiltCount);
+//
+//    shift.x = x[tiltCount/2];
+//    shift.y = y[tiltCount/2];
+//	return shift;
+//}
 
 //float Projection::GetMean(float* data)
 //{

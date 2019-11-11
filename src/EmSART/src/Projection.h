@@ -69,9 +69,9 @@ public:
 	void GetDetectorMatrix(uint aIndex, float aMatrix[16], float os);
 	int GetMinimumTiltIndex();
 	float2 GetMinimumTiltShift();
-	float2 GetMeanShift();
+	/*float2 GetMeanShift();
 	float2 GetMedianShift();
-	/*float GetMean(float* data);
+	float GetMean(float* data);
 	float GetMean(int index);
 	void Normalize(float* data, float mean);*/
 	Matrix<float> RotateMatrix(uint aIndex, Matrix<float>& matrix);

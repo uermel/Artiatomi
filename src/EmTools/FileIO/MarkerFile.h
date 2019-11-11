@@ -69,7 +69,7 @@ class MarkerFile : private EmFile
 {
 public:
 	//! Creates a new MarkerFile instance. The data is directly read from file.
-	MarkerFile(string aFileName);
+	MarkerFile(string aFileName, int aRefMarker = 0);
 
 	//! Initializes a new MarkerFile instance with one unclicked marker per projection.
 	MarkerFile(int aProjectionCount, float* aTiltAngles);
@@ -158,6 +158,7 @@ private:
 	float* mMarkerXPos;
 	float* mMarkerYPos;
 	float* mMarkerZPos;
+	int mRefMarker;
 
 	class MinimeData
 	{
