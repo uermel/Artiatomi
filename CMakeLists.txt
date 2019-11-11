@@ -14,7 +14,7 @@ set(CLICKER_PATH "src/Clicker" CACHE PATH "Path to Clicker source.")
 set(EMSART_PATH "src/EmSART/src" CACHE PATH "Path to EmSART source.")
 set(ISA_PATH "src/ImageStackAlignator" CACHE PATH "Path to ImageStackAlignator source.")
 if(UNIX)
-set(CUDA_PATH "/usr/local/cuda-9.0" CACHE PATH "Path to cuda 8 root")
+	set(CUDA_PATH "/usr/local/cuda" CACHE PATH "Path to CUDA root")
 endif()
 
 if(WIN32)
