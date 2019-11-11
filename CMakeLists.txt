@@ -11,7 +11,7 @@ set(CMAKE_CXX_STANDARD 14)
 
 set(EMTOOLS_PATH "src/EmTools" CACHE PATH "Path to EmTools source.")
 set(CLICKER_PATH "src/Clicker" CACHE PATH "Path to Clicker source.")
-set(EMSART_PATH "src/EmSART/src" CACHE PATH "Path to EmSART source.")
+set(EMSART_PATH "src/EmSART" CACHE PATH "Path to EmSART source.")
 set(ISA_PATH "src/ImageStackAlignator" CACHE PATH "Path to ImageStackAlignator source.")
 if(UNIX)
 	set(CUDA_PATH "/usr/local/cuda" CACHE PATH "Path to CUDA root")
