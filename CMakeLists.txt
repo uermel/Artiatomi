@@ -149,6 +149,7 @@ set(MINIMIZATION_LIB
 
 ######################### FileIO #####################################
 set(FILEIO_SRC
+        ${EMTOOLS_PATH}/FileIO/CtfFile.cpp
         ${EMTOOLS_PATH}/FileIO/Dm3File.cpp
         ${EMTOOLS_PATH}/FileIO/Dm3FileTag.cpp
         ${EMTOOLS_PATH}/FileIO/Dm3FileTagDirectory.cpp
@@ -164,9 +165,11 @@ set(FILEIO_SRC
         ${EMTOOLS_PATH}/FileIO/ImodFiducialFile.cpp
         ${EMTOOLS_PATH}/FileIO/MarkerFile.cpp
         ${EMTOOLS_PATH}/FileIO/MDocFile.cpp
+		${EMTOOLS_PATH}/FileIO/MotiveList.cpp
         ${EMTOOLS_PATH}/FileIO/MovieStack.cpp
         ${EMTOOLS_PATH}/FileIO/MRCFile.cpp
         ${EMTOOLS_PATH}/FileIO/SERFile.cpp
+		${EMTOOLS_PATH}/FileIO/ShiftFile.cpp
         ${EMTOOLS_PATH}/FileIO/SimpleFileList.cpp
         ${EMTOOLS_PATH}/FileIO/SingleFrame.cpp
         ${EMTOOLS_PATH}/FileIO/TIFFFile.cpp
@@ -416,7 +419,6 @@ set(EMSARTCOMMON_SRC
         ${EMSART_PATH}/utils/SimpleLogger.cpp
         ${EMSART_PATH}/utils/Config.cpp
 		
-        ${EMSART_PATH}/io/CtfFile.cpp
 		${EMSART_PATH}/io/FileSource.cpp
         ${EMSART_PATH}/io/MPISource.cpp)
 		
@@ -532,8 +534,6 @@ target_compile_options(EmSART PUBLIC -fpermissive)
 set(EMSARTREFINE_SRC
         ${EMSARTCOMMON_SRC}
 		${EMSART_PATH}/EmSartRefine.cpp
-		${EMSART_PATH}/io/MotiveList.cpp
-		${EMSART_PATH}/io/ShiftFile.cpp
         )
 		
 set(EMSARTREFINE_INC
@@ -568,8 +568,6 @@ target_compile_options(EmSARTRefine PUBLIC -fpermissive)
 set(EMSARTSUBVOLS_SRC
         ${EMSARTCOMMON_SRC}
 		${EMSART_PATH}/EmSartSubVolumes.cpp
-		${EMSART_PATH}/io/MotiveList.cpp
-		${EMSART_PATH}/io/ShiftFile.cpp
         )
 		
 set(EMSARTSUBVOLS_INC

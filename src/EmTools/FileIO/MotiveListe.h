@@ -24,13 +24,54 @@
 #ifndef MOTIVELIST_H
 #define MOTIVELIST_H
 
-#include <EmFile.h>
-#ifdef SUBVOLREC_MODE
-#include "../utils/Config.h"
-#endif
-#ifdef REFINE_MODE
-#endif
-#include "../utils/Config.h"
+#include "EmFile.h"
+
+struct motive;
+
+struct supportMotive;
+
+class MotiveList : public EmFile
+{
+public:
+	enum NamingConvention_enum
+	{
+		NC_ParticleOnly, //Particle nr from line 4
+		NC_TomogramParticle //Tomogram nr from line 5 and particle nr from line 6
+	};
+
+	enum GroupMode_enum
+	{
+		GM_BYGROUP,
+		GM_MAXDIST,
+		GM_MAXCOUNT
+	};
+
+private:
+	float binningFactorClick;
+	float binningFactorShift;
+
+	std::vector<int> groupIndices;
+
+public:
+	MotiveList(string filename, float aBinningFactorClick, float aBinningShift);
+
+	motive GetAt(int index);
+
+	void SetAt(int index, motive& m);
+
+	int GetParticleCount();
+
+	float GetDistance(int aIndex1, int aIndex2);
+	float GetDistance(motive& mot1, motive& mot2);
+	std::vector<motive> GetNeighbours(int index, GroupMode_enum aGroupMode, float aMaxDistance, int aGroupSize);
+	std::vector<motive> GetNeighbours(int index, int count);
+	std::vector<motive> GetNeighbours(int index, float maxDist);
+	std::vector<supportMotive> GetNeighbours(int index, float maxDist, vector<MotiveList>& supporters);
+	std::vector<motive> GetNeighbours(int groupNr);
+	int GetGroupCount(GroupMode_enum aConfig);
+	int GetGroupIdx(int groupNr);
+	int GetGlobalIdx(motive& m);
+};
 
 struct motive
 {
@@ -56,49 +97,15 @@ struct motive
 	float classNo;
 
 	motive();
-	
-#ifdef SUBVOLREC_MODE
-	string GetIndexCoding(Configuration::NamingConvention nc);
-#endif
 
-#ifdef REFINE_MODE
+	string GetIndexCoding(MotiveList::NamingConvention_enum nc);
+
 	bool isEqual(motive& m);
-#endif
 };
 
 struct supportMotive
 {
 	motive m;
 	int index;
-};
-
-class MotiveList : public EmFile
-{
-	float binningFactorClick;
-	float binningFactorShift;
-
-	std::vector<int> groupIndices;
-
-public:
-	MotiveList(string filename, float aBinningFactorClick, float aBinningShift);
-
-	motive GetAt(int index);
-
-	void SetAt(int index, motive& m);
-
-	int GetParticleCount();
-
-#ifdef REFINE_MODE
-	float GetDistance(int aIndex1, int aIndex2);
-	float GetDistance(motive& mot1, motive& mot2);
-	std::vector<motive> GetNeighbours(int index, Configuration::Config& aConfig);
-	std::vector<motive> GetNeighbours(int index, int count);
-	std::vector<motive> GetNeighbours(int index, float maxDist);
-	std::vector<supportMotive> GetNeighbours(int index, float maxDist, vector<MotiveList>& supporters);
-	std::vector<motive> GetNeighbours(int groupNr);
-	int GetGroupCount(Configuration::Config& aConfig);
-	int GetGroupIdx(int groupNr);
-	int GetGlobalIdx(motive& m);
-#endif
 };
 #endif //MOTIVELIST_H

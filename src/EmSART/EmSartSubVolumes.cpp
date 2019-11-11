@@ -44,9 +44,9 @@
 #include "io/writeBMP.h"
 //#include "io/mrcHeader.h"
 //#include "io/emHeader.h"
-#include "io/CtfFile.h"
-#include "io/MotiveListe.h"
-#include "io/ShiftFile.h"
+#include <CtfFile.h>
+#include <MotiveListe.h>
+#include <ShiftFile.h>
 #include <time.h>
 #include <cufft.h>
 #include <npp.h>

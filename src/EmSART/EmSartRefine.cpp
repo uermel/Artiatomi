@@ -43,9 +43,9 @@
 #include "io/writeBMP.h"
 //#include "io/mrcHeader.h"
 //#include "io/emHeader.h"
-#include "io/CtfFile.h"
-#include "io/MotiveListe.h"
-#include "io/ShiftFile.h"
+#include <CtfFile.h>
+#include <MotiveListe.h>
+#include <ShiftFile.h>
 #include <time.h>
 #include <cufft.h>
 #include <npp.h>
@@ -694,7 +694,7 @@ int main(int argc, char* argv[])
 			reconstructor.setRotVolData(volSubVol->GetPtrToSubVolume(0));
 		}
 				
-		for (int group = 0; group < ml.GetGroupCount(aConfig); group++)
+		for (int group = 0; group < ml.GetGroupCount(aConfig.GroupMode); group++)
 		{
 			Matrix<float> magAnisotropyInv(reconstructor.GetMagAnistropyMatrix(1.0f / aConfig.MagAnisotropyAmount, aConfig.MagAnisotropyAngleInDeg, proj.GetWidth(), proj.GetHeight()));
 
@@ -707,10 +707,10 @@ int main(int argc, char* argv[])
 			volumeIsEmpty = false;
 			
 			//Get the motive list entries for this group:
-			vector<motive> motives = ml.GetNeighbours(group, aConfig);
+			vector<motive> motives = ml.GetNeighbours(group, aConfig.GroupMode, aConfig.MaxDistance, aConfig.GroupSize);
 
-			if (aConfig.GroupMode == Configuration::Config::GM_MAXCOUNT ||
-				aConfig.GroupMode == Configuration::Config::GM_MAXDIST)
+			if (aConfig.GroupMode == MotiveList::GroupMode_enum::GM_MAXCOUNT ||
+				aConfig.GroupMode == MotiveList::GroupMode_enum::GM_MAXDIST)
 			{
 				if (processedParticle[ml.GetGlobalIdx(motives[0])])
 				{
@@ -761,19 +761,19 @@ int main(int argc, char* argv[])
 			if (mpi_part == 0)
 				switch (aConfig.GroupMode)
 				{
-				case Configuration::Config::GM_BYGROUP:
-					printf("Group nr: %d/%d, group size: %d\n", group, (int)ml.GetGroupCount(aConfig), (int)motives.size());
-					log << "Group nr: " << group << "/" << (int)ml.GetGroupCount(aConfig) << ", group size: " << (int)motives.size() << endl;
+				case MotiveList::GroupMode_enum::GM_BYGROUP:
+					printf("Group nr: %d/%d, group size: %d\n", group, (int)ml.GetGroupCount(aConfig.GroupMode), (int)motives.size());
+					log << "Group nr: " << group << "/" << (int)ml.GetGroupCount(aConfig.GroupMode) << ", group size: " << (int)motives.size() << endl;
 					break;
-				case Configuration::Config::GM_MAXDIST:
-					printf("Group nr: %d/%d, group size: %d\n", group, (int)ml.GetGroupCount(aConfig), (int)motives.size());
-					log << "Group nr: " << group << "/" << (int)ml.GetGroupCount(aConfig) << ", group size: " << (int)motives.size() << endl;
+				case MotiveList::GroupMode_enum::GM_MAXDIST:
+					printf("Group nr: %d/%d, group size: %d\n", group, (int)ml.GetGroupCount(aConfig.GroupMode), (int)motives.size());
+					log << "Group nr: " << group << "/" << (int)ml.GetGroupCount(aConfig.GroupMode) << ", group size: " << (int)motives.size() << endl;
 					break;
-				case Configuration::Config::GM_MAXCOUNT:
+				case MotiveList::GroupMode_enum::GM_MAXCOUNT:
 					{
 						float dist = ml.GetDistance(motives[0], motives[motives.size() - 1]);
-						printf("Group nr: %d/%d, max distance : %f [voxel]\n", group, (int)ml.GetGroupCount(aConfig), dist);
-						log << "Group nr: " << group << "/" << (int)ml.GetGroupCount(aConfig) << ", max distance: " << dist << " [voxel]" << endl;
+						printf("Group nr: %d/%d, max distance : %f [voxel]\n", group, (int)ml.GetGroupCount(aConfig.GroupMode), dist);
+						log << "Group nr: " << group << "/" << (int)ml.GetGroupCount(aConfig.GroupMode) << ", max distance: " << dist << " [voxel]" << endl;
 					}
 					break;
 				}
@@ -1024,7 +1024,7 @@ int main(int argc, char* argv[])
 				//if (mpi_part == 0)
 				{
 					//save shift for every entry in the group
-					if (aConfig.GroupMode == Configuration::Config::GM_BYGROUP)
+					if (aConfig.GroupMode == MotiveList::GroupMode_enum::GM_BYGROUP)
 					{
 						for (int motlIdx = 0; motlIdx < motives.size(); motlIdx++)
 						{

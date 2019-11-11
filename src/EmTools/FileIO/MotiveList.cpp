@@ -110,7 +110,6 @@ int MotiveList::GetParticleCount()
 	return _fileHeader.DimY;
 }
 
-#ifdef REFINE_MODE
 float MotiveList::GetDistance(int aIndex1, int aIndex2)
 {
 	motive mot1 = GetAt(aIndex1);
@@ -130,16 +129,16 @@ float MotiveList::GetDistance(motive & mot1, motive & mot2)
 	return dist;
 }
 
-std::vector<motive> MotiveList::GetNeighbours(int index, Configuration::Config & aConfig)
+std::vector<motive> MotiveList::GetNeighbours(int index, GroupMode_enum aGroupMode, float aMaxDistance, int aGroupSize)
 {
-	switch (aConfig.GroupMode)
+	switch (aGroupMode)
 	{
-	case Configuration::Config::GM_BYGROUP:
+	case GM_BYGROUP:
 		return GetNeighbours(index);
-	case Configuration::Config::GM_MAXDIST:
-		return GetNeighbours(index, aConfig.MaxDistance);
-	case Configuration::Config::GM_MAXCOUNT:
-		return GetNeighbours(index, aConfig.GroupSize);
+	case GM_MAXDIST:
+		return GetNeighbours(index, aMaxDistance);
+	case GM_MAXCOUNT:
+		return GetNeighbours(index, aGroupSize);
 	}
 	return std::vector<motive>();
 }
@@ -230,15 +229,15 @@ std::vector<motive> MotiveList::GetNeighbours(int groupNr)
 	return ret;
 }
 
-int MotiveList::GetGroupCount(Configuration::Config & aConfig)
+int MotiveList::GetGroupCount(GroupMode_enum aGroupMode)
 {
-	switch (aConfig.GroupMode)
+	switch (aGroupMode)
 	{
-	case Configuration::Config::GM_BYGROUP:
+	case GM_BYGROUP:
 		return (int)groupIndices.size();
-	case Configuration::Config::GM_MAXDIST:
+	case GM_MAXDIST:
 		return _fileHeader.DimY;
-	case Configuration::Config::GM_MAXCOUNT:
+	case GM_MAXCOUNT:
 		return _fileHeader.DimY;
 	}
 	return 0;
@@ -287,18 +286,16 @@ bool motive::isEqual(motive & m)
 
 	return eq;
 }
-#endif
 
-#ifdef SUBVOLREC_MODE
-string motive::GetIndexCoding(Configuration::NamingConvention nc)
+string motive::GetIndexCoding(MotiveList::NamingConvention_enum nc)
 {
 	stringstream ss;
 	switch (nc)
 	{
-	case Configuration::NC_ParticleOnly:
+	case MotiveList::NamingConvention_enum::NC_ParticleOnly:
 		ss << partNr;
 		break;
-	case Configuration::NC_TomogramParticle:
+	case MotiveList::NamingConvention_enum::NC_TomogramParticle:
 		ss << tomoNr << "_" << partNrInTomo;
 		break;
 	default:
@@ -306,4 +303,3 @@ string motive::GetIndexCoding(Configuration::NamingConvention nc)
 	}
 	return ss.str();
 }
-#endif

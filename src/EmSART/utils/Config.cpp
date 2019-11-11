@@ -88,7 +88,7 @@ namespace Configuration
 			Reference(),
 			MaxShift(0),
 			ShiftOutputFile(),
-			GroupMode(GM_BYGROUP),
+			GroupMode(MotiveList::GroupMode_enum::GM_BYGROUP),
 			GroupSize(0),
 			MaxDistance(0),
 			CCMapFileName(),
@@ -107,7 +107,7 @@ namespace Configuration
 			SubVolPath(),
 			ShiftInputFile(),
 			BatchSize(0),
-			NamingConv(NamingConvention::NC_ParticleOnly),
+			NamingConv(MotiveList::NamingConvention_enum::NC_ParticleOnly),
 			ScaleMotivelistShift(1),
 			ScaleMotivelistPosition(1)
 #endif
@@ -416,15 +416,15 @@ namespace Configuration
 
 		if (gm == "ByGroup")
 		{
-			GroupMode = GM_BYGROUP;
+			GroupMode = MotiveList::GroupMode_enum::GM_BYGROUP;
 		}
 		else if(gm == "MaxDistance")
 		{
-			GroupMode = GM_MAXDIST;
+			GroupMode = MotiveList::GroupMode_enum::GM_MAXDIST;
 		}
 		else if(gm == "MaxCount")
 		{
-			GroupMode = GM_MAXCOUNT;
+			GroupMode = MotiveList::GroupMode_enum::GM_MAXCOUNT;
 		}
 		else
 		{
@@ -432,11 +432,11 @@ namespace Configuration
 			throw ex;
 		}
 
-		if (GroupMode == GM_MAXDIST)
+		if (GroupMode == MotiveList::GroupMode_enum::GM_MAXDIST)
 		{
 			MaxDistance = GetFloat("MaxDistance");
 		}
-		if (GroupMode == GM_MAXCOUNT)
+		if (GroupMode == MotiveList::GroupMode_enum::GM_MAXCOUNT)
 		{
 			GroupSize = GetInt("GroupSize");
 		}
@@ -485,10 +485,10 @@ namespace Configuration
 		MaxShift = GetInt("MaxShift");
 
 		string nc = GetStringOptional("NamingConvention");
-		NamingConv = NamingConvention::NC_ParticleOnly;
+		NamingConv = MotiveList::NamingConvention_enum::NC_ParticleOnly;
 		if (nc == "TomoParticle" || nc == "Tomo_Particle")
 		{
-			NamingConv = NamingConvention::NC_TomogramParticle;
+			NamingConv = MotiveList::NamingConvention_enum::NC_TomogramParticle;
 		}
 		ScaleMotivelistShift = GetFloat("ScaleMotivelistShift");
 		ScaleMotivelistPosition = GetFloat("ScaleMotivelistPosition");

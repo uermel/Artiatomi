@@ -24,8 +24,9 @@
 #ifndef SHIFTFILE_H
 #define SHIFTFILE_H
 
-#include "IODefault.h"
-#include <EmFile.h>
+#ifndef NO_CUDA
+#include "EmFile.h"
+#include <vector_types.h>
 
 
 using namespace std;
@@ -36,6 +37,7 @@ using namespace std;
 \date   September 2011
 \version 1.0
 */
+
 class ShiftFile : public EmFile
 {
 protected:
@@ -62,4 +64,5 @@ public:
 	void SetValue(const int aProjection, const int aMotive, float2 aVal);
 };
 
+#endif //NoCuda
 #endif

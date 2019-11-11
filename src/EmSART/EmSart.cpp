@@ -48,7 +48,7 @@
 #include "io/writeBMP.h"
 //#include "io/mrcHeader.h"
 //#include "io/emHeader.h"
-#include "io/CtfFile.h"
+#include <CtfFile.h>
 #include <time.h>
 #include <cufft.h>
 #include <npp.h>

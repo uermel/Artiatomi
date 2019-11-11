@@ -29,6 +29,7 @@
 #include <list>
 #include "ConfigExceptions.h"
 #include "../Kernels.h"
+#include <MotiveListe.h>
 
 using namespace std;
 
@@ -36,15 +37,6 @@ using namespace std;
 
 namespace Configuration
 {
-#ifdef SUBVOLREC_MODE
-	enum NamingConvention
-	{
-		NC_ParticleOnly, //Particle nr from line 4
-		NC_TomogramParticle //Tomogram nr from line 5 and particle nr from line 6
-	};
-#endif
-
-
 	//! Parse structured config files
 	/*!
 		Config files contains lines with name-value assignements in the form "<name> = <value>".
@@ -87,14 +79,7 @@ namespace Configuration
 			PNM_STANDARD_DEV,
 			PNM_NONE
 		};
-#ifdef REFINE_MODE
-		enum GROUP_MODE
-		{
-			GM_BYGROUP,
-			GM_MAXDIST,
-			GM_MAXCOUNT
-		};
-#endif
+
 	    private:
 			//! Parse config file aConfigFile
 			/*!
@@ -159,7 +144,7 @@ namespace Configuration
 			bool	SwitchCTFDirectionForIMOD;
 			bool	PhaseFlipOnly;
 			float	WienerFilterNoiseLevel;
-
+			
 #ifdef REFINE_MODE
 			int SizeSubVol;
 			float VoxelSizeSubVol;
@@ -169,7 +154,7 @@ namespace Configuration
 			string Reference;
 			int MaxShift;
 			string ShiftOutputFile;
-			GROUP_MODE GroupMode;
+			MotiveList::GroupMode_enum GroupMode;
 			int GroupSize;
 			float MaxDistance;
 			string CCMapFileName;
@@ -190,7 +175,7 @@ namespace Configuration
 			string ShiftInputFile;
 			int BatchSize;
 			int MaxShift;
-			NamingConvention NamingConv;
+			MotiveList::NamingConvention_enum NamingConv;
 #endif
 
             static Config& GetConfig();

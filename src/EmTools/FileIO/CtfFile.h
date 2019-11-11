@@ -21,33 +21,20 @@
 ////////////////////////////////////////////////////////////////////////
 
 
-#include "CtfFile.h"
-#include "IODefault.h"
+#ifndef CTFFILE_H
+#define CTFFILE_H
 
-CtfFile::CtfFile(std::string aFileName)
-	: EmFile(aFileName)
-{
-	OpenAndRead();
-	//ReadHeaderInfo();
-}
+#include "EmFile.h"
 
-float CtfFile::GetMinDefocus(uint index)
-{
-	int DimX = GetFileHeader().DimX;
-	float* fdata = (float*)_data;
-	return fdata[1 * DimX + index];
-}
 
-float CtfFile::GetMaxDefocus(uint index)
+class CtfFile : private EmFile
 {
-	int DimX = GetFileHeader().DimX;
-	float* fdata = (float*)_data;
-	return fdata[2 * DimX + index];
-}
+public:
+	CtfFile(string aFileName);
 
-float CtfFile::GetAstigmatismAngle(uint index)
-{
-	int DimX = GetFileHeader().DimX;
-	float* fdata = (float*)_data;
-	return fdata[4 * DimX + index] * 180.0f / M_PI;
-}
+	float GetMinDefocus(uint index);
+	float GetMaxDefocus(uint index);
+	float GetAstigmatismAngle(uint index);
+};
+
+#endif
