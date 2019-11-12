@@ -588,7 +588,7 @@ int main(int argc, char* argv[])
 
 		ShiftFile sf(aConfig.ShiftInputFile);
 
-		float2 test = sf(1, 2);
+		//float2 test = sf(1, 2);
 
 		/*float2* extraShifts = new float2[projSource->DimZ * ml.DimY];
 		memset(extraShifts, 0, projSource->DimZ * ml.DimY * sizeof(float2));
@@ -647,7 +647,9 @@ int main(int argc, char* argv[])
 					float3 shift = make_float3(m.x_Shift, m.y_Shift, m.z_Shift);
 					v->PositionInSpace(aConfig.VoxelSize, aConfig.VoxelSizeSubVol, *volReconstructed, posSubVol, shift);
 
-					float2 es = sf(index, motlIdx);// s[i * projCount + motlIdx];
+					// This tmp var is a little messy but this way ShiftFiles don't depend on CUDA
+					my_float2 tmp = sf(index, motlIdx);
+					float2 es = make_float2(tmp.x, tmp.y);// s[i * projCount + motlIdx];
 
 					float shiftLength = sqrtf(es.x * es.x + es.y * es.y);
 

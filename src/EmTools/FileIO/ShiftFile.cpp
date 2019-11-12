@@ -23,8 +23,6 @@
 
 #include "ShiftFile.h"
 
-#ifndef NO_CUDA
-
 ShiftFile::ShiftFile(string aFileName)
 	: EmFile(aFileName)
 {
@@ -64,9 +62,9 @@ int ShiftFile::GetProjectionCount()
 	return _fileHeader.DimY;
 }
 
-float2 ShiftFile::operator() (const int aProjection, const int aMotive)
+my_float2 ShiftFile::operator() (const int aProjection, const int aMotive)
 {
-	float2 erg;
+	my_float2 erg;
 
 	float* fdata = (float*)_data;
 	erg.x = -fdata[0 * _fileHeader.DimX * _fileHeader.DimY + aProjection * _fileHeader.DimX + aMotive];
@@ -80,4 +78,3 @@ void ShiftFile::SetValue(const int aProjection, const int aMotive, float2 aVal)
 	fdata[0 * _fileHeader.DimX * _fileHeader.DimY + aProjection * _fileHeader.DimX + aMotive] = aVal.x;
 	fdata[1 * _fileHeader.DimX * _fileHeader.DimY + aProjection * _fileHeader.DimX + aMotive] = aVal.y;
 }
-#endif
