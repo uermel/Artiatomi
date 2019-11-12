@@ -22,7 +22,7 @@
 
 
 #include "MPISource.h"
-#include "../utils/Config.h"
+//#include "../utils/Config.h"
 
 MPISource::MPISource(int aDimX, int aDimY, int aDimZ, float aPixelSize)
 	: ProjectionSource(), _dimX(aDimX), _dimY(aDimY), _dimZ(aDimZ), _pixelSize(aPixelSize)

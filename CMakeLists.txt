@@ -174,7 +174,10 @@ set(FILEIO_SRC
         ${EMTOOLS_PATH}/FileIO/SingleFrame.cpp
         ${EMTOOLS_PATH}/FileIO/TIFFFile.cpp
         ${EMTOOLS_PATH}/FileIO/TiltSeries.cpp
-        ${EMTOOLS_PATH}/FileIO/Volume.cpp)
+        ${EMTOOLS_PATH}/FileIO/Volume.cpp
+        ${EMTOOLS_PATH}/FileIO/FileSource.cpp
+        ${EMTOOLS_PATH}/FileIO/MPISource.cpp)
+        
 
 set(FILEIO_INC
         ${EMTOOLS_PATH}/FileIO
@@ -418,10 +421,7 @@ set(EMSARTCOMMON_SRC
         ${EMSART_PATH}/utils/log.cpp
         ${EMSART_PATH}/utils/SimpleLogger.cpp
         ${EMSART_PATH}/utils/Config.cpp
-		
-		${EMSART_PATH}/io/FileSource.cpp
-        ${EMSART_PATH}/io/MPISource.cpp)
-		
+		)
 		
 set(EMSARTCOMMON_INC
         ${EMSART_PATH}

@@ -43,10 +43,10 @@
 //#include "io/Dm4FileStack.h"
 //#include "io/MRCFile.h"
 #ifdef USE_MPI
-#include "io/MPISource.h"
+#include <MPISource.h>
 #endif
 #include <MarkerFile.h>
-#include "io/writeBMP.h"
+#include <writeBMP.h>
 //#include "io/mrcHeader.h"
 //#include "io/emHeader.h"
 #include <CtfFile.h>
