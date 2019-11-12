@@ -24,6 +24,7 @@
 #include "MotiveListe.h"
 #include <sstream>
 #include <algorithm>
+#include <math.h>
 
 motive::motive() :
 	ccCoeff(0),
