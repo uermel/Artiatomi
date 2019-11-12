@@ -39,13 +39,13 @@
 //#include "utils/Matrix.h"
 //#include "io/Dm4FileStack.h"
 //#include "io/MRCFile.h"
-#include <FileSource.h>
+#include "io/FileSource.h"
 #ifdef USE_MPI
-#include <MPISource.h>
+#include "io/MPISource.h"
 #endif
 #include <MarkerFile.h>
 //#include "io/MarkerFile.h"
-#include <writeBMP.h>
+#include "io/writeBMP.h"
 //#include "io/mrcHeader.h"
 //#include "io/emHeader.h"
 #include <CtfFile.h>

@@ -25,7 +25,7 @@
 #define PROJECTION_H
 
 #include "EmSartDefault.h"
-#include <ProjectionSource.h>
+#include "io/ProjectionSource.h"
 //#include "io/MRCFile.h"
 //#include "io/Dm4FileStack.h"
 #include <MarkerFile.h>
