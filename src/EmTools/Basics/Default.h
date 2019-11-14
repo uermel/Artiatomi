@@ -24,7 +24,6 @@
 #ifndef DEFAULT_H
 #define DEFAULT_H
 
-#include <cstdint>
 #include <stdio.h>
 #include <string>
 #include <vector>
@@ -191,92 +190,5 @@ enum ImageType_enum
 	IT_VOLUME,
 	IT_NONE
 };
-
-// Non-standard types
-// Most of them are used only by TIFF IO
-// These are needed to proviede type-context to delete[]
-// when freeing in-memory representations of file data blocks
-typedef struct rgb {
-    std::uint8_t R;
-    std::uint8_t G;
-    std::uint8_t B;
-} rgb_t;
-
-typedef struct double2_t {
-	double a;
-	double b;
-} double2_t;
-
-typedef struct float2_t {
-	float a;
-	float b;
-} float2_t;
-
-typedef struct float3_t {
-	float a;
-	float b;
-	float c;
-} float3_t;
-
-typedef struct float4_t {
-	float a;
-	float b;
-	float c;
-	float d;
-} float4_t;
-
-typedef struct uchar2_t {
-	unsigned char a;
-	unsigned char b;
-} uchar2_t;
-
-typedef struct uchar3_t {
-	unsigned char a;
-	unsigned char b;
-	unsigned char c;
-} uchar3_t;
-
-typedef struct uchar4_t {
-	unsigned char a;
-	unsigned char b;
-	unsigned char c;
-	unsigned char d;
-} uchar4_t;
-
-typedef struct ushort2_t {
-	std::uint16_t a;
-	std::uint16_t b;
-} ushort2_t;
-
-typedef struct ushort3_t {
-	std::uint16_t a;
-	std::uint16_t b;
-	std::uint16_t c;
-} ushort3_t;
-
-typedef struct ushort4_t {
-	std::uint16_t a;
-	std::uint16_t b;
-	std::uint16_t c;
-	std::uint16_t d;
-} ushort4_t;
-
-typedef struct short2_t {
-	std::int16_t a;
-	std::int16_t b;
-} short2_t;
-
-typedef struct short3_t {
-	std::int16_t a;
-	std::int16_t b;
-	std::int16_t c;
-} short3_t;
-
-typedef struct short4_t {
-	std::int16_t a;
-	std::int16_t b;
-	std::int16_t c;
-	std::int16_t d;
-} short4_t;
 
 #endif

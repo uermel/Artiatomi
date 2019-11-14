@@ -870,7 +870,7 @@ int main(int argc, char* argv[])
 	}
 
 	// Free output
-	FileReader::DeleteData(output, outputType);
+	delete[] (char *)output;
 
 	CudaContext::DestroyInstance(ctx);
 	

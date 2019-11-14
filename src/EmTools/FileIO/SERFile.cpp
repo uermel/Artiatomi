@@ -44,11 +44,8 @@ SERFile::~SERFile()
 	_dimensionArray.Units = NULL;
 
 	// Delete existing data
-	// Need to figure out type of data array first
-	DataType_enum dataType = this->GetDataType();
-
-	// Free data block
-	FileReader::DeleteData(_element.Data, dataType);
+	if (_element.Data)
+		delete[] (char *)_element.Data;
 
 	_element.Data = NULL;
 }
