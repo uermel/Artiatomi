@@ -1032,7 +1032,9 @@ int main(int argc, char* argv[])
 
 							int totalIdx = ml.GetGlobalIdx(m);
 							//printf("Set values at: %d, %d\n", index, motlIdx); fflush(stdout);
-							sf.SetValue(index, totalIdx, shift);
+
+							// Convert to my_float to avoid FileIO dependency on Cuda
+							sf.SetValue(index, totalIdx, my_float2(shift.x, shift.y));
 							groupRelationList[totalIdx].particleNr = m.partNr;
 							groupRelationList[totalIdx].particleNrInTomo = m.partNrInTomo;
 							groupRelationList[totalIdx].tomoNr = m.tomoNr;
@@ -1053,7 +1055,8 @@ int main(int argc, char* argv[])
 							int totalIdx2 = ml.GetGlobalIdx(m2);
 							if (d <= aConfig.SpeedUpDistance && d < minDistOfProcessedParticles[totalIdx2])
 							{
-								sf.SetValue(index, totalIdx2, shift);
+								// Convert to my_float to avoid FileIO dependency on Cuda
+								sf.SetValue(index, totalIdx2, my_float2(shift.x, shift.y));
 								processedParticle[totalIdx2] = true;
 								minDistOfProcessedParticles[totalIdx2] = d;
 								closeIndx.push_back(pair<int, float>(totalIdx2, d));
@@ -1080,7 +1083,8 @@ int main(int argc, char* argv[])
 						}
 
 						//printf("Set values at: %d, %d\n", index, motlIdx); fflush(stdout);
-						sf.SetValue(index, totalIdx, shift);
+						// Convert to my_float to avoid FileIO dependency on Cuda
+						sf.SetValue(index, totalIdx, my_float2(shift.x, shift.y));
 						processedParticle[totalIdx] = true;
 					}
 				}

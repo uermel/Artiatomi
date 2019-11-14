@@ -72,7 +72,7 @@ my_float2 ShiftFile::operator() (const int aProjection, const int aMotive)
 	return erg;
 }
 
-void ShiftFile::SetValue(const int aProjection, const int aMotive, float2 aVal)
+void ShiftFile::SetValue(const int aProjection, const int aMotive, my_float2 aVal)
 {
 	float* fdata = (float*)_data;
 	fdata[0 * _fileHeader.DimX * _fileHeader.DimY + aProjection * _fileHeader.DimX + aMotive] = aVal.x;

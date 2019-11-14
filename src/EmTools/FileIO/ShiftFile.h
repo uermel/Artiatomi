@@ -25,7 +25,6 @@
 #define SHIFTFILE_H
 
 #include "EmFile.h"
-#include <vector_types.h>
 
 
 using namespace std;
@@ -40,6 +39,12 @@ using namespace std;
 struct my_float2 {
 	float x;
 	float y;
+
+	// Default constructor
+	my_float2() {}
+
+	// Initialize constructor
+    my_float2(float a, float b) : x(a), y(b) {}
 };
 
 
@@ -66,7 +71,7 @@ public:
 	my_float2 operator() (const int aProjection, const int aMotive);
 
 	//! Returns value with index (\p aProjection, \p aMotive).
-	void SetValue(const int aProjection, const int aMotive, float2 aVal);
+	void SetValue(const int aProjection, const int aMotive, my_float2 aVal);
 };
 
 #endif
