@@ -24,7 +24,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#include "../default.h"
+#include "../basics/default.h"
 #include <map>
 #include <list>
 #include "ConfigExceptions.h"

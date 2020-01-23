@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
 project(Artiatomi LANGUAGES CUDA CXX)
 
-set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_BUILD_TYPE Debug)
 
 set(CUDA_COMPILE_OPTIONS --use_fast_math)
 #set(CUDA_COMPILE_OPTIONS -g -G -lineinfo) #to debug kernels
@@ -13,6 +13,8 @@ set(EMTOOLS_PATH "src/EmTools" CACHE PATH "Path to EmTools source.")
 set(CLICKER_PATH "src/Clicker" CACHE PATH "Path to Clicker source.")
 set(EMSART_PATH "src/EmSART" CACHE PATH "Path to EmSART source.")
 set(ISA_PATH "src/ImageStackAlignator" CACHE PATH "Path to ImageStackAlignator source.")
+set(STA_PATH "src/SubTomogramAverageMPI" CACHE PATH "Path to SubTomogramAverageMPI source.")
+
 if(UNIX)
 	set(CUDA_PATH "/usr/local/cuda" CACHE PATH "Path to CUDA root")
 endif()
@@ -52,10 +54,16 @@ set(CUDA_LIBS ${CUDA_CUDA_LIBRARY}
 #set(CUDA_LIBS ${CUDA_LIBRARIES})
 set(BIN2C_EXEC bin2c) #in cuda toolkit binary path
 ######################### CUDA #############################
+set(OpenCL_INCLUDE_DIR "/usr/local/cuda/include")
+set(OpenCL_LIBRARY "/usr/local/cuda/lib64/libOpenCL.so")
 
-######################### OpenCL/GL #############################
 find_package(OpenCL REQUIRED)
 find_package(OpenGL REQUIRED)
+
+message( ${OpenCL_INCLUDE_DIR} )
+message( ${OpenCL_LIBRARIES} )
+message( ${OPENGL_INCLUDE_DIR} )
+message( ${OPENGL_LIBRARIES} )
 ######################### OpenCL #############################
 
 ######################### FFTW ###########################
@@ -258,6 +266,63 @@ set(CC_LIB
         ${FFTW_LIB})
 ######################### CC #####################################
 
+######################### STA FileIO #####################################
+set(STA_FILEIO_SRC
+        ${STA_PATH}/io/EMFile.cpp
+        ${STA_PATH}/io/File.cpp
+        ${STA_PATH}/io/FileIOException.cpp
+        ${STA_PATH}/io/FileReader.cpp
+        ${STA_PATH}/io/FileWriter.cpp
+        ${STA_PATH}/io/Image.cpp
+        ${STA_PATH}/io/ImageConverterMethods.cpp
+        ${STA_PATH}/io/MotiveList.cpp)
+
+set(STA_FILEIO_INC
+        ${STA_PATH}/io
+        ${STA_PATH}/basics
+        ${MK_LOG_INC}
+        ${FILTER_GRAPH_INC}
+        ${MINIMIZATION_INC})
+
+set(STA_FILEIO_LIB
+        )
+######################### STA FileIO #####################################
+
+######################### STA CudaHelpers ################################
+set(STA_CUDA_HELPERS_SRC
+        ${STA_PATH}/cuda/CudaArrays.cpp
+        ${STA_PATH}/cuda/CudaContext.cpp
+        ${STA_PATH}/cuda/CudaDeviceProperties.cpp
+        ${STA_PATH}/cuda/CudaException.cpp
+        ${STA_PATH}/cuda/CudaGral.cpp
+        ${STA_PATH}/cuda/CudaKernel.cpp
+        ${STA_PATH}/cuda/CudaTextures.cpp
+        ${STA_PATH}/cuda/CudaVariables.cpp)
+
+set(STA_CUDA_HELPERS_INC
+        ${STA_PATH}/cuda
+        ${STA_PATH}/basics
+        ${THREADING_INC}
+        ${MK_LOG_INC}
+        ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
+
+set(STA_CUDA_HELPERS_LIB
+        ${CUDA_LIBS}
+        ${THREADING_LIB})
+######################### STA CudaHelpers ################################
+
+######################### STA Config ################################
+set(STA_CONFIG_SRC
+        ${STA_PATH}/config/Config.cpp
+        ${STA_PATH}/config/ConfigExceptions.cpp)
+
+set(STA_CONFIG_INC
+        ${STA_PATH}/config
+        ${STA_PATH}/basics)
+
+set(STA_CONFIG_LIB)
+######################### STA Config ################################
+
 ####################################################################################################
 ####################################################################################################
 
@@ -380,7 +445,7 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 
 # PTX-Kernel file
 cuda_compile_ptx(ISA_PTX_FILES ${ISA_PATH}/ImageStackAlignatorKernels/kernel.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
-add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${ISA_PATH}/ImageStackAlignatorKernels/kernel.cu.h COMMAND ${BIN2C_EXEC} -p 0 --name KernelCC ${ISA_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${ISA_PATH}/ImageStackAlignatorKernels/kernel.cu.h DEPENDS ${ISA_PTX_FILES})
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${ISA_PATH}/ImageStackAlignatorKernels/kernel.cu.h COMMAND ${BIN2C_EXEC} -p 0 --const --name KernelCC ${ISA_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${ISA_PATH}/ImageStackAlignatorKernels/kernel.cu.h DEPENDS ${ISA_PTX_FILES})
 add_custom_target(isa_ptx_header ALL
         DEPENDS ${CMAKE_SOURCE_DIR}/${ISA_PATH}/ImageStackAlignatorKernels/kernel.cu.h ${ISA_PATH}/ImageStackAlignatorKernels/kernel.cu
         SOURCES ${ISA_PATH}/ImageStackAlignatorKernels/kernel.cu)
@@ -447,49 +512,49 @@ set(EMSARTCOMMON_LIB
 # PTX-Kernel file
 cuda_compile_ptx(BP_PTX_FILES ${EMSART_PATH}/cuda_kernels/BackProjectionSquareOS.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/BackProjectionSquareOS.cu.h 
-				   COMMAND ${BIN2C_EXEC} -p 0 --name KernelBackProjectionOS ${BP_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/BackProjectionSquareOS.cu.h DEPENDS ${BP_PTX_FILES})
+				   COMMAND ${BIN2C_EXEC} -p 0 --const --name KernelBackProjectionOS ${BP_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/BackProjectionSquareOS.cu.h DEPENDS ${BP_PTX_FILES})
 add_custom_target(bp_ptx_header ALL
         DEPENDS ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/BackProjectionSquareOS.cu.h ${EMSART_PATH}/cuda_kernels/BackProjectionSquareOS.cu
         SOURCES ${EMSART_PATH}/cuda_kernels/BackProjectionSquareOS.cu)
 		
 cuda_compile_ptx(FPRM_PTX_FILES ${EMSART_PATH}/cuda_kernels/ForwardProjectionRayMarcher_TL.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ForwardProjectionRayMarcher_TL.cu.h 
-				   COMMAND ${BIN2C_EXEC} -p 0 --name KernelForwardProjectionRayMarcher_TL ${FPRM_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ForwardProjectionRayMarcher_TL.cu.h DEPENDS ${FPRM_PTX_FILES})
+				   COMMAND ${BIN2C_EXEC} -p 0 --const --name KernelForwardProjectionRayMarcher_TL ${FPRM_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ForwardProjectionRayMarcher_TL.cu.h DEPENDS ${FPRM_PTX_FILES})
 add_custom_target(fprm_ptx_header ALL
         DEPENDS ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ForwardProjectionRayMarcher_TL.cu.h ${EMSART_PATH}/cuda_kernels/ForwardProjectionRayMarcher_TL.cu
         SOURCES ${EMSART_PATH}/cuda_kernels/ForwardProjectionRayMarcher_TL.cu)
 		
 cuda_compile_ptx(FPD_PTX_FILES ${EMSART_PATH}/cuda_kernels/ForwardProjectionSlicer.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ForwardProjectionSlicer.cu.h 
-				   COMMAND ${BIN2C_EXEC} -p 0 --name KernelForwardProjectionSlicer ${FPD_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ForwardProjectionSlicer.cu.h DEPENDS ${FPD_PTX_FILES})
+				   COMMAND ${BIN2C_EXEC} -p 0 --const --name KernelForwardProjectionSlicer ${FPD_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ForwardProjectionSlicer.cu.h DEPENDS ${FPD_PTX_FILES})
 add_custom_target(fpd_ptx_header ALL
         DEPENDS ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ForwardProjectionSlicer.cu.h ${EMSART_PATH}/cuda_kernels/ForwardProjectionSlicer.cu
         SOURCES ${EMSART_PATH}/cuda_kernels/ForwardProjectionSlicer.cu)
 		
 cuda_compile_ptx(CTF_PTX_FILES ${EMSART_PATH}/cuda_kernels/ctf.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ctf.cu.h 
-				   COMMAND ${BIN2C_EXEC} -p 0 --name Kernelctf ${CTF_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ctf.cu.h DEPENDS ${CTF_PTX_FILES})
+				   COMMAND ${BIN2C_EXEC} -p 0 --const --name Kernelctf ${CTF_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ctf.cu.h DEPENDS ${CTF_PTX_FILES})
 add_custom_target(ctf_ptx_header ALL
         DEPENDS ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ctf.cu.h ${EMSART_PATH}/cuda_kernels/ctf.cu
         SOURCES ${EMSART_PATH}/cuda_kernels/ctf.cu)
 		
 cuda_compile_ptx(CTS_PTX_FILES ${EMSART_PATH}/cuda_kernels/CopyToSquare.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/CopyToSquare.cu.h 
-				   COMMAND ${BIN2C_EXEC} -p 0 --name KernelCopyToSquare ${CTS_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/CopyToSquare.cu.h DEPENDS ${CTS_PTX_FILES})
+				   COMMAND ${BIN2C_EXEC} -p 0 --const --name KernelCopyToSquare ${CTS_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/CopyToSquare.cu.h DEPENDS ${CTS_PTX_FILES})
 add_custom_target(cts_ptx_header ALL
         DEPENDS ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/CopyToSquare.cu.h ${EMSART_PATH}/cuda_kernels/CopyToSquare.cu
         SOURCES ${EMSART_PATH}/cuda_kernels/CopyToSquare.cu)
 		
 cuda_compile_ptx(COMPARE_PTX_FILES ${EMSART_PATH}/cuda_kernels/Compare.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/Compare.cu.h 
-				   COMMAND ${BIN2C_EXEC} -p 0 --name KernelCompare ${COMPARE_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/Compare.cu.h DEPENDS ${COMPARE_PTX_FILES})
+				   COMMAND ${BIN2C_EXEC} -p 0 --const --name KernelCompare ${COMPARE_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/Compare.cu.h DEPENDS ${COMPARE_PTX_FILES})
 add_custom_target(compare_ptx_header ALL
         DEPENDS ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/Compare.cu.h ${EMSART_PATH}/cuda_kernels/Compare.cu
         SOURCES ${EMSART_PATH}/cuda_kernels/Compare.cu)
 		
 cuda_compile_ptx(WBP_PTX_FILES ${EMSART_PATH}/cuda_kernels/wbpWeighting.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/wbpWeighting.cu.h 
-				   COMMAND ${BIN2C_EXEC} -p 0 --name KernelWbpWeighting ${WBP_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/wbpWeighting.cu.h DEPENDS ${WBP_PTX_FILES})
+				   COMMAND ${BIN2C_EXEC} -p 0 --const --name KernelWbpWeighting ${WBP_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/wbpWeighting.cu.h DEPENDS ${WBP_PTX_FILES})
 add_custom_target(wbp_ptx_header ALL
         DEPENDS ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/wbpWeighting.cu.h ${EMSART_PATH}/cuda_kernels/wbpWeighting.cu
         SOURCES ${EMSART_PATH}/cuda_kernels/wbpWeighting.cu)
@@ -614,3 +679,115 @@ ADD_LATEX_DOCUMENT(
 )
 endif()
 ######################### Tutorial #####################################
+
+
+######################### STA Common ########################
+set(STA_COMMON_SRC
+        ${STA_FILEIO_SRC}
+        ${STA_CUDA_HELPERS_SRC}
+        ${STA_CONFIG_SRC}
+        ${MK_LOG_SRC}
+        ${THREADING_SRC}
+        ${FILTER_GRAPH_SRC}
+        ${MINIMIZATION_SRC}
+
+        ${STA_PATH}/AvgProcess.cpp
+        ${STA_PATH}/BasicKernel.cpp
+        ${STA_PATH}/CudaReducer.cpp
+        ${STA_PATH}/CudaRot.cpp
+        ${STA_PATH}/stdafx.cpp
+        )
+
+set(STA_COMMON_INC
+        ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+        ${MPI_CXX_INCLUDE_DIRS}
+        ${STA_FILEIO_INC}
+        ${STA_CUDA_HELPERS_INC}
+        ${STA_CONFIG_INC}
+        ${STA_PATH}/SubTomogramAverageMPI)
+
+set(STA_COMMON_LIB
+        ${CUDA_LIBS}
+        ${MPI_CXX_LIBRARIES}
+        ${STA_FILEIO_LIB}
+        ${STA_CUDA_HELPERS_LIB}
+        ${STA_CONFIG_LIB}
+        ${MK_LOG_LIB}
+        ${MINIMIZATION_LIB}
+        ${THREADING_LIB}
+        ${FILTER_GRAPH_LIB}
+        )
+
+set(CMAKE_VERBOSE_MAKEFILE ON)
+
+# PTX-Kernel files
+cuda_compile_ptx(STA_PTX_FILES ${STA_PATH}/cuda_kernels/kernel.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${STA_PATH}/cuda_kernels/kernel.cu.h COMMAND ${BIN2C_EXEC} -p 0 --const --name SubTomogramAverageKernel ${STA_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${STA_PATH}/cuda_kernels/kernel.cu.h DEPENDS ${STA_PTX_FILES})
+add_custom_target(sta_ptx_header ALL
+        DEPENDS ${CMAKE_SOURCE_DIR}/${STA_PATH}/cuda_kernels/kernel.cu.h ${STA_PATH}/cuda_kernels/kernel.cu
+        SOURCES ${STA_PATH}/cuda_kernels/kernel.cu)
+
+cuda_compile_ptx(STA_BASIC_PTX_FILES ${STA_PATH}/cuda_kernels/basicKernels.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${STA_PATH}/cuda_kernels/basicKernels.cu.h COMMAND ${BIN2C_EXEC} -p 0 --const --name SubTomogramAverageBasicKernel ${STA_BASIC_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${STA_PATH}/cuda_kernels/basicKernels.cu.h DEPENDS ${STA_BASIC_PTX_FILES})
+add_custom_target(sta_basic_ptx_header ALL
+        DEPENDS ${CMAKE_SOURCE_DIR}/${STA_PATH}/cuda_kernels/basicKernels.cu.h ${STA_PATH}/cuda_kernels/basicKernels.cu
+        SOURCES ${STA_PATH}/cuda_kernels/basicKernels.cu)
+######################### STA Common ########################
+
+######################### SubTomogramAverageMPI ########################
+
+set(STA_SRC
+        ${STA_COMMON_SRC}
+        ${STA_PATH}/SubTomogramAverageMPI.cpp
+        )
+        
+set(STA_INC
+        ${STA_COMMON_INC}
+        )
+        
+set(STA_LIB
+        ${STA_COMMON_LIB}
+        )
+
+# Executable
+add_executable(SubTomogramAverageMPI
+        ${STA_SRC})
+
+# Executable depends on ptx files
+add_dependencies(SubTomogramAverageMPI sta_ptx_header)  
+add_dependencies(SubTomogramAverageMPI sta_basic_ptx_header)    
+
+target_include_directories(SubTomogramAverageMPI PUBLIC ${STA_INC})
+target_link_libraries(SubTomogramAverageMPI ${STA_LIB})
+target_compile_definitions(SubTomogramAverageMPI PUBLIC NO_OPENCL USE_MPI)
+target_compile_options(SubTomogramAverageMPI PUBLIC -fpermissive)
+######################### SubTomogramAverageMPI ########################
+
+######################### AddParticles ########################
+
+set(ADDPARTICLES_SRC
+        ${STA_COMMON_SRC}
+        ${STA_PATH}/AddParticles.cpp
+        )
+        
+set(ADDPARTICLES_INC
+        ${STA_COMMON_INC}
+        )
+        
+set(ADDPARTICLES_LIB
+        ${STA_COMMON_LIB}
+        )
+
+# Executable
+add_executable(AddParticles
+        ${ADDPARTICLES_SRC})
+
+# Executable depends on ptx files
+add_dependencies(AddParticles sta_ptx_header)  
+add_dependencies(AddParticles sta_basic_ptx_header)    
+
+target_include_directories(AddParticles PUBLIC ${ADDPARTICLES_INC})
+target_link_libraries(AddParticles ${ADDPARTICLES_LIB})
+target_compile_definitions(AddParticles PUBLIC NO_OPENCL USE_MPI)
+target_compile_options(AddParticles PUBLIC -fpermissive)
+######################### AddParticles ########################

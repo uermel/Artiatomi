@@ -24,7 +24,7 @@
 #ifndef CUDAREDUCER_H
 #define CUDAREDUCER_H
 
-#include "default.h"
+#include "basics/default.h"
 #include <cuda.h>
 #include "cuda/CudaVariables.h"
 #include "cuda/CudaKernel.h"

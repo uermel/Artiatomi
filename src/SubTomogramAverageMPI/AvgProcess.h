@@ -24,7 +24,7 @@
 #ifndef AVGPROCESS_H
 #define AVGPROCESS_H
 
-#include "default.h"
+#include "basics/default.h"
 #include <cuda.h>
 #include <cufft.h>
 #include "io/EMFile.h"
@@ -34,9 +34,9 @@
 #include "cuda/CudaTextures.h"
 #include "cuda/CudaContext.h"
 
+#include "BasicKernel.h"
 #include "CudaReducer.h"
 #include "CudaRot.h"
-#include "BasicKernel.h"
 #include <map>
 
 using namespace std;

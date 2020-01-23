@@ -22,6 +22,7 @@
 
 
 #include "CudaRot.h"
+#include "CudaKernelBinaries.h"
 
 CudaRot::CudaRot(int aVolSize, CUstream aStream, CudaContext* context, bool linearInterpolation)
 	: volSize(aVolSize), stream(aStream), ctx(context), blockSize(32, 16, 1),
@@ -31,7 +32,8 @@ CudaRot::CudaRot(int aVolSize, CUstream aStream, CudaContext* context, bool line
 	  dataTexCplx(CU_AD_FORMAT_FLOAT, aVolSize, aVolSize, aVolSize, 2, 0),
 	  oldphi(0), oldpsi(0), oldtheta(0)
 {
-	CUmodule cuMod = ctx->LoadModule("basicKernels.ptx");
+	CUmodule cuMod = ctx->LoadModulePTX(SubTomogramAverageBasicKernel, 0, false, false);
+	// CUmodule cuMod = ctx->LoadModule("basicKernels.ptx");
 
 	shift = new CudaKernel("shift", cuMod);
 	rotVol = new CudaKernel("rot3d", cuMod);

@@ -152,6 +152,77 @@ CUmodule Cuda::CudaContext::LoadModulePTX(uint aOptionCount, CUjit_option* aOpti
 	return hcuModule;
 }
 
+CUmodule Cuda::CudaContext::LoadModulePTX(const void* aModuleImage, uint aMaxRegCount, bool showInfoBuffer, bool showErrorBuffer)
+{   	
+	uint jitOptionCount = 0;
+	CUjit_option ptxOptions[6];
+	void* jitValues[6];
+	int indexSet = 0;
+	char infoBuffer[1025];
+	char compilerBuffer[1025];
+	// Assume 64-bit system now, which requires long long ints to get size equal to pointers
+	ulong64 compilerBufferSize = 1024;
+	ulong64 infoBufferSize = 1024;
+	infoBuffer[1024] = 0;
+	compilerBuffer[1024] = 0;
+	int indexInfoBufferSize = 0;
+	int indexCompilerBufferSize = 0;
+
+	if (showInfoBuffer)
+	{
+		jitOptionCount += 3;
+		ptxOptions[indexSet] = CU_JIT_INFO_LOG_BUFFER_SIZE_BYTES;
+		jitValues[indexSet] = (void*)infoBufferSize;
+		indexInfoBufferSize = indexSet;
+		indexSet++;
+		ptxOptions[indexSet] = CU_JIT_INFO_LOG_BUFFER;
+		jitValues[indexSet] = infoBuffer;
+		indexSet++;
+		ptxOptions[indexSet] = CU_JIT_LOG_VERBOSE;
+		jitValues[indexSet] = (void*)1;
+		indexSet++;
+	}
+
+	if (showErrorBuffer)
+	{
+		jitOptionCount += 2;
+		ptxOptions[indexSet] = CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES;
+		jitValues[indexSet] = (void*)compilerBufferSize;
+		indexCompilerBufferSize = indexSet;
+		indexSet++;
+		ptxOptions[indexSet] = CU_JIT_ERROR_LOG_BUFFER;
+		jitValues[indexSet] = compilerBuffer;
+		indexSet++;
+	}
+	
+	if (aMaxRegCount > 0)
+	{
+		jitOptionCount += 1;
+		ptxOptions[indexSet] = CU_JIT_MAX_REGISTERS;
+
+		// Assume 64-bit system now, which requires long long ints to get size equal to pointers
+		jitValues[indexSet] = (void*)(ulong64)aMaxRegCount;
+		indexSet++;
+	}
+	
+	CUmodule hcuModule;
+	cudaSafeCall(cuModuleLoadDataEx(&hcuModule, aModuleImage, jitOptionCount, ptxOptions, jitValues));
+
+	if (showInfoBuffer)
+	{
+		if (jitValues[indexInfoBufferSize])
+			printf("Cuda JIT Info: \n%s\n", infoBuffer);
+	}
+
+	if (showErrorBuffer)
+	{
+		if (jitValues[indexCompilerBufferSize])
+			printf("Cuda JIT Error: \n%s\n", compilerBuffer);
+	}
+	
+	return hcuModule;
+}
+
 void Cuda::CudaContext::UnloadModule(CUmodule& aModule)
 {
 	if (aModule)

@@ -24,7 +24,7 @@
 #ifndef CONFIGEXCEPTIONS_H
 #define CONFIGEXCEPTIONS_H
 
-#include "../default.h"
+#include "../basics/default.h"
 
 using namespace std;
 

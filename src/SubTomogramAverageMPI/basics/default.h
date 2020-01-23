@@ -62,7 +62,7 @@ typedef unsigned char uchar;
 #include <sstream>
 #include <vector_types.h>
 #include <vector_functions.h>
-#include "cuda/cutil_math_.h"
+#include "../cuda/cutil_math_.h"
 
 inline dim3 make_dim3(uint a, uint b, uint c)
 {

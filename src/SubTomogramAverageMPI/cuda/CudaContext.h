@@ -186,6 +186,14 @@ namespace Cuda
 		//Load a PTX Cuda Module from byte array
 		CUmodule LoadModulePTX(uint aOptionCount, CUjit_option* aOptions, void** aOptionValues, const void* aModuleImage);
 		
+		//! Load a PTX Cuda Module from byte array
+		/*!
+			Loads the *.ptx module given by \p aModuleImage and creates a CUmodule bound to this CUDA context.
+			\return The created CUmodule
+		*/
+		//Load a PTX Cuda Module from byte array
+		CUmodule LoadModulePTX(const void* aModuleImage, uint aMaxRegCount, bool showInfoBuffer, bool showErrorBuffer);
+
 		//! Unload a Cuda Module
 		/*!
 			Unloads a module \p aModule from the current context.
