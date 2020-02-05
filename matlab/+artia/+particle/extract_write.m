@@ -105,7 +105,7 @@ function [average] = extract_write(motivelistFilename, upScaleFactor, tomogramFi
             theta = tempMotl(19, i);
 
             if doRotate
-                part = rot(part, [-psi, -phi, -theta]);
+                part = artia.img.rot(part, [-psi, -phi, -theta]);
             end
 
             artia.em.write(part, sprintf([partPref '%d_%d.em'], tempMotl(5, i), tempMotl(6, i)));
