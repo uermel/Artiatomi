@@ -3,7 +3,7 @@ function mrcfid = write(data, fileName, angpix, varargin)
 %
 % Usage:
 %       
-%   artia.mrc.write(data, fileName, 'doPrint', false, 'dataType', 
+%   artia.mrc.write(data, fileName, angpix, 'doPrint', false, 'dataType', 
 %   'float32', 'header', [], 'doAppend', 'false');
 %
 % Arguments:

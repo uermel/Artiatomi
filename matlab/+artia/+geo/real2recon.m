@@ -3,8 +3,8 @@ function [xyz] = real2recon(model, reconDim, voxelSize, volumeShifts)
 % coordinates to binned, shifted reconstruction coordinates.
 %
 % Parameters:
-%   model (double):
-%       The real space model to be converted.
+%   model (double[3xM]):
+%       The real space model to be converted (M markers).
 %   reconDim (double[3]):
 %       The reconstruction dimensions.
 %   voxelSize (double):
