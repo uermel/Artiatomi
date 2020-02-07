@@ -163,6 +163,7 @@ namespace Configuration
 			vector<string> SupportingMotiveLists;
 			float MaxDistanceSupport;
 			bool MultiPeakDetection;
+			int TomogramIndex;
 #endif
 
 #ifdef SUBVOLREC_MODE

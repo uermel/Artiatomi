@@ -98,6 +98,7 @@ namespace Configuration
 			SupportingReferences(),
 			SupportingMotiveLists(),
 			MultiPeakDetection(false)
+			TomogramIndex(0)
 #endif
 #ifdef SUBVOLREC_MODE
 			,
@@ -445,6 +446,7 @@ namespace Configuration
 		ScaleMotivelistShift = GetFloat("ScaleMotivelistShift");
 		ScaleMotivelistPosition = GetFloat("ScaleMotivelistPosition");
 		MultiPeakDetection = GetBool("MultiPeakDetection");
+		TomogramIndex = GetInt("TomogramIndex");
 
 		{
 			string temp = GetStringOptional("SupportingReferences");
