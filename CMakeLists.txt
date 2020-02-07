@@ -791,3 +791,43 @@ target_link_libraries(AddParticles ${ADDPARTICLES_LIB})
 target_compile_definitions(AddParticles PUBLIC NO_OPENCL USE_MPI)
 target_compile_options(AddParticles PUBLIC -fpermissive)
 ######################### AddParticles ########################
+
+
+######################### Clicker #####################################
+set(TEST_SRC
+		${MK_LOG_SRC}
+		${FILEIO_SRC}
+		${CC_SRC}
+		${MINIMIZATION_SRC}
+		${THREADING_SRC}
+		${FILTER_GRAPH_SRC}
+
+		${EMTOOLS_PATH}/FileIO/motl_test.cpp)
+
+set(TEST_INC
+		${CLICKER_PATH}
+		${MK_LOG_INC}
+		${FILEIO_INC}
+		${CC_INC}
+		${MINIMIZATION_INC}
+		${THREADING_INC}
+		${FILTER_GRAPH_INC}
+		)
+
+set(TEST_LIB
+		${CC_LIB}
+		${FILEIO_LIB}
+		${MK_LOG_LIB}
+		${MINIMIZATION_LIB}
+		${THREADING_LIB}
+		${FILTER_GRAPH_LIB}
+		)
+
+add_executable(test
+			${TEST_SRC})
+
+
+target_include_directories(test PUBLIC ${TEST_INC})
+target_link_libraries(test ${TEST_LIB})
+target_compile_definitions(test PUBLIC NO_CUDA)
+######################### Clicker #####################################

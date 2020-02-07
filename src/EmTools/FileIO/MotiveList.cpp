@@ -106,6 +106,38 @@ void MotiveList::SetAt(int index, motive& m)
 	memcpy((char*)_data + index * sizeof(m), &m, sizeof(m));
 }
 
+
+void MotiveList::selectTomo(int index)
+{
+    // First count and save indeces of correct items
+    auto indeces = new int[_fileHeader.DimY];
+    int count = 0;
+
+    for (int i = 0; i < _fileHeader.DimY; i++){
+        motive m = GetAt(i);
+
+        if (m.tomoNr == (float) index) {
+            indeces[count] = i;
+            count++;
+        }
+    }
+
+    // Now update header, recompute data size with new count, make new data array with selected indeces
+    _fileHeader.DimY = count;
+    size_t sizeData = GetDataSize();
+    auto new_data = new char[sizeData];
+
+    for (int i = 0; i < count; i++){
+        motive m;
+        memcpy(&m, (char*)_data + indeces[i] * sizeof(m), sizeof(m));
+        memcpy((char*)new_data + i * sizeof(m), &m, sizeof(m));
+    }
+
+    // Now delete the old data and set the new data
+    delete[] (char *)_data;
+    _data = new_data;
+}
+
 int MotiveList::GetParticleCount()
 {
 	return _fileHeader.DimY;

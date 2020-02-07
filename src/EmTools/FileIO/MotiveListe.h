@@ -59,6 +59,8 @@ public:
 
 	void SetAt(int index, motive& m);
 
+	void selectTomo(int index);
+
 	int GetParticleCount();
 
 	float GetDistance(int aIndex1, int aIndex2);
