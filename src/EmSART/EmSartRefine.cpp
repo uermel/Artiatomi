@@ -53,7 +53,7 @@
 #include <algorithm>
 #include "utils/SimpleLogger.h"
 #include "Reconstructor.h"
-
+#include "cuda_profiler_api.h"
 using namespace std;
 using namespace Cuda;
 
@@ -477,7 +477,7 @@ int main(int argc, char* argv[])
         }
 
         Reconstructor reconstructor(aConfig, proj, projSource, markers, *defocus, modules, mpi_part, mpi_size);
-
+        Reconstructor reconstructor2(aConfig, proj, projSource, markers, *defocus, modules, mpi_part, mpi_size);
         /////////////////////////////////////
         /// Prepare tomogram  END
         /////////////////////////////////////
@@ -716,20 +716,13 @@ int main(int argc, char* argv[])
         /////////////////////////////////////
         /// Main refine loop START
         /////////////////////////////////////
+        cudaProfilerStart();
 		for (int group = 0; group < ml.GetGroupCount(aConfig.GroupMode); group++)
 		{
-			Matrix<float> magAnisotropyInv(reconstructor.GetMagAnistropyMatrix(1.0f / aConfig.MagAnisotropyAmount, aConfig.MagAnisotropyAngleInDeg, proj.GetWidth(), proj.GetHeight()));
-
-			//reset Volume:
-			{
-				volWithoutSubVols->LoadFromVolume(*volWithSubVols, mpi_part);
-			}
-
-			volumeIsEmpty = false;
-			
 			//Get the motive list entries for this group:
 			vector<motive> motives = ml.GetNeighbours(group, aConfig.GroupMode, aConfig.MaxDistance, aConfig.GroupSize);
 
+			// Skip if particle shifts were assigned using SpeedUpDistance
 			if (aConfig.GroupMode == MotiveList::GroupMode_enum::GM_MAXCOUNT ||
 				aConfig.GroupMode == MotiveList::GroupMode_enum::GM_MAXDIST)
 			{
@@ -738,6 +731,15 @@ int main(int argc, char* argv[])
 					continue;
 				}
 			}
+
+            Matrix<float> magAnisotropyInv(reconstructor.GetMagAnistropyMatrix(1.0f / aConfig.MagAnisotropyAmount, aConfig.MagAnisotropyAngleInDeg, proj.GetWidth(), proj.GetHeight()));
+
+            //Reset volume only after checking for skip.
+            {
+                volWithoutSubVols->LoadFromVolume(*volWithSubVols, mpi_part);
+            }
+
+            volumeIsEmpty = false;
 
 #ifdef USE_MPI
 			MPI_Barrier(MPI_COMM_WORLD);
@@ -779,7 +781,10 @@ int main(int argc, char* argv[])
 					break;
 				}
 
-			//Project the single sub-Volumes:
+			// Load all subvolumes onto the GPU first
+
+
+			// Project the single sub-Volumes:
 			for (int i = 0; i < projCount; i++)
 			{
 				if (mpi_part == 0)
@@ -1055,6 +1060,7 @@ int main(int argc, char* argv[])
 				printf("\n");
 			}
 		}
+		cudaProfilerStop();
         /////////////////////////////////////
         /// Main refine loop END
         /////////////////////////////////////

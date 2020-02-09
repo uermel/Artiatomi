@@ -49,7 +49,8 @@ set(CUDA_LIBS ${CUDA_CUDA_LIBRARY}
 				${CUDA_nppim_LIBRARY}
 				${CUDA_nppist_LIBRARY}
 				${CUDA_nppisu_LIBRARY}
-				${CUDA_nppitc_LIBRARY})
+				${CUDA_nppitc_LIBRARY}
+				${CUDA_LIBRARIES})
 
 #set(CUDA_LIBS ${CUDA_LIBRARIES})
 set(BIN2C_EXEC bin2c) #in cuda toolkit binary path
@@ -625,7 +626,7 @@ add_dependencies(EmSARTRefine wbp_ptx_header)
 
 target_include_directories(EmSARTRefine PUBLIC ${EMSARTREFINE_INC})
 target_link_libraries(EmSARTRefine ${EMSARTREFINE_LIB})
-target_compile_definitions(EmSARTRefine PUBLIC NO_OPENCL USE_MPI REFINE_MODE)
+target_compile_definitions(EmSARTRefine PUBLIC NO_OPENCL REFINE_MODE)
 target_compile_options(EmSARTRefine PUBLIC -fpermissive)
 ######################### EmSARTRefine ###############################
 
