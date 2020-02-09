@@ -97,7 +97,7 @@ namespace Configuration
 			ScaleMotivelistPosition(1),
 			SupportingReferences(),
 			SupportingMotiveLists(),
-			MultiPeakDetection(false)
+			MultiPeakDetection(false),
 			TomogramIndex(0)
 #endif
 #ifdef SUBVOLREC_MODE

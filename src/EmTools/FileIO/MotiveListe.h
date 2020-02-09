@@ -60,6 +60,7 @@ public:
 	void SetAt(int index, motive& m);
 
 	void selectTomo(int index);
+    void getRefIndeces(std::vector<int> &unique, int* &correspond, int &count);
 
 	int GetParticleCount();
 

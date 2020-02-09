@@ -106,7 +106,6 @@ void MotiveList::SetAt(int index, motive& m)
 	memcpy((char*)_data + index * sizeof(m), &m, sizeof(m));
 }
 
-
 void MotiveList::selectTomo(int index)
 {
     // First count and save indeces of correct items
@@ -136,6 +135,39 @@ void MotiveList::selectTomo(int index)
     // Now delete the old data and set the new data
     delete[] (char *)_data;
     _data = new_data;
+}
+
+void MotiveList::getRefIndeces(std::vector<int> &unique, int* &correspond, int &count)
+{
+    // The unique IDs
+    unique.clear();
+    // The number of unique indeces
+    count = 0;
+
+    for (int i = 0; i < _fileHeader.DimY; i++)
+    {
+        // Get the current item
+        motive m = GetAt(i);
+        bool found = false;
+
+        // Search if this ID is already present
+        for (int j = 0; j < count; j++)
+        {
+            if (unique[j] == (int)m.classNo)
+            {
+                found = true;
+                correspond[i] = j;
+            }
+        }
+
+        // If not present append to the end
+        if (!found)
+        {
+            unique.push_back((int)m.classNo);
+            correspond[i] = count;
+            count++;
+        }
+    }
 }
 
 int MotiveList::GetParticleCount()
