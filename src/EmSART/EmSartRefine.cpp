@@ -477,6 +477,10 @@ int main(int argc, char* argv[])
         }
 
         Reconstructor reconstructor(aConfig, proj, projSource, markers, *defocus, modules, mpi_part, mpi_size);
+        //vector<Reconstructor *> vrec;
+        //for (int recon = 0; recon < 60; recon++){
+        //    vrec.push_back(new Reconstructor(aConfig, proj, projSource, markers, *defocus, modules, mpi_part, mpi_size));
+        //}
         Reconstructor reconstructor2(aConfig, proj, projSource, markers, *defocus, modules, mpi_part, mpi_size);
         /////////////////////////////////////
         /// Prepare tomogram  END
@@ -550,9 +554,9 @@ int main(int argc, char* argv[])
         vector<CudaDeviceVariable*> vd_rot_particle;
 
         // Rotated particle's array on the device (needed for texture interpolation), (size: unique_ref_count)
-        vector<CudaArray3D*> vd_arr_rot_particle;
+        //vector<CudaArray3D*> vd_arr_rot_particle;
         // Texture object of the rotated particle for SART, (size: unique_ref_count)
-        vector<CudaTextureObject3D*> vd_tex_rot_particle;
+        //vector<CudaTextureObject3D*> vd_tex_rot_particle;
 
         // Initialize the kernels and device variables
         for (size_t i = 0; i < unique_ref_count; i++)
@@ -566,10 +570,10 @@ int main(int argc, char* argv[])
             vd_rot_particle.push_back(new CudaDeviceVariable((int)vh_ori_particle[i]->GetDimension().x * (int)vh_ori_particle[i]->GetDimension().x * (int)vh_ori_particle[i]->GetDimension().x * sizeof(float)));
 
             // Create the cuda array for the rotated particle (source data for interpolation during SART-FP)
-            auto arr = new CudaArray3D(arrayFormat, (int)vh_ori_particle[i]->GetDimension().x, (int)vh_ori_particle[i]->GetDimension().x, (int)vh_ori_particle[i]->GetDimension().x, 1, 2);
-            vd_arr_rot_particle.push_back(arr); // pirate vector
+            //auto arr = new CudaArray3D(arrayFormat, (int)vh_ori_particle[i]->GetDimension().x, (int)vh_ori_particle[i]->GetDimension().x, (int)vh_ori_particle[i]->GetDimension().x, 1, 2);
+            //vd_arr_rot_particle.push_back(arr); // pirate vector
             // Create the texture object for the rotated particle (for interpolation during SART-FP)
-            vd_tex_rot_particle.push_back(new CudaTextureObject3D(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, arr));
+            //vd_tex_rot_particle.push_back(new CudaTextureObject3D(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, arr));
         }
 
         // Now rotate all particles and store them on host
@@ -781,8 +785,26 @@ int main(int argc, char* argv[])
 					break;
 				}
 
-			// Load all subvolumes onto the GPU first
+			// Load all particles onto the GPU first!
+            // Rotated particle's array on the device (needed for texture interpolation), (size: unique_ref_count)
+            vector<CudaArray3D*> vd_arr_rot_particle;
+            // Texture object of the rotated particle for SART, (size: unique_ref_count)
+            vector<CudaTextureObject3D*> vd_tex_rot_particle;
+			for (size_t groupIdx = 0; groupIdx < motives.size(); groupIdx++)
+            {
+                motive m = motives[groupIdx];
+                int globalIdx = ml.GetGlobalIdx(m);
+                int ref_id_idx = ref_ids[globalIdx];
 
+                // Create the cuda array for the rotated particle (source data for interpolation during SART-FP)
+                auto arr = new CudaArray3D(arrayFormat, (int)vh_ori_particle[ref_id_idx]->GetDimension().x, (int)vh_ori_particle[ref_id_idx]->GetDimension().x, (int)vh_ori_particle[ref_id_idx]->GetDimension().x, 1, 2);
+                // Populate the array with the rotated particle
+                arr->CopyFromHostToArray(vh_rot_particle[globalIdx]->GetPtrToSubVolume(0));
+                // Add to group vector
+                vd_arr_rot_particle.push_back(arr); // pirate vector
+                // Create the texture object for the rotated particle (for interpolation during SART-FP)
+                vd_tex_rot_particle.push_back(new CudaTextureObject3D(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, arr));
+            }
 
 			// Project the single sub-Volumes:
 			for (int i = 0; i < projCount; i++)
@@ -806,9 +828,9 @@ int main(int argc, char* argv[])
 
 				if (mpi_part == 0)
 				{
-					for (int motlIdx = 0; motlIdx < motives.size(); motlIdx++)
+					for (size_t groupIdx = 0; groupIdx < motives.size(); groupIdx++)
 					{
-						motive m = motives[motlIdx];
+						motive m = motives[groupIdx];
 						int globalIdx = ml.GetGlobalIdx(m);
 						int ref_id_idx = ref_ids[globalIdx];
 						
@@ -816,7 +838,7 @@ int main(int argc, char* argv[])
 						//volRot.CopyDeviceToHost(volSubVolRot->GetPtrToSubVolume(0));
 
 						//vol_ArraySubVol.CopyFromDeviceToArray(volRot);
-                        vd_arr_rot_particle[ref_id_idx]->CopyFromHostToArray(vh_rot_particle[globalIdx]->GetPtrToSubVolume(0));
+                        //vd_arr_rot_particle[ref_id_idx]->CopyFromHostToArray(vh_rot_particle[globalIdx]->GetPtrToSubVolume(0));
 
 						float3 posSubVol = make_float3(m.x_Coord, m.y_Coord, m.z_Coord);
 						float3 shift = make_float3(m.x_Shift, m.y_Shift, m.z_Shift);
@@ -862,7 +884,7 @@ int main(int argc, char* argv[])
 						//Project actual index:						
 						/*printf("Do projection...\n");
 						fflush(stdout);*/
-						reconstructor.ForwardProjectionROI(vh_rot_particle[globalIdx], *vd_tex_rot_particle[ref_id_idx], projIndex, volumeIsEmpty, roiMinLocal, roiMaxLocal, true);
+						reconstructor.ForwardProjectionROI(vh_rot_particle[globalIdx], *vd_tex_rot_particle[groupIdx], projIndex, volumeIsEmpty, roiMinLocal, roiMaxLocal, true);
 						//reconstructor.ForwardProjection(volSubVolRot, texObjSubVol, index, volumeIsEmpty, true);
 					}
 				}
