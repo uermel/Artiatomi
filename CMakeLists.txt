@@ -50,6 +50,7 @@ set(CUDA_LIBS ${CUDA_CUDA_LIBRARY}
 				${CUDA_nppist_LIBRARY}
 				${CUDA_nppisu_LIBRARY}
 				${CUDA_nppitc_LIBRARY}
+				${CUDA_npps_LIBRARY}
 				${CUDA_LIBRARIES})
 
 #set(CUDA_LIBS ${CUDA_LIBRARIES})
@@ -232,6 +233,7 @@ set(CUDA_HELPERS_SRC
         ${EMTOOLS_PATH}/CudaHelpers/CudaHelpers.cpp
         ${EMTOOLS_PATH}/CudaHelpers/CudaKernel.cpp
         ${EMTOOLS_PATH}/CudaHelpers/CudaTextures.cpp
+		${EMTOOLS_PATH}/CudaHelpers/CudaSurfaces.cpp
         ${EMTOOLS_PATH}/CudaHelpers/CudaVariables.cpp
         ${EMTOOLS_PATH}/CudaHelpers/NPPImageBase.cpp
         ${EMTOOLS_PATH}/CudaHelpers/NPPImages.cpp)
@@ -794,7 +796,7 @@ target_compile_options(AddParticles PUBLIC -fpermissive)
 ######################### AddParticles ########################
 
 
-######################### Clicker #####################################
+######################### MotlTest #####################################
 set(TEST_SRC
 		${MK_LOG_SRC}
 		${FILEIO_SRC}
@@ -831,4 +833,38 @@ add_executable(test
 target_include_directories(test PUBLIC ${TEST_INC})
 target_link_libraries(test ${TEST_LIB})
 target_compile_definitions(test PUBLIC NO_CUDA)
-######################### Clicker #####################################
+######################### MotlTest #####################################
+
+
+
+######################### VolTest #####################################
+set(VOLTEST_SRC
+		${EMSARTCOMMON_SRC}
+
+		${EMSART_PATH}/volume_test.cpp)
+
+set(VOLTEST_INC
+		${EMSARTCOMMON_INC}
+		)
+
+set(VOLTEST_LIB
+		${EMSARTCOMMON_LIB}
+		)
+
+add_executable(volTest
+		${VOLTEST_SRC})
+
+# Executable depends on ptx files
+add_dependencies(volTest bp_ptx_header)
+add_dependencies(volTest fprm_ptx_header)
+add_dependencies(volTest fpd_ptx_header)
+add_dependencies(volTest ctf_ptx_header)
+add_dependencies(volTest cts_ptx_header)
+add_dependencies(volTest compare_ptx_header)
+add_dependencies(volTest wbp_ptx_header)
+
+target_include_directories(volTest PUBLIC ${VOLTEST_INC})
+target_link_libraries(volTest ${VOLTEST_LIB})
+target_compile_definitions(volTest PUBLIC USE_MPI NO_OPENCL REFINE_MODE)
+target_compile_options(volTest PUBLIC -fpermissive)
+######################### VolTest #####################################

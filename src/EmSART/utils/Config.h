@@ -152,6 +152,8 @@ namespace Configuration
 			float ScaleMotivelistShift;
 			float ScaleMotivelistPosition;
 			string Reference;
+			string ReferenceMask;
+			string VolumeMask;
 			int MaxShift;
 			string ShiftOutputFile;
 			MotiveList::GroupMode_enum GroupMode;

@@ -54,6 +54,8 @@
 #include "utils/SimpleLogger.h"
 #include "Reconstructor.h"
 #include "cuda_profiler_api.h"
+#include <npp.h>
+
 using namespace std;
 using namespace Cuda;
 
@@ -427,8 +429,7 @@ int main(int argc, char* argv[])
         CudaArray3D vol_Array(arrayFormat, volSize.x, volSize.y, volSize.z, 1, 2);
         // Tomogram's texture object for SART
         CudaTextureObject3D texObj(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, &vol_Array);
-
-
+        CudaSurfaceObject3D surfObj(&vol_Array);
 
         if (mpi_part == 0) printf("Copy volume to device ... ");
 
@@ -477,11 +478,6 @@ int main(int argc, char* argv[])
         }
 
         Reconstructor reconstructor(aConfig, proj, projSource, markers, *defocus, modules, mpi_part, mpi_size);
-        //vector<Reconstructor *> vrec;
-        //for (int recon = 0; recon < 60; recon++){
-        //    vrec.push_back(new Reconstructor(aConfig, proj, projSource, markers, *defocus, modules, mpi_part, mpi_size));
-        //}
-        Reconstructor reconstructor2(aConfig, proj, projSource, markers, *defocus, modules, mpi_part, mpi_size);
         /////////////////////////////////////
         /// Prepare tomogram  END
         /////////////////////////////////////
@@ -489,7 +485,7 @@ int main(int argc, char* argv[])
         /////////////////////////////////////
         /// Preprocess particles START
         /////////////////////////////////////
-        if (mpi_part == 0) printf("Start preprocessing particles\n");
+        if (mpi_part == 0) printf("Start preprocessing particles and masks\n");
 		// Get Motivelist and select for tomogram
 		MotiveList ml(aConfig.MotiveList, aConfig.ScaleMotivelistPosition, aConfig.ScaleMotivelistShift);
 		ml.selectTomo(aConfig.TomogramIndex);
@@ -512,31 +508,67 @@ int main(int argc, char* argv[])
         // Create working memory (host)
         vector<Volume<unsigned short> *> v_volFP16; // TODO:What the hell does this do?
 
-        // Storage of original particle (size: unique_ref_count)
+        // Storage of original particle, mask for particle, mask for volume (size: unique_ref_count)
         vector<Volume<float> *> vh_ori_particle;
+        vector<Volume<float> *> vh_ori_refmask;
+        vector<Volume<float> *> vh_ori_volmask;
 
-        // Storage of rotated particles (size: ml.GetParticleCount());
+        // Storage of rotated particles, masks (size: ml.GetParticleCount());
         vector<Volume<float> *> vh_rot_particle;
+        vector<Volume<float> *> vh_rot_refmask;
+        vector<Volume<float> *> vh_rot_volmask;
 
-        // Storage of particle dimensions
+        // Storage of particle, mask dimensions (dimensions of refmask same as particle)
         vector<uint3> vh_particle_dims;
+        vector<uint3> vh_volmask_dims;
 
         // Init the original reference volumes on host, read from file, get dimensions
         vector<float3> vh_subVolDim;
+        vector<float3> vh_volMaskDim;
         for (size_t i = 0; i < unique_ref_count; i++)
         {
-            // Build name
-            stringstream name;
-            name << aConfig.Reference << unique_ref_ids[i] << ".em";
-            // Get dims
-            EmFile ref(name.str());
+            // Build names
+            stringstream ref_name;
+            stringstream refmask_name;
+            stringstream volmask_name;
+            ref_name << aConfig.Reference << unique_ref_ids[i] << ".em";
+            refmask_name << aConfig.ReferenceMask << unique_ref_ids[i] << ".em";
+            volmask_name << aConfig.VolumeMask << unique_ref_ids[i] << ".em";
+
+            //--> REFERENCE
+            // Read header
+            EmFile ref(ref_name.str());
             ref.OpenAndReadHeader();
             // Create volume object
             uint3 tempdim = make_dim3(ref.GetFileHeader().DimX, ref.GetFileHeader().DimY, ref.GetFileHeader().DimZ);
-            auto tempvol = new Volume<float>(tempdim);
-            tempvol->LoadFromFile(name.str(), 0);
-            vh_ori_particle.push_back(tempvol);
+            auto temp_ref = new Volume<float>(tempdim);
+            // Read and append volume and dimensions
+            temp_ref->LoadFromFile(ref_name.str(), 0);
+            vh_ori_particle.push_back(temp_ref);
             vh_particle_dims.push_back(tempdim);
+
+            //--> REFERENCE MASK
+            // Read header
+            EmFile refmask(refmask_name.str());
+            refmask.OpenAndReadHeader();
+            // Create volume object
+            tempdim = make_dim3(refmask.GetFileHeader().DimX, refmask.GetFileHeader().DimY, refmask.GetFileHeader().DimZ);
+            auto temp_refmask = new Volume<float>(tempdim);
+            // Read and append volume (dimensions same as reference)
+            temp_refmask->LoadFromFile(refmask_name.str(), 0);
+            vh_ori_refmask.push_back(temp_refmask);
+
+            //--> VOLUME MASK
+            // Read header
+            EmFile volmask(volmask_name.str());
+            volmask.OpenAndReadHeader();
+            // Create volume object
+            tempdim = make_dim3(volmask.GetFileHeader().DimX, volmask.GetFileHeader().DimY, volmask.GetFileHeader().DimZ);
+            auto temp_volmask = new Volume<float>(tempdim);
+            // Read and append volume and dimensions
+            temp_volmask->LoadFromFile(volmask_name.str(), 0);
+            vh_ori_volmask.push_back(temp_volmask);
+            vh_volmask_dims.push_back(tempdim);
 
             // Get dimension of particle
             if (aConfig.FP16Volume)
@@ -548,56 +580,167 @@ int main(int argc, char* argv[])
         // Device array
         //CudaDeviceVariable d_rot_particle(aConfig.SizeSubVol * aConfig.SizeSubVol * aConfig.SizeSubVol * sizeof(float));
 
-        // Rotation kernels for the reference volumes of (potentially) different sizes (size: unique_ref_count)
-        vector<RotKernel*> vd_Rotators;
-        // Output device arrays for the reference volumes of (potentially) different sizes (size: unique_ref_count)
+        // Rotation kernels for the reference volumes/masks of (potentially) different sizes (size: unique_ref_count)
+        vector<RotKernel*> vd_ref_rotators;
+        vector<RotKernel*> vd_refmask_rotators;
+        vector<RotKernel*> vd_volmask_rotators;
+        // Output device arrays for the reference volumes/masks of (potentially) different sizes (size: unique_ref_count)
         vector<CudaDeviceVariable*> vd_rot_particle;
-
-        // Rotated particle's array on the device (needed for texture interpolation), (size: unique_ref_count)
-        //vector<CudaArray3D*> vd_arr_rot_particle;
-        // Texture object of the rotated particle for SART, (size: unique_ref_count)
-        //vector<CudaTextureObject3D*> vd_tex_rot_particle;
+        vector<CudaDeviceVariable*> vd_rot_refmask;
+        vector<CudaDeviceVariable*> vd_rot_volmask;
 
         // Initialize the kernels and device variables
         for (size_t i = 0; i < unique_ref_count; i++)
         {
-            // Create the kernel object
-            auto rotator = new RotKernel(modules.modWBP, (int)vh_ori_particle[i]->GetDimension().x);
+            //--> REFERENCE
+            // Create the kernel objects
+            auto ref_rotator = new RotKernel(modules.modWBP, (int)vh_ori_particle[i]->GetDimension().x);
             // Set the unrotated reference as default data
-            rotator->SetData(vh_ori_particle[i]->GetPtrToSubVolume(0));
-            vd_Rotators.push_back(rotator);
+            ref_rotator->SetData(vh_ori_particle[i]->GetPtrToSubVolume(0));
+            vd_ref_rotators.push_back(ref_rotator);
             // Create the output arrays
             vd_rot_particle.push_back(new CudaDeviceVariable((int)vh_ori_particle[i]->GetDimension().x * (int)vh_ori_particle[i]->GetDimension().x * (int)vh_ori_particle[i]->GetDimension().x * sizeof(float)));
 
-            // Create the cuda array for the rotated particle (source data for interpolation during SART-FP)
-            //auto arr = new CudaArray3D(arrayFormat, (int)vh_ori_particle[i]->GetDimension().x, (int)vh_ori_particle[i]->GetDimension().x, (int)vh_ori_particle[i]->GetDimension().x, 1, 2);
-            //vd_arr_rot_particle.push_back(arr); // pirate vector
-            // Create the texture object for the rotated particle (for interpolation during SART-FP)
-            //vd_tex_rot_particle.push_back(new CudaTextureObject3D(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, arr));
+            //--> REFERENCE MASK
+            // Create the kernel objects
+            auto refmask_rotator = new RotKernel(modules.modWBP, (int)vh_ori_refmask[i]->GetDimension().x);
+            // Set the unrotated mask as default data
+            refmask_rotator->SetData(vh_ori_refmask[i]->GetPtrToSubVolume(0));
+            vd_refmask_rotators.push_back(refmask_rotator);
+            // Create the output arrays
+            vd_rot_refmask.push_back(new CudaDeviceVariable((int)vh_ori_refmask[i]->GetDimension().x * (int)vh_ori_refmask[i]->GetDimension().x * (int)vh_ori_refmask[i]->GetDimension().x * sizeof(float)));
+
+            //--> VOLUME MASK
+            // Create the kernel objects
+            auto volmask_rotator = new RotKernel(modules.modWBP, (int)vh_ori_volmask[i]->GetDimension().x);
+            // Set the unrotated mask as default data
+            volmask_rotator->SetData(vh_ori_volmask[i]->GetPtrToSubVolume(0));
+            vd_volmask_rotators.push_back(volmask_rotator);
+            // Create the output arrays
+            vd_rot_volmask.push_back(new CudaDeviceVariable((int)vh_ori_volmask[i]->GetDimension().x * (int)vh_ori_volmask[i]->GetDimension().x * (int)vh_ori_volmask[i]->GetDimension().x * sizeof(float)));
         }
 
-        // Now rotate all particles and store them on host
+        // Now rotate all particles/masks, apply rotated masks to rotated particles and store them on host
+        CudaDeviceVariable d_refsum(sizeof(float));
+        CudaDeviceVariable d_masksum(sizeof(float));
+        CudaDeviceVariable d_mean(sizeof(float));
+        float h_refsum = 0;
+        float h_masksum = 0;
+        float h_mean = 0;
         for (size_t motlIdx = 0; motlIdx < ml.GetParticleCount(); motlIdx++)
         {
             // Get current particle's data
             motive m = ml.GetAt(motlIdx);
 
-            // Rotate
+            // Rotate refs and masks
             int ref_id_idx = ref_ids[motlIdx];
-            (*vd_Rotators[ref_id_idx])(*vd_rot_particle[ref_id_idx], m.phi, m.psi, m.theta);
+            (*vd_ref_rotators[ref_id_idx])(*vd_rot_particle[ref_id_idx], m.phi, m.psi, m.theta);
+            (*vd_refmask_rotators[ref_id_idx])(*vd_rot_refmask[ref_id_idx], m.phi, m.psi, m.theta);
+            (*vd_volmask_rotators[ref_id_idx])(*vd_rot_volmask[ref_id_idx], m.phi, m.psi, m.theta);
+
+            //--> Apply mask to reference correctly (zero mean inside mask).
+            // Set old vars 0
+            h_refsum = 0;
+            h_masksum = 0;
+            h_mean = 0;
+            d_refsum.Memset(0);
+            d_masksum.Memset(0);
+
+            //--> Compute ref .* mask (result in place in ref)
+            auto npp_ref = (Npp32f*)vd_rot_particle[ref_id_idx]->GetDevicePtr();
+            auto npp_refmask = (Npp32f*)vd_rot_refmask[ref_id_idx]->GetDevicePtr();
+            auto npp_volmask = (Npp32f*)vd_rot_volmask[ref_id_idx]->GetDevicePtr();
+
+            int refdim = (int)vh_ori_particle[ref_id_idx]->GetDimension().x * (int)vh_ori_particle[ref_id_idx]->GetDimension().x * (int)vh_ori_particle[ref_id_idx]->GetDimension().x;
+            int volmaskdim = (int)vh_ori_volmask[ref_id_idx]->GetDimension().x * (int)vh_ori_volmask[ref_id_idx]->GetDimension().x * (int)vh_ori_volmask[ref_id_idx]->GetDimension().x;
+            nppSafeCall(nppsMulC_32f_I((Npp32f) -1.f, npp_refmask, refdim)); // Volumes are loaded inverted, so fix that (WTF?!?!?!!?)
+            nppSafeCall(nppsMulC_32f_I((Npp32f) -1.f, npp_volmask, volmaskdim)); // Volumes are loaded inverted, so fix that (WTF?!?!?!!?)
+            //TODO: Overload volume loading function to load non-inverted masks.
+            nppSafeCall(nppsMul_32f_I(npp_refmask, npp_ref, refdim));
+
+            printf("Finished Mult\n");
+
+            //--> Compute sum(ref(:))
+            d_refsum.CopyDeviceToHost(&h_refsum, sizeof(float));
+            printf("Copy successful before\n");
+            auto npp_refsum = (Npp32f *)d_refsum.GetDevicePtr();
+            // Compute/Alloc scratch buffer size
+            int nBufferSize;
+            CUdeviceptr d_scratch;
+            nppSafeCall(nppsSumGetBufferSize_32f(refdim, &nBufferSize));
+            printf("Buffersize computed\n");
+            cudaSafeCall(cuMemAlloc(&d_scratch, nBufferSize));
+            printf("Buffer allocated\n");
+            // Compute sum (is now in d_refum)
+            nppSafeCall(nppsSum_32f(npp_ref, refdim, npp_refsum, (Npp8u*)d_scratch));
+            printf("Sum executed\n");
+            //printf("npp:%p var:%p", (void *)&npp_refsum, (void *)d_refsum.GetDevicePtr());
+            // To host
+            d_refsum.CopyDeviceToHost(&h_refsum, sizeof(float));
+            printf("Copy to host\n");
+
+            //--> Compute sum(mask(:))
+            auto npp_masksum = (Npp32f *)d_masksum.GetDevicePtr();
+            // Compute/Alloc scratch buffer size
+            nppSafeCall(nppsSumGetBufferSize_32f(refdim, &nBufferSize));
+            cudaSafeCall(cuMemAlloc(&d_scratch, nBufferSize));
+            // Compute sum (is now in d_refum)
+            nppSafeCall(nppsSum_32f(npp_refmask, refdim, npp_masksum, (Npp8u*)d_scratch));
+            // To host
+            d_masksum.CopyDeviceToHost(&h_masksum, sizeof(float));
+
+            printf("Computed sum mask\n");
+
+            //--> Compute mean in mask
+            h_mean = h_refsum/h_masksum;
+            printf("mean: %f\n", h_mean);
+
+            //--> Multiply mask with mean
+            CudaDeviceVariable d_scaled_mask(sizeof(float)*refdim);
+            auto npp_scaled_mask = (Npp32f*)d_scaled_mask.GetDevicePtr();
+            nppSafeCall(nppsMulC_32f(npp_refmask, (Npp32f)h_mean, npp_scaled_mask, refdim));
+            //nppSafeCall(nppsMulC_32f(npp_mask, (Npp32f)-1.f, npp_scaled_mask, refdim));
+            printf("Scaled mask\n");
+
+            //--> Subtract scaled mask from rotated ref (in place).
+            nppSafeCall(nppsSub_32f_I(npp_scaled_mask, npp_ref, refdim));
+            //--> Final reference is now at the original device pointer
+
+            printf("Finished shit\n");
 
             // Create host storage (using remembered dimensions from above) and copy back to host
-            auto tempvol = new Volume<float>(vh_particle_dims[ref_id_idx]);
-            vd_rot_particle[ref_id_idx]->CopyDeviceToHost(tempvol->GetPtrToSubVolume(0));
-            vh_rot_particle.push_back(tempvol);
+            //--> REFERENCE
+            auto tempref = new Volume<float>(vh_particle_dims[ref_id_idx]);
+            vd_rot_particle[ref_id_idx]->CopyDeviceToHost(tempref->GetPtrToSubVolume(0));
+            vh_rot_particle.push_back(tempref);
+
+            //--> REFERENCE MASK
+            auto temprefmask = new Volume<float>(vh_particle_dims[ref_id_idx]);
+            vd_rot_refmask[ref_id_idx]->CopyDeviceToHost(temprefmask->GetPtrToSubVolume(0));
+            vh_rot_refmask.push_back(temprefmask);
+
+            //--> VOLUME MASK
+            auto tempvolmask = new Volume<float>(vh_volmask_dims[ref_id_idx]);
+            vd_rot_volmask[ref_id_idx]->CopyDeviceToHost(tempvolmask->GetPtrToSubVolume(0));
+            vh_rot_volmask.push_back(tempvolmask);
         }
 
-        // vh_rot_particle now contains all rotated particles in the order of the motivelist.
+        // vh_rot_particle now contains all rotated, porperly masked particles in the order of the motivelist.
+        // vh_rot_refmask now contains all rotated refrence masks.
+        // vh_rot_volmask now contains all rotated volume masks for forward projection.
 
         // Free memory allocated for rotation (rot kernel + device output array)
-        vd_Rotators.clear();
+        vd_ref_rotators.clear();
+        vd_refmask_rotators.clear();
+        vd_volmask_rotators.clear();
         vd_rot_particle.clear();
-        if (mpi_part == 0) printf("End preprocessing particles\n");
+        vd_rot_refmask.clear();
+        vd_rot_volmask.clear();
+
+        // Test particle
+        emwrite("/home/uermel/Programs/artia-build/refinement/testparticle.em", vh_rot_particle[0]->GetPtrToSubVolume(0), (int)vh_rot_particle[0]->GetSubVolumeDimension(0).x, (int)vh_rot_particle[0]->GetSubVolumeDimension(0).x, (int)vh_rot_particle[0]->GetSubVolumeDimension(0).x);
+
+        if (mpi_part == 0) printf("End preprocessing particles and masks\n");
         /////////////////////////////////////
         /// Preprocess particles END
         /////////////////////////////////////

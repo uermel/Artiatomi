@@ -86,6 +86,8 @@ namespace Configuration
 			VoxelSizeSubVol(0),
 			MotiveList(),
 			Reference(),
+            ReferenceMask(),
+            VolumeMask(),
 			MaxShift(0),
 			ShiftOutputFile(),
 			GroupMode(MotiveList::GroupMode_enum::GM_BYGROUP),
@@ -411,6 +413,8 @@ namespace Configuration
 		VoxelSizeSubVol = GetFloat("VoxelSizeSubVol");
 		MotiveList = GetString("MotiveList");
 		Reference = GetString("Reference");
+        ReferenceMask = GetString("ReferenceMask");
+        VolumeMask = GetString("VolumeMask");
 		MaxShift = GetInt("MaxShift");
 		ShiftOutputFile = GetString("ShiftOutputFile");
 		string gm = GetString("GroupMode");

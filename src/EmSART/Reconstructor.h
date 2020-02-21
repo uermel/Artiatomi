@@ -35,6 +35,7 @@
 #include <CudaArrays.h>
 #include <CudaContext.h>
 #include <CudaTextures.h>
+#include <CudaSurfaces.h>
 #include <CudaKernel.h>
 #include <CudaDeviceProperties.h>
 #include "utils/Config.h"

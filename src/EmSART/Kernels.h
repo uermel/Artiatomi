@@ -28,6 +28,7 @@
 #include <CudaArrays.h>
 #include <CudaContext.h>
 #include <CudaTextures.h>
+#include <CudaSurfaces.h>
 #include <CudaKernel.h>
 #include <CudaDeviceProperties.h>
 #include "Projection.h"
@@ -233,6 +234,27 @@ public:
 	void SetData(float* data);
 };
 
+class ApplyMaskKernel : public Cuda::CudaKernel
+{
+private:
+    int size;
+
+public:
+    ApplyMaskKernel(CUmodule aModule, int aSize);
+
+    float operator()(Cuda::CudaSurfaceObject3D& volume, Cuda::CudaDeviceVariable& mask, Cuda::CudaDeviceVariable& tempStore, int3 volmin, int3 volmax, int3 dimMask, int3 radiusMask, int3 centerInVol);
+};
+
+class RestoreVolumeKernel : public Cuda::CudaKernel
+{
+private:
+    int size;
+
+public:
+    RestoreVolumeKernel(CUmodule aModule, int aSize);
+
+    float operator()(Cuda::CudaSurfaceObject3D& volume, Cuda::CudaDeviceVariable& tempStore, int3 volmin, int3 volmax, int3 dimMask, int3 radiusMask, int3 centerInVol);
+};
 
 void SetConstantValues(Cuda::CudaKernel& kernel, Volume<unsigned short>& vol, Projection& proj, int index, int subVol, Matrix<float>& m, Matrix<float>& mInv);
 

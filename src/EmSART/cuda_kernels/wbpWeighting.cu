@@ -29,6 +29,8 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include <texture_fetch_functions.h>
+#include <surface_functions.h>
+
 
 #include <stdio.h>
 #include "cufft.h"
@@ -401,6 +403,89 @@ __global__ void rot3d(int size, float3 rotMat0, float3 rotMat1, float3 rotMat2, 
 	rotVox.z = center + rotMat0.z * vox.x + rotMat1.z * vox.y + rotMat2.z * vox.z;
 
 	outVol[z * size * size + y * size + x] = tex3D(texVol, rotVox.x + 0.5f, rotVox.y + 0.5f, rotVox.z + 0.5f);
-
 }
 #endif
+
+
+/// Apply mask to a volume split on multiple GPUs
+// volume -- CUDA surface object bound to CUDA arrays of the volume on different nodes
+// mask -- CUDA device pointer to mask volume (needs to be replicated on each node)
+// tempStore -- CUDA device pointer for storing the modified region to revert the volume later
+// volmin -- The min global coordinate on this MPI node
+// volmax -- The max global coodinate on this MPI node
+// dimMask -- Dimensions of the mask volume
+// radiusMask -- radius of the mask applied
+// centerInVol -- The center of the mask in global volume coordinates (Matlab convention, i.e. 1-based, so -1)
+extern "C"
+__global__
+void applyMask(cudaSurfaceObject_t volume, const float* mask, float* tempStore, int3 volmin, int3 volmax, int3 dimMask, int3 radiusMask, int3 centerInVol)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    // Return if outside mask
+    if ((x >= dimMask.x) || (y >= dimMask.y) || (z >= dimMask.z)) return;
+
+    // Compute mask position in complete volume (-1 because Matlab --> C++)
+    int3 maskGrid;
+    maskGrid.x = x - radiusMask.x + centerInVol.x - 1;
+    maskGrid.y = y - radiusMask.y + centerInVol.y - 1;
+    maskGrid.z = z - radiusMask.z + centerInVol.z - 1;
+
+    // Return if outside current subvolume
+    bool mincond = (maskGrid.x < volmin.x) || (maskGrid.y < volmin.y) || (maskGrid.z < volmin.z);
+    bool maxcond = (maskGrid.x >= volmax.x) || (maskGrid.y >= volmax.y) || (maskGrid.z >= volmax.z);
+    if (mincond || maxcond) return;
+
+    // Adjust coordinates to current subvolume
+    int3 volGrid;
+    volGrid.x = maskGrid.x - volmin.x;
+    volGrid.y = maskGrid.y - volmin.y;
+    volGrid.z = maskGrid.z - volmin.z;
+
+    // Do the deed.
+    size_t mask_idx = z * dimMask.x * dimMask.y + y * dimMask.x + x;
+
+    float data;
+    surf3Dread<float>(&data, volume, volGrid.x * sizeof(float), volGrid.y, volGrid.z, cudaBoundaryModeTrap);
+    tempStore[mask_idx] = data;
+    data *= mask[mask_idx];
+    surf3Dwrite<float>(data, volume, volGrid.x * sizeof(float), volGrid.y, volGrid.z, cudaBoundaryModeTrap);
+}
+
+
+extern "C"
+__global__
+void restoreVolume(cudaSurfaceObject_t volume, const float* tempStore, int3 volmin, int3 volmax, int3 dimMask, int3 radiusMask, int3 centerInVol)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    // Return if outside mask
+    if ((x >= dimMask.x) || (y >= dimMask.y) || (z >= dimMask.z)) return;
+
+    // Compute mask position in complete volume (-1 because Matlab --> C++)
+    int3 maskGrid;
+    maskGrid.x = x - radiusMask.x + centerInVol.x - 1;
+    maskGrid.y = y - radiusMask.y + centerInVol.y - 1;
+    maskGrid.z = z - radiusMask.z + centerInVol.z - 1;
+
+    // Return if outside current MPI-subvolume
+    bool mincond = (maskGrid.x < volmin.x) || (maskGrid.y < volmin.y) || (maskGrid.z < volmin.z);
+    bool maxcond = (maskGrid.x >= volmax.x) || (maskGrid.y >= volmax.y) || (maskGrid.z >= volmax.z);
+    if (mincond || maxcond) return;
+
+    // Adjust coordinates to current MPI-subvolume
+    int3 volGrid;
+    volGrid.x = maskGrid.x - volmin.x;
+    volGrid.y = maskGrid.y - volmin.y;
+    volGrid.z = maskGrid.z - volmin.z;
+
+    // Do the deed.
+    size_t mask_idx = z * dimMask.x * dimMask.y + y * dimMask.x + x;
+
+    float data = tempStore[mask_idx];
+    surf3Dwrite<float>(data, volume, volGrid.x * sizeof(float), volGrid.y, volGrid.z, cudaBoundaryModeTrap);
+}
