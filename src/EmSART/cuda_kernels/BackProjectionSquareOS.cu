@@ -73,174 +73,6 @@
 
 
 
-
-
-
-//#define SPLINES
-#ifdef SPLINES
-
-
-#define Pole (sqrt(3.0f)-2.0f)  //pole for cubic b-spline
- 
-//--------------------------------------------------------------------------
-// Local GPU device procedures
-//--------------------------------------------------------------------------
-__host__ __device__ float InitialCausalCoefficient(
-	float* c,			// coefficients
-	uint DataLength,	// number of coefficients
-	int step)			// element interleave in bytes
-{
-	const uint Horizon = min(12, DataLength);
-
-	// this initialization corresponds to clamping boundaries
-	// accelerated loop
-	float zn = Pole;
-	float Sum = *c;
-	for (uint n = 0; n < Horizon; n++) {
-		Sum += zn * *c;
-		zn *= Pole;
-		c = (float*)((uchar*)c + step);
-	}
-	return(Sum);
-}
-
-__host__ __device__ float InitialAntiCausalCoefficient(
-	float* c,			// last coefficient
-	uint DataLength,	// number of samples or coefficients
-	int step)			// element interleave in bytes
-{
-	// this initialization corresponds to clamping boundaries
-	return((Pole / (Pole - 1.0f)) * *c);
-}
-
-__host__ __device__ void ConvertToInterpolationCoefficients(
-	float* coeffs,		// input samples --> output coefficients
-	uint DataLength,	// number of samples or coefficients
-	int step)			// element interleave in bytes
-{
-	// compute the overall gain
-	const float Lambda = (1.0f - Pole) * (1.0f - 1.0f / Pole);
-
-	// causal initialization
-	float* c = coeffs;
-	float previous_c;  //cache the previously calculated c rather than look it up again (faster!)
-	*c = previous_c = Lambda * InitialCausalCoefficient(c, DataLength, step);
-	// causal recursion
-	for (uint n = 1; n < DataLength; n++) {
-		c = (float*)((uchar*)c + step);
-		*c = previous_c = Lambda * *c + Pole * previous_c;
-	}
-	// anticausal initialization
-	*c = previous_c = InitialAntiCausalCoefficient(c, DataLength, step);
-	// anticausal recursion
-	for (int n = DataLength - 2; 0 <= n; n--) {
-		c = (float*)((uchar*)c - step);
-		*c = previous_c = Pole * (previous_c - *c);
-	}
-}
-
-extern "C"
-__global__ void SamplesToCoefficients2DX(
-	float* image,		// in-place processing
-	uint pitch,			// width in bytes
-	uint width,			// width of the image
-	uint height)		// height of the image
-{
-	// process lines in x-direction
-	const uint y = blockIdx.x * blockDim.x + threadIdx.x;
-	float* line = (float*)((uchar*)image + y * pitch);  //direct access
-
-	ConvertToInterpolationCoefficients(line, width, sizeof(float));
-}
-
-extern "C"
-__global__ void SamplesToCoefficients2DY(
-	float* image,		// in-place processing
-	uint pitch,			// width in bytes
-	uint width,			// width of the image
-	uint height)		// height of the image
-{
-	// process lines in x-direction
-	const uint x = blockIdx.x * blockDim.x + threadIdx.x;
-	float* line = image + x;  //direct access
-
-	ConvertToInterpolationCoefficients(line, height, pitch);
-}
-
-
-
-// Cubic B-spline function
-// The 3rd order Maximal Order and Minimum Support function, that it is maximally differentiable.
-inline __host__ __device__ float bspline(float t)
-{
-	t = fabs(t);
-	const float a = 2.0f - t;
-
-	if (t < 1.0f) return 2.0f/3.0f - 0.5f*t*t*a;
-	else if (t < 2.0f) return a*a*a / 6.0f;
-	else return 0.0f;
-}
-
-
-//! Bicubic interpolated texture lookup, using unnormalized coordinates.
-//! Straight forward implementation, using 16 nearest neighbour lookups.
-//! @param tex  2D texture
-//! @param x  unnormalized x texture coordinate
-//! @param y  unnormalized y texture coordinate
-__device__ float cubicTex2DSimple(texture<float, 2, cudaReadModeElementType> _tex, float x, float y)
-{
-	// transform the coordinate from [0,extent] to [-0.5, extent-0.5]
-	const float2 coord_grid = make_float2(x - 0.5f, y - 0.5f);
-	float2 index;
-	index.x = floor(coord_grid.x);
-	index.y = floor(coord_grid.y);
-	float2 fraction;
-	fraction.x = coord_grid.x - index.x;
-	fraction.y = coord_grid.y - index.y;
-	index.x += 0.5f;  //move from [-0.5, extent-0.5] to [0, extent]
-	index.y += 0.5f;  //move from [-0.5, extent-0.5] to [0, extent]
-
-	float result = 0.0f;
-	for (float y=-1; y < 2.5f; y++)
-	{
-		float bsplineY = bspline(y-fraction.y);
-		float v = index.y + y;
-		for (float x=-1; x < 2.5f; x++)
-		{
-			float bsplineXY = bspline(x-fraction.x) * bsplineY;
-			float u = index.x + x;
-			result += bsplineXY * tex2D(_tex, u, v);
-		}
-	}
-	return result;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#endif
-
-
-
 // transform vector by matrix
 __device__
 void MatrixVector3Mul(float4x4 M, float3* v)
@@ -255,9 +87,8 @@ void MatrixVector3Mul(float4x4 M, float3* v)
 extern volatile __shared__ unsigned char sBuffer[];
 
 
-#ifdef SM20
 surface<void, cudaSurfaceType3D> surfref;
-#endif
+
 
 
 extern "C"
@@ -270,33 +101,14 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 	float3 hitPoint;
 	float3 c_source;
 
-	//curandState state;
-
-
 	int4 pixelBorders; //--> x = x.min; y = x.max; z = y.min; v = y.max   	
 	
 	// index to access shared memory, e.g. thread linear address in a block
 	const unsigned int index2 = (threadIdx.z * blockDim.x * blockDim.y) + (threadIdx.y * blockDim.x) + threadIdx.x;	
-
-	// integer voxel coordinates
-	//unsigned long long int voxelIndex;
-	
-	//we are using -use_fast_math flag! Only 24 bit integer multiplication = no 512 sized volume index can be computed
-	//hack: use long long int data type
-	//voxelIndex = (unsigned long long int)blockIdx.x * (unsigned long long int)blockDim.x + (unsigned long long int)threadIdx.x + (unsigned long long int)(blockDim.x * gridDim.x) * (unsigned long long int)(blockIdx.y * blockDim.y + (unsigned long long int)threadIdx.y);
-	
-	//compute x,y,z indiced
-	//unsigned int z = (unsigned int)floor((double)voxelIndex / (double)c_volumeDim_x_quarter / (double)c_volumeDim.y) ;
-	//unsigned int y = (unsigned int)floor((double)((double)voxelIndex - (double)z * (double)c_volumeDim_x_quarter * (double)c_volumeDim.y) / (double)c_volumeDim_x_quarter);
-	//unsigned int x = (unsigned int)(voxelIndex - (double)z * (double)c_volumeDim_x_quarter * (double)c_volumeDim.y - (double)y * (double)c_volumeDim_x_quarter);	
 	
 	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
 	const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
-
-	//curand_init(1234, x + (unsigned long long)y * c_volumeDim_x_quarter  + (unsigned long long)z * c_volumeDim_x_quarter * c_volumeDim.y, 0, &state);
-	
-	//voxelIndex = x + (unsigned long)y * c_volumeDim_x_quarter  + (unsigned long)z * c_volumeDim_x_quarter * c_volumeDim.y;
 
 	if (x >= c_volumeDim_x_quarter || y >= c_volumeDim.y || z >= c_volumeDim.z) return;
 
@@ -305,12 +117,10 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 	
 	//Correction term per voxel in shared memory
 	volatile float4* voxelD = distanceD + blockDim.x * blockDim.y * blockDim.z;
-	//volatile float4* voxelD = (float4*)(sBuffer);
 	
 	
 	float4 voxelBlock;
 
-	//float3 detectorNormal;
 	float3 MC_bBoxMin;
 	float3 MC_bBoxMax;
 	float t;
@@ -321,21 +131,10 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 	float3 tmin, tmax;
 	float pixel_y, pixel_x;	
 
-	//read voxel values from global device memory and normalize them
-	//ushort4 temp = vol2[voxelIndex];
-	//voxelBlock.x = temp.x / 65535.0f;
-	//voxelBlock.y = temp.y / 65535.0f;
-	//voxelBlock.z = temp.z / 65535.0f;
-	//voxelBlock.w = temp.w / 65535.0f;
-	//ushort4 temp = vol2[voxelIndex];
-	#ifdef SM20
 	surf3Dread(&voxelBlock.x, surfref, x * 4 * 4 + 0, y, z);
 	surf3Dread(&voxelBlock.y, surfref, x * 4 * 4 + 4, y, z);
 	surf3Dread(&voxelBlock.z, surfref, x * 4 * 4 + 8, y, z);
 	surf3Dread(&voxelBlock.w, surfref, x * 4 * 4 + 12, y, z);
-	#else
-	voxelBlock = vol2[voxelIndex];
-	#endif
 
 
 	//adopt x coordinate to single voxels, not voxelBlocks
@@ -357,11 +156,6 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 
 	//The loop has been manually unrolled: nvcc cannot handle inner loops
 	//first corner
-	//ray.x = -c_projNorm.x;
-	//ray.y = -c_projNorm.y;
-	//ray.z = -c_projNorm.z;
-
-	//ray = normalize(ray);
 	t = (c_projNorm.x * MC_bBoxMin.x + c_projNorm.y * MC_bBoxMin.y + c_projNorm.z * MC_bBoxMin.z);
 	t += (-c_projNorm.x * c_detektor.x - c_projNorm.y * c_detektor.y - c_projNorm.z * c_detektor.z);
 	t = abs(t);
@@ -473,20 +267,6 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 		//MC_bBoxMin.y = MC_bBoxMax.y;
 		//MC_bBoxMax.y = temp;
 	}
-	//if (c_projNorm.x * c_projNorm.y >= 0) 
-	//{
-	//	float temp = MC_bBoxMin.y;
-	//	MC_bBoxMin.y = MC_bBoxMax.y;
-	//	MC_bBoxMax.y = temp;
-
-	//	
-	//}
-	//else
-	//{
-	//	float ttemp = MC_bBoxMin.x;
-	//	MC_bBoxMin.x = MC_bBoxMax.x;
-	//	MC_bBoxMax.x = ttemp;
-	//}
 
 	//Convert global coordinated to projection pixel indices
 	MatrixVector3Mul(c_DetectorMatrix, &MC_bBoxMin);    
@@ -525,10 +305,6 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 	{				
 		for ( pixel_x = pixelBorders.x + maxOverSampleInv*0.5f ; pixel_x < pixelBorders.y ; pixel_x+=maxOverSampleInv)	
 		{
-			/*float pixel_xr = pixel_x + (curand_uniform(&state) - 0.5f) * maxOverSampleInv;
-			float pixel_yr = pixel_y + (curand_uniform(&state) - 0.5f) * maxOverSampleInv;*/
-
-			//if (pixel_x < 1) continue;
 			float xAniso;
 			float yAniso;
 
@@ -707,52 +483,6 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 		}//for loop y-pixel
 	}//for loop x-pixel
 
-//	float len = 0;
-//	float3 lengths;
-//	
-//	lengths.x = 100;
-//	if (x > c_volumeDim.x * 0.5f)
-//	{
-//		if (c_volumeDim.x - x < 100.0f)
-//			lengths.x = c_volumeDim.x -x;
-//	}
-//	else
-//	{
-//		if (x < 100.0f)
-//			lengths.x = x;
-//	}
-//	
-//	
-//	lengths.y = 100;
-//	if (x > c_volumeDim.y * 0.5f)
-//	{
-//		if (c_volumeDim.y - y < 100.0f)
-//			lengths.y = c_volumeDim.x -y;
-//	}
-//	else
-//	{
-//		if (y < 100.0f)
-//			lengths.y = y;
-//	}
-//	
-//	
-//	lengths.z = 100;
-//	if (x > c_volumeDim.z * 0.5f)
-//	{
-//		if (c_volumeDim.z - z < 100.0f)
-//			lengths.z = c_volumeDim.x -z;
-//	}
-//	else
-//	{
-//		if (z < 100.0f)
-//			lengths.z = z;
-//	}
-//
-//	len = sqrtf(lengths.x * lengths.x + lengths.y * lengths.y + lengths.z * lengths.z);
-//	if (len < 100)
-//		len = 1.0f - expf(-(len * len));
-//	else
-//		len = 1.0f;
 
 	//Only positive distance values are allowed
 	distanceD[index2].x = fmaxf (0.f, distanceD[index2].x);
@@ -766,19 +496,10 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 	if (distanceD[index2].z != 0.0f) voxelBlock.z += (lambda * voxelD[index2].z / (float)distanceD[index2].z);
 	if (distanceD[index2].w != 0.0f) voxelBlock.w += (lambda * voxelD[index2].w / (float)distanceD[index2].w);
 
-
-	//store values in global memory
-	//__syncthreads();
-	//vol2[voxelIndex] = temp2;
-	
-	#ifdef SM20
 	surf3Dwrite(voxelBlock.x, surfref, x * 4 + 0, y, z);
 	surf3Dwrite(voxelBlock.y, surfref, x * 4 + 4, y, z);
 	surf3Dwrite(voxelBlock.z, surfref, x * 4 + 8, y, z);
 	surf3Dwrite(voxelBlock.w, surfref, x * 4 + 12, y, z);
-	#else
-	vol2[voxelIndex] = voxelBlock;
-	#endif
 }
 
 
@@ -792,9 +513,6 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 	float3 hitPoint;
 	float3 c_source;
 
-	//curandState state;
-
-
 	int4 pixelBorders; //--> x = x.min; y = x.max; z = y.min; v = y.max   	
 	
 	// index to access shared memory, e.g. thread linear address in a block
@@ -810,13 +528,10 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 	volatile float4* distanceD = (float4*)(sBuffer);
 	
 	//Correction term per voxel in shared memory
-	volatile float4* voxelD = distanceD + blockDim.x * blockDim.y * blockDim.z;
-	//volatile float4* voxelD = (float4*)(sBuffer);
-	
+	volatile float4* voxelD = distanceD + blockDim.x * blockDim.y * blockDim.z;	
 	
 	float4 voxelBlock;
 
-	//float3 detectorNormal;
 	float3 MC_bBoxMin;
 	float3 MC_bBoxMax;
 	float t;
@@ -829,7 +544,6 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 
 	unsigned short tempfp16;
 
-	#ifdef SM20
 	surf3Dread(&tempfp16, surfref, x * 2 * 4 + 0, y, z);
 	voxelBlock.x = __half2float(tempfp16);
 	surf3Dread(&tempfp16, surfref, x * 2 * 4 + 2, y, z);
@@ -838,9 +552,6 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 	voxelBlock.z = __half2float(tempfp16);
 	surf3Dread(&tempfp16, surfref, x * 2 * 4 + 6, y, z);
 	voxelBlock.w = __half2float(tempfp16);
-	#else
-	voxelBlock = vol2[voxelIndex];
-	#endif
 
 
 	//adopt x coordinate to single voxels, not voxelBlocks
@@ -862,11 +573,6 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 
 	//The loop has been manually unrolled: nvcc cannot handle inner loops
 	//first corner
-	//ray.x = -c_projNorm.x;
-	//ray.y = -c_projNorm.y;
-	//ray.z = -c_projNorm.z;
-
-	//ray = normalize(ray);
 	t = (c_projNorm.x * MC_bBoxMin.x + c_projNorm.y * MC_bBoxMin.y + c_projNorm.z * MC_bBoxMin.z);
 	t += (-c_projNorm.x * c_detektor.x - c_projNorm.y * c_detektor.y - c_projNorm.z * c_detektor.z);
 	t = abs(t);
@@ -978,20 +684,6 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 		//MC_bBoxMin.y = MC_bBoxMax.y;
 		//MC_bBoxMax.y = temp;
 	}
-	//if (c_projNorm.x * c_projNorm.y >= 0) 
-	//{
-	//	float temp = MC_bBoxMin.y;
-	//	MC_bBoxMin.y = MC_bBoxMax.y;
-	//	MC_bBoxMax.y = temp;
-
-	//	
-	//}
-	//else
-	//{
-	//	float ttemp = MC_bBoxMin.x;
-	//	MC_bBoxMin.x = MC_bBoxMax.x;
-	//	MC_bBoxMax.x = ttemp;
-	//}
 
 	//Convert global coordinated to projection pixel indices
 	MatrixVector3Mul(c_DetectorMatrix, &MC_bBoxMin);    
@@ -1030,9 +722,6 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 	{				
 		for ( pixel_x = pixelBorders.x + maxOverSampleInv*0.5f ; pixel_x < pixelBorders.y ; pixel_x+=maxOverSampleInv)	
 		{
-			/*float pixel_xr = pixel_x + (curand_uniform(&state) - 0.5f) * maxOverSampleInv;
-			float pixel_yr = pixel_y + (curand_uniform(&state) - 0.5f) * maxOverSampleInv;*/
-
 			float xAniso;
 			float yAniso;
 
@@ -1212,53 +901,6 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 		}//for loop y-pixel
 	}//for loop x-pixel
 
-//	float len = 0;
-//	float3 lengths;
-//	
-//	lengths.x = 100;
-//	if (x > c_volumeDim.x * 0.5f)
-//	{
-//		if (c_volumeDim.x - x < 100.0f)
-//			lengths.x = c_volumeDim.x -x;
-//	}
-//	else
-//	{
-//		if (x < 100.0f)
-//			lengths.x = x;
-//	}
-//	
-//	
-//	lengths.y = 100;
-//	if (x > c_volumeDim.y * 0.5f)
-//	{
-//		if (c_volumeDim.y - y < 100.0f)
-//			lengths.y = c_volumeDim.x -y;
-//	}
-//	else
-//	{
-//		if (y < 100.0f)
-//			lengths.y = y;
-//	}
-//	
-//	
-//	lengths.z = 100;
-//	if (x > c_volumeDim.z * 0.5f)
-//	{
-//		if (c_volumeDim.z - z < 100.0f)
-//			lengths.z = c_volumeDim.x -z;
-//	}
-//	else
-//	{
-//		if (z < 100.0f)
-//			lengths.z = z;
-//	}
-//
-//	len = sqrtf(lengths.x * lengths.x + lengths.y * lengths.y + lengths.z * lengths.z);
-//	if (len < 100)
-//		len = 1.0f - expf(-(len * len));
-//	else
-//		len = 1.0f;
-
 	//Only positive distance values are allowed
 	distanceD[index2].x = fmaxf (0.f, distanceD[index2].x);
 	distanceD[index2].y = fmaxf (0.f, distanceD[index2].y);
@@ -1270,13 +912,7 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 	if (distanceD[index2].y != 0.0f) voxelBlock.y += (lambda * voxelD[index2].y / (float)distanceD[index2].y);
 	if (distanceD[index2].z != 0.0f) voxelBlock.z += (lambda * voxelD[index2].z / (float)distanceD[index2].z);
 	if (distanceD[index2].w != 0.0f) voxelBlock.w += (lambda * voxelD[index2].w / (float)distanceD[index2].w);
-
-
-	//store values in global memory
-	//__syncthreads();
-	//vol2[voxelIndex] = temp2;
 	
-	#ifdef SM20
 	tempfp16 = __float2half_rn(voxelBlock.x);
 	surf3Dwrite(tempfp16, surfref, x * 2 + 0, y, z);
 	tempfp16 = __float2half_rn(voxelBlock.y);
@@ -1285,9 +921,6 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 	surf3Dwrite(tempfp16, surfref, x * 2 + 4, y, z);
 	tempfp16 = __float2half_rn(voxelBlock.w);
 	surf3Dwrite(tempfp16, surfref, x * 2 + 6, y, z);
-	#else
-	vol2[voxelIndex] = voxelBlock;
-	#endif
 }
 
 

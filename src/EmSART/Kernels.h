@@ -233,6 +233,15 @@ public:
 	void SetData(float* data);
 };
 
+class DimBordersKernel : public Cuda::CudaKernel
+{
+public:
+	DimBordersKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
+	DimBordersKernel(CUmodule aModule);
+
+	float operator()(Cuda::CudaPitchedDeviceVariable& image, float4 crop, float4 cropDim);
+};
+
 
 void SetConstantValues(Cuda::CudaKernel& kernel, Volume<unsigned short>& vol, Projection& proj, int index, int subVol, Matrix<float>& m, Matrix<float>& mInv);
 

@@ -27,16 +27,16 @@
 #include <cuda.h>
 #include "Constants.h"
 
-texture< VOXEL, 3, cudaReadModeNormalizedFloat > t_dataset;
-texture< float4, 1, cudaReadModeElementType > t_transfer_function;
-texture< float4, 1, cudaReadModeElementType > t_pre_integration_1D;
-texture< float4, 2, cudaReadModeElementType > t_pre_integration_2D;
+//texture< VOXEL, 3, cudaReadModeNormalizedFloat > t_dataset;
+//texture< float4, 1, cudaReadModeElementType > t_transfer_function;
+//texture< float4, 1, cudaReadModeElementType > t_pre_integration_1D;
+//texture< float4, 2, cudaReadModeElementType > t_pre_integration_2D;
 //texture<float4, 1, cudaReadModeElementType> transferTex;
 
 //__device__ cudaArray *t_array_dataset;
-cudaArray* t_array_dataset;
-cudaArray* t_array_transfer_function;
-cudaArray* t_array_pre_integration_1D;
-cudaArray* t_array_pre_integration_2D;
+//cudaArray* t_array_dataset;
+//cudaArray* t_array_transfer_function;
+//cudaArray* t_array_pre_integration_1D;
+//cudaArray* t_array_pre_integration_2D;
 
 #endif

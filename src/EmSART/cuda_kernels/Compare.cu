@@ -129,6 +129,74 @@ void compare(int proj_x, int proj_y, size_t stride, float* real_raw, float* virt
 
 }
 
+extern "C"
+__global__
+void dimBorders(int proj_x, int proj_y, size_t stride, float* image, float4 cutLength, float4 dimLength)
+{
+	// integer pixel coordinates	
+	const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+	const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (x >= proj_x || y >= proj_y)
+		return;
+
+	unsigned int i = (y * stride / sizeof(float)) + x;
+
+	float pixel = image[i];
+	float distXA = 1.0f;
+	float distXB = 1.0f;
+	float distYA = 1.0f;
+	float distYB = 1.0f;
+
+
+	//dim border
+	if (y < cutLength.z + dimLength.z)
+	{
+		float w = (y - cutLength.z) / dimLength.z;
+		if (w < 0) w = 0;
+		distYB = 1.0f - expf(-(w * w * 9.0f));
+	}
+	else
+	{
+		distYB = 1.0f;
+	}
+
+	if (y > proj_y - dimLength.w - cutLength.w - 1)
+	{
+		float w = ((proj_y - y - 1) - cutLength.w - (proj_y - 1)) / dimLength.w;
+		if (w < 0) w = 0.0f;
+		distYA = 1.0f - expf(-(w * w * 9.0f));
+	}
+	else
+	{
+		distYA = 1.0f;
+	}
+
+	if (x < cutLength.y + dimLength.y)
+	{
+		float w = (x - cutLength.y) / dimLength.y;
+		if (w < 0) w = 0;
+		distXB = 1.0f - expf(-(w * w * 9.0f));
+	}
+	else
+	{
+		distXB = 1.0f;
+	}
+
+	if (x > proj_x - dimLength.x - cutLength.x - 1)
+	{
+		float w = ((proj_x - x - 1) - cutLength.x - (proj_x - 1)) / dimLength.x;
+		if (w < 0) w = 0.0f;
+		distXA = 1.0f - expf(-(w * w * 9.0f));
+	}
+	else
+	{
+		distXA = 1.0f;
+	}
+
+	image[i] = distXA * distXB * distYA * distYB * pixel;
+}
+
 __device__ float distance(float ax, float ay, float bx, float by)
 {
 	return sqrt((ax - bx) * (ax - bx) + (ay - by) * (ay - by));

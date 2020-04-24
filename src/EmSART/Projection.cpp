@@ -25,8 +25,8 @@
 #include "utils/Config.h"
 #include <algorithm>
 
-Projection::Projection(ProjectionSource* aPs, MarkerFile* aMarkers)
-	: ps(aPs), markers(aMarkers), extraShifts(new float2[aPs->GetProjectionCount()])
+Projection::Projection(ProjectionSource* aPs, MarkerFile* aMarkers, bool aCompensateImageRotation)
+	: ps(aPs), markers(aMarkers), extraShifts(new float2[aPs->GetProjectionCount()]), compensateImageRotation(aCompensateImageRotation)
 {
 	float2 zero;
 	zero.x = 0;
@@ -77,14 +77,33 @@ float Projection::GetPixelSize()
 	return ps->GetPixelSize(); // --> already in nm! / 10.0f;  //Angstrom to nm
 }
 
+float Projection::GetImageRotationToCompensate(uint aIndex)
+{
+	if (!compensateImageRotation)
+	{
+		return 0;
+	}
+
+	double psiAngle = -(*markers)(MFI_RotationPsi, aIndex, 0) / 180.0 * (double)M_PI;
+	if (Configuration::Config::GetConfig().UseFixPsiAngle)
+		psiAngle = -Configuration::Config::GetConfig().PsiAngle / 180.0 * (double)M_PI;
+
+	return (float)psiAngle;
+}
+
 Matrix<float> Projection::RotateMatrix(uint aIndex, Matrix<float>& matrix)
 {
-	double tiltAngle = ((*markers)(MFI_TiltAngle, aIndex, 0) + Configuration::Config::GetConfig().AddTiltAngle) / 180.0 * (double)M_PI;
+	double tiltAngle = ((double)(*markers)(MFI_TiltAngle, aIndex, 0) + (double)Configuration::Config::GetConfig().AddTiltAngle) / 180.0 * (double)M_PI;
 	double tiltXAngle = (Configuration::Config::GetConfig().AddTiltXAngle) / 180.0 * (double)M_PI;
 	double psiAngle  = -(*markers)(MFI_RotationPsi, aIndex, 0) / 180.0 * (double)M_PI;
 	if (Configuration::Config::GetConfig().UseFixPsiAngle)
         psiAngle = -Configuration::Config::GetConfig().PsiAngle / 180.0 * (double)M_PI;
 	double phiAngle = Configuration::Config::GetConfig().PhiAngle / 180.0 * (double)M_PI;
+
+	if (compensateImageRotation)
+	{
+		psiAngle = 0;
+	}
 	
 	Matrix<double> matrixD(3,1);
 	Matrix<double> mPsi(3,3);
@@ -182,6 +201,19 @@ float3 Projection::GetPosition(uint aIndex)
 	}
 	float shiftX = (*markers)(MFI_X_Shift, aIndex, 0) + extraShifts[aIndex].x;
 	float shiftY = (*markers)(MFI_Y_Shift, aIndex, 0) + extraShifts[aIndex].y;
+
+	if (compensateImageRotation)
+	{
+		float rotAngle = GetImageRotationToCompensate(aIndex);
+		float cosAngle = cos(rotAngle); 
+		float sinAngle = sin(rotAngle);
+
+		float rotatedShiftX = cosAngle * shiftX - sinAngle * shiftY;
+		float rotatedShiftY = sinAngle * shiftX + cosAngle * shiftY;
+
+		shiftX = rotatedShiftX;
+		shiftY = rotatedShiftY;
+	}
 
 	Matrix<float> vec = float3ToMatrix(pos);
 
@@ -426,9 +458,9 @@ int Projection::GetMinimumTiltIndex()
 float2 Projection::GetMinimumTiltShift()
 {
 	float2 shift;
-	int minTiltIndex = GetMinimumTiltIndex();
+	/*int minTiltIndex = GetMinimumTiltIndex();
     shift.x = -GetPixelUPitch(minTiltIndex).x * (*markers)(MFI_X_Shift, minTiltIndex, 0) - GetPixelVPitch(minTiltIndex).x * (*markers)(MFI_X_Shift, minTiltIndex, 0);
-	shift.y = -GetPixelUPitch(minTiltIndex).y * (*markers)(MFI_Y_Shift, minTiltIndex, 0) - GetPixelVPitch(minTiltIndex).y * (*markers)(MFI_Y_Shift, minTiltIndex, 0);
+	shift.y = -GetPixelUPitch(minTiltIndex).y * (*markers)(MFI_Y_Shift, minTiltIndex, 0) - GetPixelVPitch(minTiltIndex).y * (*markers)(MFI_Y_Shift, minTiltIndex, 0);*/
 
 
 	shift.x = 0;//(*markers)(MFI_Y_Shift, minTiltIndex, 0);

@@ -48,6 +48,7 @@ class Projection
 private:
 	Matrix<float> float3ToMatrix(float3 val);
 	float3 matrixToFloat3(Matrix<float>& val);
+	bool compensateImageRotation;
 
 protected:
 	ProjectionSource* ps;
@@ -55,7 +56,7 @@ protected:
 	float2* extraShifts;
 
 public:
-	Projection(ProjectionSource* aPs, MarkerFile* aMarkers);
+	Projection(ProjectionSource* aPs, MarkerFile* aMarkers, bool aCompensateImageRotation);
 	~Projection();
 
 	dim3 GetDimension();
@@ -85,6 +86,8 @@ public:
 	float2 GetExtraShift(size_t index);
 	void SetExtraShift(size_t index, float2 extraShift);
 	void AddExtraShift(size_t index, float2 extraShift);
+
+	float GetImageRotationToCompensate(uint index);
 };
 
 #endif

@@ -221,6 +221,7 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 	convVol3DKernel(modules.modBP),
 	ctf(modules.modCTF),
 	cts(modules.modCTS),
+	dimBordersKernel(modules.modComp),
 #ifdef REFINE_MODE
 	rotKernel(modules.modWBP, aConfig.SizeSubVol),
 	maxShiftWeightedKernel(modules.modWBP),
@@ -253,6 +254,7 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 	cts.SetComputeSize(proj.GetMaxDimension(), proj.GetMaxDimension(), 1);
 	maxShiftKernel.SetComputeSize(proj.GetMaxDimension(), proj.GetMaxDimension(), 1);
 	convVolKernel.SetComputeSize(config.RecDimensions.x, config.RecDimensions.y, 1);
+	dimBordersKernel.SetComputeSize(proj.GetWidth(), proj.GetHeight(), 1);
 	
 	//Alloc device variables
 	realprojUS_d.Alloc(proj.GetWidth() * sizeof(int), proj.GetHeight(), sizeof(int));
@@ -506,6 +508,7 @@ void Reconstructor::ForwardProjectionCTF(Volume<TVol>* vol, CudaTextureObject3D&
 
 	if (!volumeIsEmpty)
 	{
+		//Forward projection is not done in WBP --> no need to adapt magAnisotropy
 		SetConstantValues(slicerKernel, *vol, proj, index, mpi_part, magAnisotropy, magAnisotropyInv);
 		SetConstantValues(volTravLenKernel, *vol, proj, index, mpi_part, magAnisotropy, magAnisotropyInv);
 
@@ -516,7 +519,7 @@ void Reconstructor::ForwardProjectionCTF(Volume<TVol>* vol, CudaTextureObject3D&
 		{
 			dist_d.Memset(0);
 
-			float defocusAngle = defocus.GetAstigmatismAngle(index);
+			float defocusAngle = defocus.GetAstigmatismAngle(index) + proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0;
 			float defocusMin;
 			float defocusMax;
 			GetDefocusMinMax(ray, index, defocusMin, defocusMax);
@@ -618,6 +621,7 @@ void Reconstructor::ForwardProjectionCTF(Volume<TVol>* vol, CudaTextureObject3D&
 	}
 	else
 	{
+		//Forward projection is not done in WBP --> no need to adapt magAnisotropy
 		SetConstantValues(volTravLenKernel, *vol, proj, index, mpi_part, magAnisotropy, magAnisotropyInv);
 
 		runtime = volTravLenKernel(proj.GetWidth(), proj.GetHeight(), dist_d);
@@ -654,6 +658,7 @@ void Reconstructor::ForwardProjectionNoCTFROI(Volume<TVol>* vol, CudaTextureObje
 
 	if (!volumeIsEmpty)
 	{
+		//Forward projection is not done in WBP --> no need to adapt magAnisotropy
 		SetConstantValues(fpKernel, *vol, proj, index, mpi_part, magAnisotropy, magAnisotropyInv);
 		runtime = fpKernel(proj.GetWidth(), proj.GetHeight(), proj_d, dist_d, texVol, roiMin, roiMax);
 
@@ -684,6 +689,7 @@ void Reconstructor::ForwardProjectionNoCTFROI(Volume<TVol>* vol, CudaTextureObje
 	}
 	else
 	{
+		//Forward projection is not done in WBP --> no need to adapt magAnisotropy
 		SetConstantValues(volTravLenKernel, *vol, proj, index, mpi_part, magAnisotropy, magAnisotropyInv);
 
 		runtime = volTravLenKernel(proj.GetWidth(), proj.GetHeight(), dist_d, roiMin, roiMax);
@@ -726,6 +732,7 @@ void Reconstructor::ForwardProjectionCTFROI(Volume<TVol>* vol, CudaTextureObject
 
 	if (!volumeIsEmpty)
 	{
+		//Forward projection is not done in WBP --> no need to adapt magAnisotropy
 		SetConstantValues(slicerKernel, *vol, proj, index, mpi_part, magAnisotropy, magAnisotropyInv);
 		SetConstantValues(volTravLenKernel, *vol, proj, index, mpi_part, magAnisotropy, magAnisotropyInv);
 
@@ -738,7 +745,7 @@ void Reconstructor::ForwardProjectionCTFROI(Volume<TVol>* vol, CudaTextureObject
 		{
 			dist_d.Memset(0);
 
-			float defocusAngle = defocus.GetAstigmatismAngle(index);
+			float defocusAngle = defocus.GetAstigmatismAngle(index) + proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0;
 			float defocusMin;
 			float defocusMax;
 			GetDefocusMinMax(ray, index, defocusMin, defocusMax);
@@ -840,6 +847,7 @@ void Reconstructor::ForwardProjectionCTFROI(Volume<TVol>* vol, CudaTextureObject
 	}
 	else
 	{
+		//Forward projection is not done in WBP --> no need to adapt magAnisotropy
 		SetConstantValues(volTravLenKernel, *vol, proj, index, mpi_part, magAnisotropy, magAnisotropyInv);
 
 		runtime = volTravLenKernel(proj.GetWidth(), proj.GetHeight(), dist_d, roiMin, roiMax);
@@ -873,6 +881,12 @@ void Reconstructor::BackProjectionNoCTF(Volume<TVol>* vol, int proj_index, float
 	float3 volDim = vol->GetSubVolumeDimension(mpi_part);
 	bpKernel.SetComputeSize((int)volDim.x, (int)volDim.y, (int)volDim.z);
 
+	if (config.WBP_NoSART)
+	{
+		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
+		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
+	}
+
 	int2 pA, pB, pC, pD;
 
 	proj.ComputeHitPoints(*vol, proj_index, pA, pB, pC, pD);
@@ -894,6 +908,12 @@ template<class TVol>
 void Reconstructor::BackProjectionNoCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, CUsurfref surfref, int proj_index)
 {
 	size_t batchSize = subVolumes.size();
+
+	if (config.WBP_NoSART)
+	{
+		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
+		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
+	}
 
 	for (size_t batch = 0; batch < batchSize; batch++)
 	{
@@ -925,6 +945,12 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, int proj_index, float S
 	int x = proj.GetWidth();
 	int y = proj.GetHeight();
 
+	if (config.WBP_NoSART)
+	{
+		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
+		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
+	}
+
 	if (mpi_part == 0)
 		printf("\n");
 
@@ -936,7 +962,7 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, int proj_index, float S
 		SetConstantValues(bpKernel, *vol, proj, proj_index, mpi_part, magAnisotropy, magAnisotropyInv);
 
 
-		float defocusAngle = defocus.GetAstigmatismAngle(proj_index);
+		float defocusAngle = defocus.GetAstigmatismAngle(proj_index) + proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0;
 		float defocusMin;
 		float defocusMax;
 		GetDefocusMinMax(ray, proj_index, defocusMin, defocusMax);
@@ -982,6 +1008,12 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& 
 	int x = proj.GetWidth();
 	int y = proj.GetHeight();
 
+	if (config.WBP_NoSART)
+	{
+		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
+		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
+	}
+
 	if (mpi_part == 0)
 		printf("\n");
 
@@ -990,7 +1022,7 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& 
 
 	for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize())
 	{
-		float defocusAngle = defocus.GetAstigmatismAngle(proj_index);
+		float defocusAngle = defocus.GetAstigmatismAngle(proj_index) + proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0;
 		float defocusMin;
 		float defocusMax;
 		GetDefocusMinMax(ray, proj_index, defocusMin, defocusMax);
@@ -1267,8 +1299,49 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 		nppSafeCall(nppiSubC_32f_C1R((Npp32f*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), mean_hf,
 			(Npp32f*)realproj_d.GetDevicePtr(), realproj_d.GetPitch(), roiAll));
 		nppSafeCall(nppiDivC_32f_C1IR(-std_hf, (Npp32f*)realproj_d.GetDevicePtr(), realproj_d.GetPitch(), roiAll));
-		//projSquare_d.Memset(0);
-		float t = cts(realproj_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, false);
+
+
+		//rotate image so that tilt axis lies parallel to image axis to avoid smearing if WBP-filter wedge:
+
+		Matrix<double> shiftToCenter(3, 3);
+		Matrix<double> rotate(3, 3);
+		Matrix<double> shiftBack(3, 3);
+		double psiAngle = proj.GetImageRotationToCompensate((uint)proj_index);
+
+		shiftToCenter(0, 0) = 1; shiftToCenter(0, 1) = 0; shiftToCenter(0, 2) = -proj.GetWidth() / 2.0 + 0.5;
+		shiftToCenter(1, 0) = 0; shiftToCenter(1, 1) = 1; shiftToCenter(1, 2) = -proj.GetHeight() / 2.0 + 0.5;
+		shiftToCenter(2, 0) = 0; shiftToCenter(2, 1) = 0; shiftToCenter(2, 2) = 1;
+
+		rotate(0, 0) = cos(psiAngle); rotate(0, 1) = -sin(psiAngle); rotate(0, 2) = 0;
+		rotate(1, 0) = sin(psiAngle); rotate(1, 1) =  cos(psiAngle); rotate(1, 2) = 0;
+		rotate(2, 0) = 0;             rotate(2, 1) = 0;              rotate(2, 2) = 1;
+
+		shiftBack(0, 0) = 1; shiftBack(0, 1) = 0; shiftBack(0, 2) = proj.GetWidth() / 2.0 - 0.5;
+		shiftBack(1, 0) = 0; shiftBack(1, 1) = 1; shiftBack(1, 2) = proj.GetHeight() / 2.0 - 0.5;
+		shiftBack(2, 0) = 0; shiftBack(2, 1) = 0; shiftBack(2, 2) = 1;
+
+		Matrix<double> rotationMatrix = shiftBack * (rotate * shiftToCenter);
+
+		double affineMatrix[2][3];
+		affineMatrix[0][0] = rotationMatrix(0, 0); affineMatrix[0][1] = rotationMatrix(0, 1); affineMatrix[0][2] = rotationMatrix(0, 2);
+		affineMatrix[1][0] = rotationMatrix(1, 0); affineMatrix[1][1] = rotationMatrix(1, 1); affineMatrix[1][2] = rotationMatrix(1, 2);
+
+		NppiSize imageSize;
+		NppiRect roi;
+		imageSize.width = proj.GetWidth();
+		imageSize.height = proj.GetHeight();
+		roi.x = 0;
+		roi.y = 0;
+		roi.width = proj.GetWidth();
+		roi.height = proj.GetHeight();
+
+		dimBordersKernel(realproj_d, config.Crop, config.CropDim);
+		realprojUS_d.Memset(0);
+
+		nppSafeCall(nppiWarpAffine_32f_C1R((Npp32f*)realproj_d.GetDevicePtr(), imageSize, (int)realproj_d.GetPitch(), roi, 
+			(Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), roi, affineMatrix, NppiInterpolationMode::NPPI_INTER_CUBIC));
+		
+		float t = cts(realprojUS_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, false);
 	}
 
 	if (!skipFilter || config.WBP_NoSART)
@@ -1306,7 +1379,7 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 		if (config.WBP_NoSART)
 		{
 			//Do WBP weighting
-			wbp(fft_d, roiFFT.width * sizeof(Npp32fc), proj.GetMaxDimension(), markers(MFI_RotationPsi, proj_index, 0), config.WBPFilter);
+			//wbp(fft_d, roiFFT.width * sizeof(Npp32fc), proj.GetMaxDimension(), 0, config.WBPFilter);
 		}
 
 		cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
@@ -1432,6 +1505,12 @@ void Reconstructor::PrintGeometry(Volume<TVol>* vol, int index)
 
 	printf("\n\nProjection: %d\n", index);
 
+	if (config.WBP_NoSART)
+	{
+		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
+		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
+	}
+
 	SetConstantValues(slicerKernel, *vol, proj, index, mpi_part, magAnisotropy, magAnisotropyInv);
 	SetConstantValues(volTravLenKernel, *vol, proj, index, mpi_part, magAnisotropy, magAnisotropyInv);
 
@@ -1502,7 +1581,7 @@ void Reconstructor::PrintGeometry(Volume<TVol>* vol, int index)
 	{
 		dist_d.Memset(0);
 
-		float defocusAngle = defocus.GetAstigmatismAngle(index);
+		float defocusAngle = defocus.GetAstigmatismAngle(index) + proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0;
 		float defocusMin;
 		float defocusMax;
 		GetDefocusMinMax(ray + config.CTFSliceThickness / proj.GetPixelSize() * 0.5f, index, defocusMin, defocusMax);

@@ -348,7 +348,7 @@ int main(int argc, char* argv[])
 		MarkerFile markers(aConfig.MarkerFile, aConfig.ReferenceMarker);
 
 		//Create projection object to handle projection data
-		Projection proj(projSource, &markers);
+		Projection proj(projSource, &markers, aConfig.WBP_NoSART);
 
 		//Create volume dataset (host)
 		Volume<unsigned short> *volFP16 = NULL;

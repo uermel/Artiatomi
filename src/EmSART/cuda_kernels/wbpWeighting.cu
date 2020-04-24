@@ -68,7 +68,7 @@ void wbpWeighting(cuComplex* img, size_t stride, unsigned int pixelcount, float 
 	xpos = cosin * xpos - sinus * ypos;
 	ypos = sinus * temp + cosin * ypos;
 	
-	float length = ypos / pixelcount / 2.0f;
+	float length = ypos / (pixelcount / 2.0f);
 	float weight = 1;
 	switch (fm)
 	{

@@ -96,6 +96,7 @@ private:
 	DoseWeightingKernel doseWeightingKernel;
 	ConjKernel conjKernel;
 	MaxShiftKernel maxShiftKernel;
+	DimBordersKernel dimBordersKernel;
 #ifdef REFINE_MODE
 	MaxShiftWeightedKernel maxShiftWeightedKernel;
 	FindPeakKernel findPeakKernel;

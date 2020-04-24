@@ -364,7 +364,7 @@ int main(int argc, char* argv[])
 		MarkerFile markers(aConfig.MarkerFile, aConfig.ReferenceMarker);
 
 		//Create projection object to handle projection data
-		Projection proj(projSource, &markers);
+		Projection proj(projSource, &markers, aConfig.WBP_NoSART);
 
 		MotiveList ml(aConfig.MotiveList, aConfig.ScaleMotivelistPosition, aConfig.ScaleMotivelistShift);
 		vector<MotiveList> supportMotiveLists;
