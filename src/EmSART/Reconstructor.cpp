@@ -911,8 +911,8 @@ void Reconstructor::BackProjectionNoCTF(Volume<TVol>* vol, vector<Volume<TVol>*>
 
 	if (config.WBP_NoSART)
 	{
-		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
-		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
+		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
+		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
 	}
 
 	for (size_t batch = 0; batch < batchSize; batch++)
@@ -1022,7 +1022,7 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& 
 
 	for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize())
 	{
-		float defocusAngle = defocus.GetAstigmatismAngle(proj_index) + proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0;
+		float defocusAngle = defocus.GetAstigmatismAngle(proj_index) + proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0;
 		float defocusMin;
 		float defocusMax;
 		GetDefocusMinMax(ray, proj_index, defocusMin, defocusMax);
@@ -1379,7 +1379,7 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 		if (config.WBP_NoSART)
 		{
 			//Do WBP weighting
-			//wbp(fft_d, roiFFT.width * sizeof(Npp32fc), proj.GetMaxDimension(), 0, config.WBPFilter);
+			wbp(fft_d, roiFFT.width * sizeof(Npp32fc), proj.GetMaxDimension(), 0, config.WBPFilter);
 		}
 
 		cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
