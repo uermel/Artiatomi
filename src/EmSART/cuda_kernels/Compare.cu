@@ -93,7 +93,12 @@ void compare(int proj_x, int proj_y, size_t stride, float* real_raw, float* virt
 		
 	if (y > proj_y - dimLength.w-cutLength.w - 1)
 	{
-		float w = ((proj_y - y - 1) - cutLength.w - (proj_y - 1)) / dimLength.w;
+        // incorrect:
+        //float w = ((proj_y - y - 1) - cutLength.w - (proj_y - 1)) / dimLength.w;
+
+        //correct:
+        float w = (proj_y - 1 - y - cutLength.w) / dimLength.w;
+
 		if (w<0) w = 0.0f;
 		distYA = 1.0f - expf(-(w * w * 9.0f));
 	}
@@ -115,7 +120,12 @@ void compare(int proj_x, int proj_y, size_t stride, float* real_raw, float* virt
 		
 	if (x > proj_x - dimLength.x-cutLength.x - 1)
 	{
-		float w = ((proj_x - x - 1) - cutLength.x - (proj_x - 1)) / dimLength.x;
+        // incorrect:
+        //float w = ((proj_x - x - 1) - cutLength.x - (proj_x - 1)) / dimLength.x;
+
+        // correct:
+        float w = (proj_x - 1 - x - cutLength.x)/dimLength.x;
+
 		if (w<0) w = 0.0f;
 		distXA = 1.0f - expf(-(w * w * 9.0f));
 	}
@@ -163,7 +173,12 @@ void dimBorders(int proj_x, int proj_y, size_t stride, float* image, float4 cutL
 
 	if (y > proj_y - dimLength.w - cutLength.w - 1)
 	{
-		float w = ((proj_y - y - 1) - cutLength.w - (proj_y - 1)) / dimLength.w;
+        // incorrect:
+        //float w = ((proj_y - y - 1) - cutLength.w - (proj_y - 1)) / dimLength.w;
+
+        //correct:
+        float w = (proj_y - 1 - y - cutLength.w) / dimLength.w;
+
 		if (w < 0) w = 0.0f;
 		distYA = 1.0f - expf(-(w * w * 9.0f));
 	}
@@ -185,7 +200,12 @@ void dimBorders(int proj_x, int proj_y, size_t stride, float* image, float4 cutL
 
 	if (x > proj_x - dimLength.x - cutLength.x - 1)
 	{
-		float w = ((proj_x - x - 1) - cutLength.x - (proj_x - 1)) / dimLength.x;
+        // incorrect:
+        //float w = ((proj_x - x - 1) - cutLength.x - (proj_x - 1)) / dimLength.x;
+
+        // correct:
+        float w = (proj_x - 1 - x - cutLength.x)/dimLength.x;
+
 		if (w < 0) w = 0.0f;
 		distXA = 1.0f - expf(-(w * w * 9.0f));
 	}
