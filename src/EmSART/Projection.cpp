@@ -813,48 +813,28 @@ void Projection::ComputeHitPoints(Volume<unsigned short>& vol, uint index, int2&
 	MatrixVector3Mul((float4*)matrix, &p3);
 	MatrixVector3Mul((float4*)matrix, &p4);
 
-	if  (fabs(p1.x) < fabs(p2.x))
-		pA.x = p1.x;
-	else
-		pA.x = p2.x;
-	if  (fabs(p1.y) < fabs(p2.y))
-		pA.y = p1.y;
-	else
-		pA.y = p2.y;
-	
-	if  (fabs(p3.x) < fabs(p4.x))
-		pB.x = p3.x;
-	else
-		pB.x = p4.x;
-	if  (fabs(p3.y) < fabs(p4.y))
-		pB.y = p3.y;
-	else
-		pB.y = p4.y;
-
-	
 	MatrixVector3Mul((float4*)matrix, &p5);
 	MatrixVector3Mul((float4*)matrix, &p6);
 	MatrixVector3Mul((float4*)matrix, &p7);
 	MatrixVector3Mul((float4*)matrix, &p8);
 
-	
-	if  (fabs(p5.x) < fabs(p6.x))
-		pC.x = p5.x;
-	else
-		pC.x = p6.x;
-	if  (fabs(p5.y) < fabs(p6.y))
-		pC.y = p5.y;
-	else
-		pC.y = p6.y;
-	
-	if  (fabs(p7.x) < fabs(p8.x))
-		pD.x = p7.x;
-	else
-		pD.x = p8.x;
-	if  (fabs(p7.y) < fabs(p8.y))
-		pD.y = p7.y;
-	else
-		pD.y = p8.y;
+    // Correctly find those points most distant from the center
+    // pA.x --> min(x), pA.y --> min(y)
+    // pB.x --> min(x), pB.y --> max(y)
+    // pC.x --> max(x), pC.y --> min(y)
+    // pD.x --> max(x), pD.y --> max(y)
+
+    // Get minimum/maximum
+    float minX = min({p1.x, p2.x, p3.x, p4.x, p5.x, p6.x, p7.x, p8.x});
+    float maxX = max({p1.x, p2.x, p3.x, p4.x, p5.x, p6.x, p7.x, p8.x});
+    float minY = min({p1.y, p2.y, p3.y, p4.y, p5.y, p6.y, p7.y, p8.y});
+    float maxY = max({p1.y, p2.y, p3.y, p4.y, p5.y, p6.y, p7.y, p8.y});
+
+    // Set
+    pA.x = (int)minX; pA.y = (int)minY;
+    pB.x = (int)minX; pB.y = (int)maxY;
+    pC.x = (int)maxX; pC.y = (int)minY;
+    pD.x = (int)maxX; pD.y = (int)maxY;
 
 
 
@@ -1013,50 +993,30 @@ void Projection::ComputeHitPoints(Volume<float>& vol, uint index, int2& pA, int2
 	MatrixVector3Mul((float4*)matrix, &p2);
 	MatrixVector3Mul((float4*)matrix, &p3);
 	MatrixVector3Mul((float4*)matrix, &p4);
-
-	if  (fabs(p1.x) < fabs(p2.x))
-		pA.x = p1.x;
-	else
-		pA.x = p2.x;
-	if  (fabs(p1.y) < fabs(p2.y))
-		pA.y = p1.y;
-	else
-		pA.y = p2.y;
-	
-	if  (fabs(p3.x) < fabs(p4.x))
-		pB.x = p3.x;
-	else
-		pB.x = p4.x;
-	if  (fabs(p3.y) < fabs(p4.y))
-		pB.y = p3.y;
-	else
-		pB.y = p4.y;
-
 	
 	MatrixVector3Mul((float4*)matrix, &p5);
 	MatrixVector3Mul((float4*)matrix, &p6);
 	MatrixVector3Mul((float4*)matrix, &p7);
 	MatrixVector3Mul((float4*)matrix, &p8);
 
-	
-	if  (fabs(p5.x) < fabs(p6.x))
-		pC.x = p5.x;
-	else
-		pC.x = p6.x;
-	if  (fabs(p5.y) < fabs(p6.y))
-		pC.y = p5.y;
-	else
-		pC.y = p6.y;
-	
-	if  (fabs(p7.x) < fabs(p8.x))
-		pD.x = p7.x;
-	else
-		pD.x = p8.x;
-	if  (fabs(p7.y) < fabs(p8.y))
-		pD.y = p7.y;
-	else
-		pD.y = p8.y;
 
+	// Correctly find those points most distant from the center
+	// pA.x --> min(x), pA.y --> min(y)
+	// pB.x --> min(x), pB.y --> max(y)
+	// pC.x --> max(x), pC.y --> min(y)
+	// pD.x --> max(x), pD.y --> max(y)
+
+	// Get minimum/maximum
+    float minX = min({p1.x, p2.x, p3.x, p4.x, p5.x, p6.x, p7.x, p8.x});
+    float maxX = max({p1.x, p2.x, p3.x, p4.x, p5.x, p6.x, p7.x, p8.x});
+    float minY = min({p1.y, p2.y, p3.y, p4.y, p5.y, p6.y, p7.y, p8.y});
+    float maxY = max({p1.y, p2.y, p3.y, p4.y, p5.y, p6.y, p7.y, p8.y});
+
+    // Set
+    pA.x = (int)minX; pA.y = (int)minY;
+    pB.x = (int)minX; pB.y = (int)maxY;
+    pC.x = (int)maxX; pC.y = (int)minY;
+    pD.x = (int)maxX; pD.y = (int)maxY;
 
 
 	//hitPoint = fminf(MC_bBoxMin, MC_bBoxMax);

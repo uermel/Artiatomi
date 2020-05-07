@@ -75,6 +75,10 @@ public:
 };
 
 typedef struct {
+    float3 m[3];
+} float3x3;
+
+typedef struct {
 	float4 m[4];
 } float4x4;
 
@@ -246,7 +250,7 @@ public:
 	void ConvertVolumeFP16(float* slice, int z);
 	void ConvertVolume3DFP16(float* volume);
 	void MatrixVector3Mul(float4x4 M, float3* v);
-
+    void MatrixVector3Mul(float3x3& M, float xIn, float yIn, float& xOut, float& yOut);
 };
 
 #endif // !RECONSTRUCTOR_H

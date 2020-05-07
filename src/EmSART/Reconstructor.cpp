@@ -50,6 +50,13 @@ void Reconstructor::MatrixVector3Mul(float4x4 M, float3* v)
 	*v = erg;
 }
 
+void Reconstructor::MatrixVector3Mul(float3x3& M, float xIn, float yIn, float& xOut, float& yOut)
+{
+    xOut = M.m[0].x * xIn + M.m[0].y * yIn + M.m[0].z * 1.f;
+    yOut = M.m[1].x * xIn + M.m[1].y * yIn + M.m[1].z * 1.f;
+    //erg.z = M.m[2].x * v->x + M.m[2].y * v->y + M.m[2].z * v->z + 1.f * M.m[2].w;
+}
+
 template<class TVol>
 void Reconstructor::GetDefocusDistances(float & t_in, float & t_out, int index, Volume<TVol>* vol)
 {
@@ -887,12 +894,21 @@ void Reconstructor::BackProjectionNoCTF(Volume<TVol>* vol, int proj_index, float
 		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
 	}
 
-	int2 pA, pB, pC, pD;
-
-	proj.ComputeHitPoints(*vol, proj_index, pA, pB, pC, pD);
-
+    // Find area shaded by volume, cut and dim borders
+    int2 pA, pB, pC, pD;
+    float2 hitA, hitB, hitC, hitD;
+    proj.ComputeHitPoints(*vol, proj_index, pA, pB, pC, pD);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pA.x, (float)pA.y, hitA.x, hitA.y);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pB.x, (float)pB.y, hitB.x, hitB.y);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pC.x, (float)pC.y, hitC.x, hitC.y);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pD.x, (float)pD.y, hitD.x, hitD.y);
+    pA.x = (int)hitA.x; pA.y = (int)hitA.y;
+    pB.x = (int)hitB.x; pB.y = (int)hitB.y;
+    pC.x = (int)hitC.x; pC.y = (int)hitC.y;
+    pD.x = (int)hitD.x; pD.y = (int)hitD.y;
 	cropKernel(proj_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
-	
+
+	// Prepare and execute Backprojection
 	SetConstantValues(bpKernel, *vol, proj, proj_index, mpi_part, magAnisotropy, magAnisotropyInv);
 
 	float runtime = bpKernel(proj.GetWidth(), proj.GetHeight(), config.Lambda / SIRTCount, 
@@ -957,6 +973,21 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, int proj_index, float S
 	float t_in, t_out;
 	GetDefocusDistances(t_in, t_out, proj_index, vol);
 
+	// Find area shaded by volume, cut and dim borders
+    int2 pA, pB, pC, pD;
+    float2 hitA, hitB, hitC, hitD;
+    proj.ComputeHitPoints(*vol, proj_index, pA, pB, pC, pD);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pA.x, (float)pA.y, hitA.x, hitA.y);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pB.x, (float)pB.y, hitB.x, hitB.y);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pC.x, (float)pC.y, hitC.x, hitC.y);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pD.x, (float)pD.y, hitD.x, hitD.y);
+    pA.x = (int)hitA.x; pA.y = (int)hitA.y;
+    pB.x = (int)hitB.x; pB.y = (int)hitB.y;
+    pC.x = (int)hitC.x; pC.y = (int)hitC.y;
+    pD.x = (int)hitD.x; pD.y = (int)hitD.y;
+    cropKernel(proj_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
+
+
 	for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize())
 	{
 		SetConstantValues(bpKernel, *vol, proj, proj_index, mpi_part, magAnisotropy, magAnisotropyInv);
@@ -973,11 +1004,6 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, int proj_index, float S
 			printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b BP Defocus: %-8d nm", (int)defocusMin);
 			fflush(stdout);
 		}
-		int2 pA, pB, pC, pD;
-
-		proj.ComputeHitPoints(*vol, proj_index, pA, pB, pC, pD);
-
-		cropKernel(proj_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
 
 		cts(proj_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, true);
 		cufftSafeCall(cufftExecR2C(handleR2C, (cufftReal*)projSquare_d.GetDevicePtr(), (cufftComplex*)fft_d.GetDevicePtr()));
