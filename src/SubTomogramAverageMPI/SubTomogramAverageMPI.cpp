@@ -1163,19 +1163,26 @@ int main(int argc, char* argv[])
 				{
 					max.MaxIndex(wedgeSum, temp, tempCplx);
 
+					/* TODO AS Write Particle into EM file */
+					float* testParticle = new float[size*size*size];
+					partSum.CopyDeviceToHost(testParticle);
+					emwrite("testParticle.em", testParticle, size, size, size);
+					delete[] testParticle;
+
 					makecplx.MakeCplxWithSub(partSum, partCplx, 0);
 					cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)partCplx.GetDevicePtr(), (cufftComplex*)tempCplx.GetDevicePtr(), CUFFT_FORWARD));
 					fft.FFTShift2(tempCplx, partCplx);
 
 
-					/*float* testWedge = new float[size*size*size];
+					/* TODO AS Write Out wedge to file */
+					float* testWedge = new float[size*size*size];
 					wedgeSum.CopyDeviceToHost(testWedge);
 					emwrite("testWedge.em", testWedge, size, size, size);
 					delete[] testWedge;
 
 					float maxVal = 0;
 					temp.CopyDeviceToHost(&maxVal, sizeof(float));
-					cout << "Max value wedge: " << maxVal << endl;*/
+					cout << "Max value wedge: " << maxVal << endl;
 
 
 					wedgeNorm.WedgeNorm(wedgeSum, partCplx, temp, 0);
