@@ -105,7 +105,7 @@ void ctf(cuComplex* ctf, size_t stride, float defocusMin, float defocusMax, floa
 	float def0 = defocusMin;
 	float def1 = defocusMax;
 
-	float defocus = def0 + (1 - cos(2*beta)) * (def1 - def0);
+	float defocus = def0 + (1 - cos(2*beta)) * (def1 - def0) * 0.5f;
 
 	float length = sqrtf(xpos * xpos + ypos * ypos);
 
