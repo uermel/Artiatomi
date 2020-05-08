@@ -68,9 +68,9 @@ using namespace Cuda;
 #include <limits.h>
 #endif
 
-typedef struct {
-	float3 m[3];
-} float3x3;
+//typedef struct {
+//	float3 m[3];
+//} float3x3;
 
 typedef struct {
 	int particleNr;
