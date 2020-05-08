@@ -88,7 +88,7 @@ public:
 	BPKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim, bool fp16);
 	BPKernel(CUmodule aModule, bool fp16);
 
-    float operator()(int proj_x, int proj_y, float lambda, int maxOverSample, float maxOverSampleInv, Cuda::CudaPitchedDeviceVariable& img, float distMin, float distMax);
+    float operator()(int proj_x, int proj_y, float lambda, int maxOverSample, float maxOverSampleInv, Cuda::CudaTextureObject2D& img, Cuda::CudaSurfaceObject3D& surf,float distMin, float distMax);
 };
 
 class CTFKernel : public Cuda::CudaKernel
@@ -110,22 +110,6 @@ public:
 	float operator()(Cuda::CudaPitchedDeviceVariable& aIn, int maxsize, Cuda::CudaDeviceVariable& aOut, int borderSizeX, int borderSizeY, bool mirrorY, bool fillZero);
 };
 
-class SamplesToCoefficients2DX : public Cuda::CudaKernel
-{
-public:
-	SamplesToCoefficients2DX(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
-
-	float operator()(Cuda::CudaPitchedDeviceVariable& image);
-};
-
-class SamplesToCoefficients2DY : public Cuda::CudaKernel
-{
-public:
-	SamplesToCoefficients2DY(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
-
-	float operator()(Cuda::CudaPitchedDeviceVariable& image);
-};
-
 
 
 class ConvVolKernel : public Cuda::CudaKernel
@@ -134,7 +118,7 @@ public:
 	ConvVolKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
 	ConvVolKernel(CUmodule aModule);
 
-    float operator()(Cuda::CudaPitchedDeviceVariable& img, unsigned int z);
+    float operator()(Cuda::CudaPitchedDeviceVariable& img, Cuda::CudaSurfaceObject3D& surf, unsigned int z);
 };
 
 class ConvVol3DKernel : public Cuda::CudaKernel
@@ -143,7 +127,7 @@ public:
 	ConvVol3DKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
 	ConvVol3DKernel(CUmodule aModule);
 
-	float operator()(Cuda::CudaPitchedDeviceVariable& img);
+	float operator()(Cuda::CudaPitchedDeviceVariable& img, Cuda::CudaSurfaceObject3D& surf);
 };
 
 

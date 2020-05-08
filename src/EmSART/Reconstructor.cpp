@@ -90,16 +90,16 @@ void Reconstructor::GetDefocusDistances(float & t_in, float & t_out, int index, 
 	MatrixVector3Mul(c_DetectorMatrix, &hitPoint);
 
 	//--> pixelBorders.x = x.min; pixelBorders.z = y.min;
-	int hitX = round(hitPoint.x);
-	int hitY = round(hitPoint.y);
+	float hitX = round(hitPoint.x);
+	float hitY = round(hitPoint.y);
 
 	//printf("HitX: %d, HitY: %d\n", hitX, hitY);
 
 	//Shoot ray from hit point on projection towards volume to get the distance to entry and exit point
 	//float3 pos = proj.GetPosition(index) + hitX * proj.GetPixelUPitch(index) + hitY * proj.GetPixelVPitch(index);
 	float3 pos = proj.GetPosition(index) + hitX * proj.GetPixelUPitch(index) + hitY * proj.GetPixelVPitch(index);
-	hitX = proj.GetWidth() * 0.5f;
-	hitY = proj.GetHeight() * 0.5f;
+	hitX = (float)proj.GetWidth() * 0.5f;
+	hitY = (float)proj.GetHeight() * 0.5f;
 	float3 pos2 = proj.GetPosition(index) + hitX * proj.GetPixelUPitch(index) + hitX * proj.GetPixelVPitch(index);
 	float3 nvec = proj.GetNormalVector(index);
 
@@ -243,8 +243,8 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 	squareBorderSizeX(0),
 	squareBorderSizeY(0),
 	squarePointerShift(0),
-	magAnisotropy(GetMagAnistropyMatrix(aConfig.MagAnisotropyAmount, aConfig.MagAnisotropyAngleInDeg, proj.GetWidth(), proj.GetHeight())),
-	magAnisotropyInv(GetMagAnistropyMatrix(1.0f / aConfig.MagAnisotropyAmount, aConfig.MagAnisotropyAngleInDeg, proj.GetWidth(), proj.GetHeight()))
+	magAnisotropy(GetMagAnistropyMatrix(aConfig.MagAnisotropyAmount, aConfig.MagAnisotropyAngleInDeg, (float)proj.GetWidth(), (float)proj.GetHeight())),
+	magAnisotropyInv(GetMagAnistropyMatrix(1.0f / aConfig.MagAnisotropyAmount, aConfig.MagAnisotropyAngleInDeg, (float)proj.GetWidth(), (float)proj.GetHeight()))
 {
 	//Set kernel work dimensions for 2D images:
 	fpKernel.SetComputeSize(proj.GetWidth(), proj.GetHeight(), 1);
@@ -326,13 +326,15 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 	//Bind back projection image to texref in BP Kernel
 	if (aConfig.CtfMode == Configuration::Config::CTFM_YES)
 	{
-		CudaTextureLinearPitched2D::Bind(&bpKernel, "tex", CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, 
-			CU_TR_FILTER_MODE_LINEAR, 0, &dist_d, CU_AD_FORMAT_FLOAT, 1);
+		texImage.Bind(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, &dist_d, CU_AD_FORMAT_FLOAT, 1);
+		//CudaTextureLinearPitched2D::Bind(&bpKernel, "tex", CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, 
+		//	CU_TR_FILTER_MODE_LINEAR, 0, &dist_d, CU_AD_FORMAT_FLOAT, 1);
 	}
 	else
 	{
-		CudaTextureLinearPitched2D::Bind(&bpKernel, "tex", CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, 
-			CU_TR_FILTER_MODE_POINT, 0, &proj_d, CU_AD_FORMAT_FLOAT, 1);
+		texImage.Bind(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, &proj_d, CU_AD_FORMAT_FLOAT, 1);
+		//CudaTextureLinearPitched2D::Bind(&bpKernel, "tex", CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, 
+		//	CU_TR_FILTER_MODE_POINT, 0, &proj_d, CU_AD_FORMAT_FLOAT, 1);
 	}
 
 	ctf_d.Alloc((proj.GetMaxDimension() / 2 + 1) * sizeof(cuComplex), proj.GetMaxDimension(), sizeof(cuComplex));
@@ -394,7 +396,7 @@ Reconstructor::~Reconstructor()
 
 Matrix<float> Reconstructor::GetMagAnistropyMatrix(float aAmount, float angleInDeg, float dimX, float dimY)
 {
-	float angle = angleInDeg / 180.0f * M_PI;
+	float angle = (float)(angleInDeg / 180.0 * M_PI);
 
 	Matrix<float> shiftCenter(3, 3);
 	Matrix<float> shiftBack(3, 3);
@@ -455,10 +457,10 @@ void Reconstructor::ForwardProjectionNoCTF(Volume<TVol>* vol, CudaTextureObject3
 				{
 					MPI_Recv(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 					realprojUS_d.CopyHostToDevice(MPIBuffer);
-					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), (Npp32f*)proj_d.GetDevicePtr(), proj_d.GetPitch(), roiAll));
+					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)proj_d.GetDevicePtr(), (int)proj_d.GetPitch(), roiAll));
 					MPI_Recv(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 					realprojUS_d.CopyHostToDevice(MPIBuffer);
-					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), dist_d.GetPitch(), roiAll));
+					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
 				}
 			}
 			else
@@ -485,7 +487,7 @@ void Reconstructor::ForwardProjectionNoCTF(Volume<TVol>* vol, CudaTextureObject3
 				{
 					MPI_Recv(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 					realprojUS_d.CopyHostToDevice(MPIBuffer);
-					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), dist_d.GetPitch(), roiAll));
+					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
 				}
 			}
 			else
@@ -526,7 +528,7 @@ void Reconstructor::ForwardProjectionCTF(Volume<TVol>* vol, CudaTextureObject3D&
 		{
 			dist_d.Memset(0);
 
-			float defocusAngle = defocus.GetAstigmatismAngle(index) + proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0;
+			float defocusAngle = defocus.GetAstigmatismAngle(index) + (float)(proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0);
 			float defocusMin;
 			float defocusMax;
 			GetDefocusMinMax(ray, index, defocusMin, defocusMax);
@@ -548,7 +550,7 @@ void Reconstructor::ForwardProjectionCTF(Volume<TVol>* vol, CudaTextureObject3D&
 					{
 						MPI_Recv(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						realprojUS_d.CopyHostToDevice(MPIBuffer);
-						nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), dist_d.GetPitch(), roiAll));
+						nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
 					}
 				}
 				else
@@ -585,12 +587,12 @@ void Reconstructor::ForwardProjectionCTF(Volume<TVol>* vol, CudaTextureObject3D&
 
 				cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
 
-				nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float), proj.GetMaxDimension() * proj.GetMaxDimension(),
-					(Npp32f*)dist_d.GetDevicePtr(), dist_d.GetPitch(), roiAll));
+				nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float), (float)(proj.GetMaxDimension() * proj.GetMaxDimension()),
+					(Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
 
 
 				cropKernel(dist_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
-				nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)dist_d.GetDevicePtr(), dist_d.GetPitch(), (Npp32f*)proj_d.GetDevicePtr(), proj_d.GetPitch(), roiAll));
+				nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), (Npp32f*)proj_d.GetDevicePtr(), (int)proj_d.GetPitch(), roiAll));
 			}
 		}
 		/*proj_d.CopyDeviceToHost(MPIBuffer);
@@ -608,7 +610,7 @@ void Reconstructor::ForwardProjectionCTF(Volume<TVol>* vol, CudaTextureObject3D&
 				{
 					MPI_Recv(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 					realprojUS_d.CopyHostToDevice(MPIBuffer);
-					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), dist_d.GetPitch(), roiAll));
+					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
 				}
 				/*proj_d.CopyDeviceToHost(MPIBuffer);
 				printf("\n");
@@ -641,7 +643,7 @@ void Reconstructor::ForwardProjectionCTF(Volume<TVol>* vol, CudaTextureObject3D&
 				{
 					MPI_Recv(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 					realprojUS_d.CopyHostToDevice(MPIBuffer);
-					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), dist_d.GetPitch(), roiAll));
+					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
 				}
 			}
 			else
@@ -678,10 +680,10 @@ void Reconstructor::ForwardProjectionNoCTFROI(Volume<TVol>* vol, CudaTextureObje
 				{
 					MPI_Recv(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 					realprojUS_d.CopyHostToDevice(MPIBuffer);
-					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), (Npp32f*)proj_d.GetDevicePtr(), proj_d.GetPitch(), roiAll));
+					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)proj_d.GetDevicePtr(), (int)proj_d.GetPitch(), roiAll));
 					MPI_Recv(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 					realprojUS_d.CopyHostToDevice(MPIBuffer);
-					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), dist_d.GetPitch(), roiAll));
+					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
 				}
 			}
 			else
@@ -709,7 +711,7 @@ void Reconstructor::ForwardProjectionNoCTFROI(Volume<TVol>* vol, CudaTextureObje
 				{
 					MPI_Recv(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 					realprojUS_d.CopyHostToDevice(MPIBuffer);
-					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), dist_d.GetPitch(), roiAll));
+					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
 				}
 			}
 			else
@@ -752,7 +754,7 @@ void Reconstructor::ForwardProjectionCTFROI(Volume<TVol>* vol, CudaTextureObject
 		{
 			dist_d.Memset(0);
 
-			float defocusAngle = defocus.GetAstigmatismAngle(index) + proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0;
+			float defocusAngle = defocus.GetAstigmatismAngle(index) + (float)(proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0);
 			float defocusMin;
 			float defocusMax;
 			GetDefocusMinMax(ray, index, defocusMin, defocusMax);
@@ -774,7 +776,7 @@ void Reconstructor::ForwardProjectionCTFROI(Volume<TVol>* vol, CudaTextureObject
 					{
 						MPI_Recv(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 						realprojUS_d.CopyHostToDevice(MPIBuffer);
-						nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), dist_d.GetPitch(), roiAll));
+						nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
 					}
 				}
 				else
@@ -811,12 +813,12 @@ void Reconstructor::ForwardProjectionCTFROI(Volume<TVol>* vol, CudaTextureObject
 
 				cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
 
-				nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float), proj.GetMaxDimension() * proj.GetMaxDimension(),
-					(Npp32f*)dist_d.GetDevicePtr(), dist_d.GetPitch(), roiAll));
+				nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float), (float)(proj.GetMaxDimension() * proj.GetMaxDimension()),
+					(Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
 
 
 				cropKernel(dist_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
-				nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)dist_d.GetDevicePtr(), dist_d.GetPitch(), (Npp32f*)proj_d.GetDevicePtr(), proj_d.GetPitch(), roiAll));
+				nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), (Npp32f*)proj_d.GetDevicePtr(), (int)proj_d.GetPitch(), roiAll));
 			}
 		}
 		/*proj_d.CopyDeviceToHost(MPIBuffer);
@@ -834,7 +836,7 @@ void Reconstructor::ForwardProjectionCTFROI(Volume<TVol>* vol, CudaTextureObject
 				{
 					MPI_Recv(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 					realprojUS_d.CopyHostToDevice(MPIBuffer);
-					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), dist_d.GetPitch(), roiAll));
+					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
 				}
 				/*proj_d.CopyDeviceToHost(MPIBuffer);
 				printf("\n");
@@ -867,7 +869,7 @@ void Reconstructor::ForwardProjectionCTFROI(Volume<TVol>* vol, CudaTextureObject
 				{
 					MPI_Recv(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 					realprojUS_d.CopyHostToDevice(MPIBuffer);
-					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), dist_d.GetPitch(), roiAll));
+					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
 				}
 			}
 			else
@@ -883,15 +885,15 @@ template void Reconstructor::ForwardProjectionCTFROI(Volume<unsigned short>* vol
 template void Reconstructor::ForwardProjectionCTFROI(Volume<float>* vol, CudaTextureObject3D& tevVol, int index, bool volumeIsEmpty, int2 roiMin, int2 roiMax, bool noSync);
 
 template<class TVol>
-void Reconstructor::BackProjectionNoCTF(Volume<TVol>* vol, int proj_index, float SIRTCount)
+void Reconstructor::BackProjectionNoCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount)
 {
 	float3 volDim = vol->GetSubVolumeDimension(mpi_part);
 	bpKernel.SetComputeSize((int)volDim.x, (int)volDim.y, (int)volDim.z);
 
 	if (config.WBP_NoSART)
 	{
-		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
-		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
+		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
+		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
 	}
 
     // Find area shaded by volume, cut and dim borders
@@ -907,34 +909,35 @@ void Reconstructor::BackProjectionNoCTF(Volume<TVol>* vol, int proj_index, float
     pC.x = (int)hitC.x; pC.y = (int)hitC.y;
     pD.x = (int)hitD.x; pD.y = (int)hitD.y;
 	cropKernel(proj_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
-
+	
 	// Prepare and execute Backprojection
 	SetConstantValues(bpKernel, *vol, proj, proj_index, mpi_part, magAnisotropy, magAnisotropyInv);
 
 	float runtime = bpKernel(proj.GetWidth(), proj.GetHeight(), config.Lambda / SIRTCount, 
-		config.OverSampling, 1.0f / (float)(config.OverSampling), proj_d, 0, 9999999999999.0f);
+		config.OverSampling, 1.0f / (float)(config.OverSampling), texImage, surface, 0, 9999999999999.0f);
 
 }
-template void Reconstructor::BackProjectionNoCTF(Volume<unsigned short>* vol, int proj_index, float SIRTCount);
-template void Reconstructor::BackProjectionNoCTF(Volume<float>* vol, int proj_index, float SIRTCount);
+template void Reconstructor::BackProjectionNoCTF(Volume<unsigned short>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
+template void Reconstructor::BackProjectionNoCTF(Volume<float>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
 
 
 #ifdef SUBVOLREC_MODE
 template<class TVol>
-void Reconstructor::BackProjectionNoCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, CUsurfref surfref, int proj_index)
+void Reconstructor::BackProjectionNoCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, int proj_index)
 {
 	size_t batchSize = subVolumes.size();
 
 	if (config.WBP_NoSART)
 	{
-		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
-		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
+		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
+		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
 	}
 
 	for (size_t batch = 0; batch < batchSize; batch++)
 	{
 		//bind surfref to correct array:
-		cudaSafeCall(cuSurfRefSetArray(surfref, vecArrays[batch]->GetCUarray(), 0));
+		//cudaSafeCall(cuSurfRefSetArray(surfref, vecArrays[batch]->GetCUarray(), 0));
+		CudaSurfaceObject3D surface(vecArrays[batch]);
 
 		//set additional shifts:
 		proj.SetExtraShift(proj_index, vecExtraShifts[batch]);
@@ -945,15 +948,15 @@ void Reconstructor::BackProjectionNoCTF(Volume<TVol>* vol, vector<Volume<TVol>*>
 		SetConstantValues(bpKernel, *(subVolumes[batch]), proj, proj_index, 0, magAnisotropy, magAnisotropyInv);
 
 		float runtime = bpKernel(proj.GetWidth(), proj.GetHeight(), 1.0f,
-			config.OverSampling, 1.0f / (float)(config.OverSampling), proj_d, 0, 9999999999999.0f);
+			config.OverSampling, 1.0f / (float)(config.OverSampling), texImage, surface, 0, 9999999999999.0f);
 	}
 }
-template void Reconstructor::BackProjectionNoCTF(Volume<unsigned short>* vol, vector<Volume<unsigned short>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, CUsurfref surfref, int proj_index);
-template void Reconstructor::BackProjectionNoCTF(Volume<float>* vol, vector<Volume<float>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, CUsurfref surfref, int proj_index);
+template void Reconstructor::BackProjectionNoCTF(Volume<unsigned short>* vol, vector<Volume<unsigned short>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, int proj_index);
+template void Reconstructor::BackProjectionNoCTF(Volume<float>* vol, vector<Volume<float>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, int proj_index);
 #endif
 
 template<class TVol>
-void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, int proj_index, float SIRTcount)
+void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTcount)
 {
 	float3 volDim = vol->GetSubVolumeDimension(mpi_part);
 	bpKernel.SetComputeSize((int)volDim.x, (int)volDim.y, (int)volDim.z);
@@ -963,8 +966,8 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, int proj_index, float S
 
 	if (config.WBP_NoSART)
 	{
-		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
-		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
+		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
+		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
 	}
 
 	if (mpi_part == 0)
@@ -993,7 +996,7 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, int proj_index, float S
 		SetConstantValues(bpKernel, *vol, proj, proj_index, mpi_part, magAnisotropy, magAnisotropyInv);
 
 
-		float defocusAngle = defocus.GetAstigmatismAngle(proj_index) + proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0;
+		float defocusAngle = defocus.GetAstigmatismAngle(proj_index) + (float)(proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0);
 		float defocusMin;
 		float defocusMax;
 		GetDefocusMinMax(ray, proj_index, defocusMin, defocusMax);
@@ -1011,20 +1014,20 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, int proj_index, float S
 		ctf(fft_d, defocusMin, defocusMax, defocusAngle, false, config.PhaseFlipOnly, config.WienerFilterNoiseLevel, (proj.GetMaxDimension() / 2 + 1) * sizeof(float2), config.CTFBetaFac);
 
 		cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
-		nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float), proj.GetMaxDimension() * proj.GetMaxDimension(),
-			(Npp32f*)dist_d.GetDevicePtr(), dist_d.GetPitch(), roiAll));
+		nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float), (float)(proj.GetMaxDimension() * proj.GetMaxDimension()),
+			(Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
 
 		cropKernel(dist_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
 
-		runtime = bpKernel(x, y, config.Lambda / SIRTcount, config.OverSampling, 1.0f / (float)(config.OverSampling), filterImage_d, ray, ray + config.CTFSliceThickness / proj.GetPixelSize());
+		runtime = bpKernel(x, y, config.Lambda / SIRTcount, config.OverSampling, 1.0f / (float)(config.OverSampling), texImage, surface, ray, ray + config.CTFSliceThickness / proj.GetPixelSize());
 	}
 }
-template void Reconstructor::BackProjectionCTF(Volume<unsigned short>* vol, int proj_index, float SIRTCount);
-template void Reconstructor::BackProjectionCTF(Volume<float>* vol, int proj_index, float SIRTCount);
+template void Reconstructor::BackProjectionCTF(Volume<unsigned short>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
+template void Reconstructor::BackProjectionCTF(Volume<float>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
 
 #ifdef SUBVOLREC_MODE
 template<class TVol>
-void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, CUsurfref surfref, int proj_index)
+void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, int proj_index)
 {
 	size_t batchSize = subVolumes.size();
 	//TODO
@@ -1036,8 +1039,8 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& 
 
 	if (config.WBP_NoSART)
 	{
-		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
-		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
+		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
+		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
 	}
 
 	if (mpi_part == 0)
@@ -1048,7 +1051,7 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& 
 
 	for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize())
 	{
-		float defocusAngle = defocus.GetAstigmatismAngle(proj_index) + proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0;
+		float defocusAngle = defocus.GetAstigmatismAngle(proj_index) + (float)(proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0);
 		float defocusMin;
 		float defocusMax;
 		GetDefocusMinMax(ray, proj_index, defocusMin, defocusMax);
@@ -1067,14 +1070,15 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& 
 		ctf(fft_d, defocusMin, defocusMax, defocusAngle, false, config.PhaseFlipOnly, config.WienerFilterNoiseLevel, (proj.GetMaxDimension() / 2 + 1) * sizeof(float2), config.CTFBetaFac);
 
 		cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
-		nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float), proj.GetMaxDimension() * proj.GetMaxDimension(),
-			(Npp32f*)dist_d.GetDevicePtr(), dist_d.GetPitch(), roiAll));
+		nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float), (float)(proj.GetMaxDimension() * proj.GetMaxDimension()),
+			(Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
 
 
 		for (size_t batch = 0; batch < batchSize; batch++)
 		{
 			//bind surfref to correct array:
-			cudaSafeCall(cuSurfRefSetArray(surfref, vecArrays[batch]->GetCUarray(), 0));
+			//cudaSafeCall(cuSurfRefSetArray(surfref, vecArrays[batch]->GetCUarray(), 0));
+			CudaSurfaceObject3D surface(vecArrays[batch]);
 
 			//set additional shifts:
 			proj.SetExtraShift(proj_index, vecExtraShifts[batch]);
@@ -1085,12 +1089,12 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& 
 			SetConstantValues(bpKernel, *(subVolumes[batch]), proj, proj_index, 0, magAnisotropy, magAnisotropyInv);
 
 			//Most of the time, no volume should get hit...
-			runtime = bpKernel(x, y, 1.0f, config.OverSampling, 1.0f / (float)(config.OverSampling), filterImage_d, ray, ray + config.CTFSliceThickness / proj.GetPixelSize());
+			runtime = bpKernel(x, y, 1.0f, config.OverSampling, 1.0f / (float)(config.OverSampling), texImage, surface, ray, ray + config.CTFSliceThickness / proj.GetPixelSize());
 		}
 	}
 }
-template void Reconstructor::BackProjectionCTF(Volume<unsigned short>* vol, vector<Volume<unsigned short>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, CUsurfref surfref, int proj_index);
-template void Reconstructor::BackProjectionCTF(Volume<float>* vol, vector<Volume<float>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, CUsurfref surfref, int proj_index);
+template void Reconstructor::BackProjectionCTF(Volume<unsigned short>* vol, vector<Volume<unsigned short>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, int proj_index);
+template void Reconstructor::BackProjectionCTF(Volume<float>* vol, vector<Volume<float>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, int proj_index);
 #endif
 
 bool Reconstructor::ComputeFourFilter()
@@ -1224,23 +1228,23 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 	{
 		//printf("SIGNED SHORT\n");
 		cudaSafeCall(cuMemcpyHtoD(realprojUS_d.GetDevicePtr(), img_h, proj.GetWidth() * proj.GetHeight() * sizeof(short)));
-		nppSafeCall(nppiConvert_16s32f_C1R((Npp16s*)realprojUS_d.GetDevicePtr(), proj.GetWidth() * sizeof(short), (Npp32f*)realproj_d.GetDevicePtr(), realproj_d.GetPitch(), roiAll));
+		nppSafeCall(nppiConvert_16s32f_C1R((Npp16s*)realprojUS_d.GetDevicePtr(), proj.GetWidth() * sizeof(short), (Npp32f*)realproj_d.GetDevicePtr(), (int)realproj_d.GetPitch(), roiAll));
 	}
 	else if (projSource->GetDataType() == DT_USHORT)
 	{
 		//printf("UNSIGNED SHORT\n");
 		cudaSafeCall(cuMemcpyHtoD(realprojUS_d.GetDevicePtr(), img_h, proj.GetWidth() * proj.GetHeight() * sizeof(short)));
-		nppSafeCall(nppiConvert_16u32f_C1R((Npp16u*)realprojUS_d.GetDevicePtr(), proj.GetWidth() * sizeof(short), (Npp32f*)realproj_d.GetDevicePtr(), realproj_d.GetPitch(), roiAll));
+		nppSafeCall(nppiConvert_16u32f_C1R((Npp16u*)realprojUS_d.GetDevicePtr(), proj.GetWidth() * sizeof(short), (Npp32f*)realproj_d.GetDevicePtr(), (int)realproj_d.GetPitch(), roiAll));
 	}
 	else if (projSource->GetDataType() == DT_INT)
 	{
 		realprojUS_d.CopyHostToDevice(img_h);
-		nppSafeCall(nppiConvert_32s32f_C1R((Npp32s*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), (Npp32f*)realproj_d.GetDevicePtr(), realproj_d.GetPitch(), roiAll));
+		nppSafeCall(nppiConvert_32s32f_C1R((Npp32s*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)realproj_d.GetDevicePtr(), (int)realproj_d.GetPitch(), roiAll));
 	}
 	else if (projSource->GetDataType() == DT_UINT)
 	{
 		realprojUS_d.CopyHostToDevice(img_h);
-		nppSafeCall(nppiConvert_32u32f_C1R((Npp32u*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), (Npp32f*)realproj_d.GetDevicePtr(), realproj_d.GetPitch(), roiAll));
+		nppSafeCall(nppiConvert_32u32f_C1R((Npp32u*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)realproj_d.GetDevicePtr(), (int)realproj_d.GetPitch(), roiAll));
 	}
 	else if (projSource->GetDataType() == DT_FLOAT)
 	{
@@ -1270,21 +1274,21 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 	if (config.CorrectBadPixels)
 	{
 		nppSafeCall(nppiCompareC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), config.BadPixelValue * meanValue, 
-			(Npp8u*)badPixelMask_d.GetDevicePtr(), badPixelMask_d.GetPitch(), roiSquare, NPP_CMP_GREATER));
+			(Npp8u*)badPixelMask_d.GetDevicePtr(), (int)badPixelMask_d.GetPitch(), roiSquare, NPP_CMP_GREATER));
 	}
 	else
 	{
-		nppSafeCall(nppiSet_8u_C1R(0, (Npp8u*)badPixelMask_d.GetDevicePtr(), badPixelMask_d.GetPitch(), roiSquare));
+		nppSafeCall(nppiSet_8u_C1R(0, (Npp8u*)badPixelMask_d.GetDevicePtr(), (int)badPixelMask_d.GetPitch(), roiSquare));
 	}
 
-	nppSafeCall(nppiSum_8u_C1R((Npp8u*)badPixelMask_d.GetDevicePtr(), badPixelMask_d.GetPitch(), roiSquare, 
+	nppSafeCall(nppiSum_8u_C1R((Npp8u*)badPixelMask_d.GetDevicePtr(), (int)badPixelMask_d.GetPitch(), roiSquare,
 		(Npp8u*)meanbuffer.GetDevicePtr(), (Npp64f*)meanval.GetDevicePtr()));
 
 	meanval.CopyDeviceToHost(&mean);
 	BadPixels = (int)(mean / 255.0);
 
 	nppSafeCall(nppiSet_32f_C1MR(meanValue, (Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare, 
-		(Npp8u*)badPixelMask_d.GetDevicePtr(), badPixelMask_d.GetPitch()));
+		(Npp8u*)badPixelMask_d.GetDevicePtr(), (int)badPixelMask_d.GetPitch()));
 
 	float normVal = 1;
 
@@ -1292,9 +1296,9 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 	if (config.WBP_NoSART)
 	{
 		nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float), 1.0f, 
-			(Npp32f*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), roiAll));
+			(Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), roiAll));
 
-		nppSafeCall(nppiMean_StdDev_32f_C1R((Npp32f*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), roiAll, 
+		nppSafeCall(nppiMean_StdDev_32f_C1R((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), roiAll,
 			(Npp8u*)meanbuffer.GetDevicePtr(), (Npp64f*)meanval.GetDevicePtr(), (Npp64f*)stdval.GetDevicePtr()));
 
 		mean = 0;
@@ -1319,12 +1323,12 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 		if (config.DownWeightTiltsForWBP)
 		{
 			//we devide here because we devide later using nppiDivC: add the end we multiply!
-			std_hf /= cosf(abs(markers(MarkerFileItem_enum::MFI_TiltAngle, proj_index, 0)) / 180.0f * M_PI);
+			std_hf /= (float)cos(abs(markers(MarkerFileItem_enum::MFI_TiltAngle, proj_index, 0)) / 180.0 * M_PI);
 		}
 
-		nppSafeCall(nppiSubC_32f_C1R((Npp32f*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), mean_hf,
-			(Npp32f*)realproj_d.GetDevicePtr(), realproj_d.GetPitch(), roiAll));
-		nppSafeCall(nppiDivC_32f_C1IR(-std_hf, (Npp32f*)realproj_d.GetDevicePtr(), realproj_d.GetPitch(), roiAll));
+		nppSafeCall(nppiSubC_32f_C1R((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), mean_hf,
+			(Npp32f*)realproj_d.GetDevicePtr(), (int)realproj_d.GetPitch(), roiAll));
+		nppSafeCall(nppiDivC_32f_C1IR(-std_hf, (Npp32f*)realproj_d.GetDevicePtr(), (int)realproj_d.GetPitch(), roiAll));
 
 
 		//rotate image so that tilt axis lies parallel to image axis to avoid smearing if WBP-filter wedge:
@@ -1376,7 +1380,7 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 
 		if (!skipFilter)
 		{
-			float lp = config.fourFilterLP, hp = config.fourFilterHP, lps = config.fourFilterLPS, hps = config.fourFilterHPS;
+			float lp = (float)config.fourFilterLP, hp = (float)config.fourFilterHP, lps = (float)config.fourFilterLPS, hps = (float)config.fourFilterHPS;
 			int size = proj.GetMaxDimension();
 			
 			fourFilterKernel(fft_d, roiFFT.width * sizeof(Npp32fc), size, lp, hp, lps, hps);
@@ -1410,12 +1414,12 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 
 		cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
 
-		normVal = proj.GetMaxDimension() * proj.GetMaxDimension();
+		normVal = (float)(proj.GetMaxDimension() * proj.GetMaxDimension());
 	}
 
 	//Normalize from FFT
 	nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float), 
-		normVal, (Npp32f*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), roiAll));
+		normVal, (Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), roiAll));
 
 
 	//When doing SART we compute mean and std on the filtered image
@@ -1442,7 +1446,7 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 			roiForMean.width = roiAll.width;
 		}
 
-		nppSafeCall(nppiMean_StdDev_32f_C1R(ptr, realprojUS_d.GetPitch(), roiForMean,
+		nppSafeCall(nppiMean_StdDev_32f_C1R(ptr, (int)realprojUS_d.GetPitch(), roiForMean,
 			(Npp8u*)meanbuffer.GetDevicePtr(), (Npp64f*)meanval.GetDevicePtr(), (Npp64f*)stdval.GetDevicePtr()));
 
 		mean = 0;
@@ -1466,9 +1470,9 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 		}
 		
 
-		nppSafeCall(nppiSubC_32f_C1R((Npp32f*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), mean_hf,
-			(Npp32f*)realproj_d.GetDevicePtr(), realproj_d.GetPitch(), roiAll));
-		nppSafeCall(nppiDivC_32f_C1IR(-std_hf, (Npp32f*)realproj_d.GetDevicePtr(), realproj_d.GetPitch(), roiAll));
+		nppSafeCall(nppiSubC_32f_C1R((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), mean_hf,
+			(Npp32f*)realproj_d.GetDevicePtr(), (int)realproj_d.GetPitch(), roiAll));
+		nppSafeCall(nppiDivC_32f_C1IR(-std_hf, (Npp32f*)realproj_d.GetDevicePtr(), (int)realproj_d.GetPitch(), roiAll));
 		realproj_d.CopyDeviceToHost(img_h);
 	}
 	else
@@ -1525,7 +1529,6 @@ template void Reconstructor::ForwardProjection(Volume<float>* vol, CudaTextureOb
 template<class TVol>
 void Reconstructor::PrintGeometry(Volume<TVol>* vol, int index)
 {
-	float runtime;
 	int x = proj.GetWidth();
 	int y = proj.GetHeight();
 
@@ -1533,8 +1536,8 @@ void Reconstructor::PrintGeometry(Volume<TVol>* vol, int index)
 
 	if (config.WBP_NoSART)
 	{
-		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
-		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0, proj.GetWidth(), proj.GetHeight());
+		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
+		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
 	}
 
 	SetConstantValues(slicerKernel, *vol, proj, index, mpi_part, magAnisotropy, magAnisotropyInv);
@@ -1572,15 +1575,15 @@ void Reconstructor::PrintGeometry(Volume<TVol>* vol, int index)
 	MatrixVector3Mul(c_DetectorMatrix, &hitPoint);
 
 	//--> pixelBorders.x = x.min; pixelBorders.z = y.min;
-	int hitX = round(hitPoint.x);
-	int hitY = round(hitPoint.y);
+	float hitX = round(hitPoint.x);
+	float hitY = round(hitPoint.y);
 
-	printf("HitXY: %d %d\n", hitX, hitY);
+	printf("HitXY: %d %d\n", (int)hitX, (int)hitY);
 
 	//Shoot ray from hit point on projection towards volume to get the distance to entry and exit point
 	float3 pos = proj.GetPosition(index) + hitX * proj.GetPixelUPitch(index) + hitY * proj.GetPixelVPitch(index);
-	hitX = proj.GetWidth() * 0.5f;
-	hitY = proj.GetHeight() * 0.5f;
+	hitX = (float)proj.GetWidth() * 0.5f;
+	hitY = (float)proj.GetHeight() * 0.5f;
 	float3 pos2 = proj.GetPosition(index) + hitX * proj.GetPixelUPitch(index) + hitX * proj.GetPixelVPitch(index);
 
 	printf("Center: %f %f %f\n", pos2.x, pos2.y, pos2.z);
@@ -1607,7 +1610,7 @@ void Reconstructor::PrintGeometry(Volume<TVol>* vol, int index)
 	{
 		dist_d.Memset(0);
 
-		float defocusAngle = defocus.GetAstigmatismAngle(index) + proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0;
+		float defocusAngle = defocus.GetAstigmatismAngle(index) + (float)(proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0);
 		float defocusMin;
 		float defocusMax;
 		GetDefocusMinMax(ray + config.CTFSliceThickness / proj.GetPixelSize() * 0.5f, index, defocusMin, defocusMax);
@@ -1648,7 +1651,7 @@ void Reconstructor::ForwardProjectionDistanceOnly(Volume<TVol>* vol, int index)
 		{
 			MPI_Recv(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 			realprojUS_d.CopyHostToDevice(MPIBuffer);
-			nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), dist_d.GetPitch(), roiAll));
+			nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
 		}
 	}
 	else
@@ -1664,121 +1667,121 @@ template void Reconstructor::ForwardProjectionDistanceOnly(Volume<float>* vol, i
 
 
 template<class TVol>
-void Reconstructor::BackProjection(Volume<TVol>* vol, int proj_index, float SIRTCount)
+void Reconstructor::BackProjection(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount)
 {
 	if (config.CtfMode == Configuration::Config::CTFM_YES)
 	{
-		BackProjectionCTF(vol, proj_index, SIRTCount);
+		BackProjectionCTF(vol, surface, proj_index, SIRTCount);
 	}
 	else
 	{
-		BackProjectionNoCTF(vol, proj_index, SIRTCount);
+		BackProjectionNoCTF(vol, surface, proj_index, SIRTCount);
 	}
 }
 
-template void Reconstructor::BackProjection(Volume<unsigned short>* vol, int proj_index, float SIRTCount);
-template void Reconstructor::BackProjection(Volume<float>* vol, int proj_index, float SIRTCount);
+template void Reconstructor::BackProjection(Volume<unsigned short>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
+template void Reconstructor::BackProjection(Volume<float>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
 
 
 #ifdef SUBVOLREC_MODE
 template<class TVol>
-void Reconstructor::BackProjection(Volume<TVol>* vol, vector<Volume<TVol>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, CUsurfref surfref, int proj_index)
+void Reconstructor::BackProjection(Volume<TVol>* vol, vector<Volume<TVol>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, int proj_index)
 {
 	if (config.CtfMode == Configuration::Config::CTFM_YES)
 	{
-		BackProjectionCTF(vol, subVolumes, vecExtraShifts, vecArrays, surfref, proj_index);
+		BackProjectionCTF(vol, subVolumes, vecExtraShifts, vecArrays, proj_index);
 	}
 	else
 	{
-		BackProjectionNoCTF(vol, subVolumes, vecExtraShifts, vecArrays, surfref, proj_index);
+		BackProjectionNoCTF(vol, subVolumes, vecExtraShifts, vecArrays, proj_index);
 	}
 }
 
-template void Reconstructor::BackProjection(Volume<unsigned short>* vol, vector<Volume<unsigned short>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, CUsurfref surfref, int proj_index);
-template void Reconstructor::BackProjection(Volume<float>* vol, vector<Volume<float>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, CUsurfref surfref, int proj_index);
+template void Reconstructor::BackProjection(Volume<unsigned short>* vol, vector<Volume<unsigned short>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, int proj_index);
+template void Reconstructor::BackProjection(Volume<float>* vol, vector<Volume<float>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, int proj_index);
 #endif
 
-template<class TVol>
-void Reconstructor::OneSARTStep(Volume<TVol>* vol, Cuda::CudaTextureObject3D & texVol, int index, bool volumeIsEmpty, char * originalImage, float SIRTCount, float* MPIBuffer)
-{
-	ForwardProjection(vol, texVol, index, volumeIsEmpty);
-	if (mpi_part == 0)
-	{
-		Compare(vol, originalImage, index);
-		CopyProjectionToHost(MPIBuffer);
-	}
+//template<class TVol>
+//void Reconstructor::OneSARTStep(Volume<TVol>* vol, Cuda::CudaTextureObject3D & texVol, Cuda::CudaSurfaceObject3D& surface, int index, bool volumeIsEmpty, char * originalImage, float SIRTCount, float* MPIBuffer)
+//{
+//	ForwardProjection(vol, texVol, index, volumeIsEmpty);
+//	if (mpi_part == 0)
+//	{
+//		Compare(vol, originalImage, index);
+//		CopyProjectionToHost(MPIBuffer);
+//	}
+//
+//	//spread the content to all other nodes:
+//	MPIBroadcast(&MPIBuffer, 1);
+//	CopyProjectionToDevice(MPIBuffer);
+//	BackProjection(vol, surface, index, SIRTCount);
+//}
+//template void Reconstructor::OneSARTStep(Volume<unsigned short>* vol, Cuda::CudaTextureObject3D & texVol, Cuda::CudaSurfaceObject3D& surface, int index, bool volumeIsEmpty, char * originalImage, float SIRTCount, float* MPIBuffer);
+//template void Reconstructor::OneSARTStep(Volume<float>* vol, Cuda::CudaTextureObject3D & texVol, Cuda::CudaSurfaceObject3D& surface, int index, bool volumeIsEmpty, char * originalImage, float SIRTCount, float* MPIBuffer);
 
-	//spread the content to all other nodes:
-	MPIBroadcast(&MPIBuffer, 1);
-	CopyProjectionToDevice(MPIBuffer);
-	BackProjection(vol, index, SIRTCount);
-}
-template void Reconstructor::OneSARTStep(Volume<unsigned short>* vol, Cuda::CudaTextureObject3D & texVol, int index, bool volumeIsEmpty, char * originalImage, float SIRTCount, float* MPIBuffer);
-template void Reconstructor::OneSARTStep(Volume<float>* vol, Cuda::CudaTextureObject3D & texVol, int index, bool volumeIsEmpty, char * originalImage, float SIRTCount, float* MPIBuffer);
+//template<class TVol>
+//void Reconstructor::BackProjectionWithPriorWBPFilter(Volume<TVol>* vol, int proj_index, char* originalImage, float* MPIBuffer)
+//{
+//	if (mpi_part == 0)
+//	{
+//		realproj_d.CopyHostToDevice(originalImage);
+//		projSquare_d.Memset(0);
+//		cts(realproj_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, false);
+//
+//		cufftSafeCall(cufftExecR2C(handleR2C, (cufftReal*)projSquare_d.GetDevicePtr(), (cufftComplex*)fft_d.GetDevicePtr()));
+//
+//		//Do WBP weighting
+//		wbp(fft_d, roiFFT.width * sizeof(Npp32fc), proj.GetMaxDimension(), markers(MFI_RotationPsi, proj_index, 0), FilterMethod::FM_RAMP);
+//		cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
+//
+//		float normVal = proj.GetMaxDimension() * proj.GetMaxDimension();
+//
+//		//Normalize from FFT
+//		nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float),
+//			normVal, (Npp32f*)proj_d.GetDevicePtr(), proj_d.GetPitch(), roiAll));
+//
+//		CopyProjectionToHost(MPIBuffer);
+//	}
+//	//spread the content to all other nodes:
+//	MPIBroadcast(&MPIBuffer, 1);
+//	CopyProjectionToDevice(MPIBuffer);
+//	BackProjection(vol, proj_index, 1);
+//}
+//template void Reconstructor::BackProjectionWithPriorWBPFilter(Volume<unsigned short>* vol, int proj_index, char* originalImage, float* MPIBuffer);
+//template void Reconstructor::BackProjectionWithPriorWBPFilter(Volume<float>* vol, int proj_index, char* originalImage, float* MPIBuffer);
 
-template<class TVol>
-void Reconstructor::BackProjectionWithPriorWBPFilter(Volume<TVol>* vol, int proj_index, char* originalImage, float* MPIBuffer)
-{
-	if (mpi_part == 0)
-	{
-		realproj_d.CopyHostToDevice(originalImage);
-		projSquare_d.Memset(0);
-		cts(realproj_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, false);
-
-		cufftSafeCall(cufftExecR2C(handleR2C, (cufftReal*)projSquare_d.GetDevicePtr(), (cufftComplex*)fft_d.GetDevicePtr()));
-
-		//Do WBP weighting
-		wbp(fft_d, roiFFT.width * sizeof(Npp32fc), proj.GetMaxDimension(), markers(MFI_RotationPsi, proj_index, 0), FilterMethod::FM_RAMP);
-		cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
-
-		float normVal = proj.GetMaxDimension() * proj.GetMaxDimension();
-
-		//Normalize from FFT
-		nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float),
-			normVal, (Npp32f*)proj_d.GetDevicePtr(), proj_d.GetPitch(), roiAll));
-
-		CopyProjectionToHost(MPIBuffer);
-	}
-	//spread the content to all other nodes:
-	MPIBroadcast(&MPIBuffer, 1);
-	CopyProjectionToDevice(MPIBuffer);
-	BackProjection(vol, proj_index, 1);
-}
-template void Reconstructor::BackProjectionWithPriorWBPFilter(Volume<unsigned short>* vol, int proj_index, char* originalImage, float* MPIBuffer);
-template void Reconstructor::BackProjectionWithPriorWBPFilter(Volume<float>* vol, int proj_index, char* originalImage, float* MPIBuffer);
-
-template<class TVol>
-void Reconstructor::RemoveProjectionFromVol(Volume<TVol>* vol, int proj_index, char* originalImage, float* MPIBuffer)
-{
-	if (mpi_part == 0)
-	{
-		realproj_d.CopyHostToDevice(originalImage);
-		projSquare_d.Memset(0);
-		cts(realproj_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, false);
-
-		cufftSafeCall(cufftExecR2C(handleR2C, (cufftReal*)projSquare_d.GetDevicePtr(), (cufftComplex*)fft_d.GetDevicePtr()));
-
-		//Do WBP weighting
-		wbp(fft_d, roiFFT.width * sizeof(Npp32fc), proj.GetMaxDimension(), markers(MFI_RotationPsi, proj_index, 0), FilterMethod::FM_RAMP);
-		cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
-
-		float normVal = proj.GetMaxDimension() * proj.GetMaxDimension();
-		//negate to remove from volume:
-		normVal *= -1;
-
-		//Normalize from FFT
-		nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float),
-			normVal, (Npp32f*)proj_d.GetDevicePtr(), proj_d.GetPitch(), roiAll));
-
-		CopyProjectionToHost(MPIBuffer);
-	}
-	//spread the content to all other nodes:
-	MPIBroadcast(&MPIBuffer, 1);
-	CopyProjectionToDevice(MPIBuffer);
-	BackProjection(vol, proj_index, 1);
-}
-template void Reconstructor::RemoveProjectionFromVol(Volume<unsigned short>* vol, int proj_index, char* originalImage, float* MPIBuffer);
-template void Reconstructor::RemoveProjectionFromVol(Volume<float>* vol, int proj_index, char* originalImage, float* MPIBuffer);
+//template<class TVol>
+//void Reconstructor::RemoveProjectionFromVol(Volume<TVol>* vol, int proj_index, char* originalImage, float* MPIBuffer)
+//{
+//	if (mpi_part == 0)
+//	{
+//		realproj_d.CopyHostToDevice(originalImage);
+//		projSquare_d.Memset(0);
+//		cts(realproj_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, false);
+//
+//		cufftSafeCall(cufftExecR2C(handleR2C, (cufftReal*)projSquare_d.GetDevicePtr(), (cufftComplex*)fft_d.GetDevicePtr()));
+//
+//		//Do WBP weighting
+//		wbp(fft_d, roiFFT.width * sizeof(Npp32fc), proj.GetMaxDimension(), markers(MFI_RotationPsi, proj_index, 0), FilterMethod::FM_RAMP);
+//		cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
+//
+//		float normVal = proj.GetMaxDimension() * proj.GetMaxDimension();
+//		//negate to remove from volume:
+//		normVal *= -1;
+//
+//		//Normalize from FFT
+//		nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float),
+//			normVal, (Npp32f*)proj_d.GetDevicePtr(), proj_d.GetPitch(), roiAll));
+//
+//		CopyProjectionToHost(MPIBuffer);
+//	}
+//	//spread the content to all other nodes:
+//	MPIBroadcast(&MPIBuffer, 1);
+//	CopyProjectionToDevice(MPIBuffer);
+//	BackProjection(vol, proj_index, 1);
+//}
+//template void Reconstructor::RemoveProjectionFromVol(Volume<unsigned short>* vol, int proj_index, char* originalImage, float* MPIBuffer);
+//template void Reconstructor::RemoveProjectionFromVol(Volume<float>* vol, int proj_index, char* originalImage, float* MPIBuffer);
 
 void Reconstructor::ResetProjectionsDevice()
 {
@@ -1836,14 +1839,14 @@ void Reconstructor::CopyProjectionToSubVolumeProjection()
 }
 #endif
 
-void Reconstructor::ConvertVolumeFP16(float * slice, int z)
+void Reconstructor::ConvertVolumeFP16(float * slice, Cuda::CudaSurfaceObject3D& surf, int z)
 {
 	if (volTemp_d.GetWidth() != config.RecDimensions.x ||
 		volTemp_d.GetHeight() != config.RecDimensions.y)
 	{
 		volTemp_d.Alloc(config.RecDimensions.x * sizeof(float), config.RecDimensions.y, sizeof(float));
 	}
-	convVolKernel(volTemp_d, z);
+	convVolKernel(volTemp_d, surf, z);
 	volTemp_d.CopyDeviceToHost(slice);
 }
 //#define WRITEDEBUG 1
@@ -1943,25 +1946,25 @@ float2 Reconstructor::GetDisplacement(bool MultiPeakDetection, float* CCValue)
 			(float*)((char*)projSquare_d.GetDevicePtr() + roiCC1.y * proj.GetMaxDimension() * sizeof(float) + roiCC1.x * sizeof(float)),
 			proj.GetMaxDimension() * sizeof(float),
 			(float*)((char*)ccMap_d.GetDevicePtr() + roiDestCC1.y * ccMap_d.GetPitch() + roiDestCC1.x * sizeof(float)),
-			ccMap_d.GetPitch(), ccSize));
+			(int)ccMap_d.GetPitch(), ccSize));
 
 		nppSafeCall(nppiCopy_32f_C1R(
 			(float*)((char*)projSquare_d.GetDevicePtr() + roiCC2.y * proj.GetMaxDimension() * sizeof(float) + roiCC2.x * sizeof(float)),
 			proj.GetMaxDimension() * sizeof(float),
 			(float*)((char*)ccMap_d.GetDevicePtr() + roiDestCC2.y * ccMap_d.GetPitch() + roiDestCC2.x * sizeof(float)),
-			ccMap_d.GetPitch(), ccSize));
+			(int)ccMap_d.GetPitch(), ccSize));
 
 		nppSafeCall(nppiCopy_32f_C1R(
 			(float*)((char*)projSquare_d.GetDevicePtr() + roiCC3.y * proj.GetMaxDimension() * sizeof(float) + roiCC3.x * sizeof(float)),
 			proj.GetMaxDimension() * sizeof(float),
 			(float*)((char*)ccMap_d.GetDevicePtr() + roiDestCC3.y * ccMap_d.GetPitch() + roiDestCC3.x * sizeof(float)),
-			ccMap_d.GetPitch(), ccSize));
+			(int)ccMap_d.GetPitch(), ccSize));
 
 		nppSafeCall(nppiCopy_32f_C1R(
 			(float*)((char*)projSquare_d.GetDevicePtr() + roiCC4.y * proj.GetMaxDimension() * sizeof(float) + roiCC4.x * sizeof(float)),
 			proj.GetMaxDimension() * sizeof(float),
 			(float*)((char*)ccMap_d.GetDevicePtr() + roiDestCC4.y * ccMap_d.GetPitch() + roiDestCC4.x * sizeof(float)),
-			ccMap_d.GetPitch(), ccSize));
+			(int)ccMap_d.GetPitch(), ccSize));
 
 		ccMap_d.CopyDeviceToHost(ccMap);
 
@@ -1992,12 +1995,12 @@ float2 Reconstructor::GetDisplacement(bool MultiPeakDetection, float* CCValue)
 		if (MultiPeakDetection)
 		{
 			//multiPeak
-			nppSafeCall(nppiSet_8u_C1R(255, (Npp8u*)badPixelMask_d.GetDevicePtr(), badPixelMask_d.GetPitch(), roiSquare));
+			nppSafeCall(nppiSet_8u_C1R(255, (Npp8u*)badPixelMask_d.GetDevicePtr(), (int)badPixelMask_d.GetPitch(), roiSquare));
 
 			findPeakKernel(projSquare_d, proj.GetMaxDimension() * sizeof(float), badPixelMask_d, proj.GetMaxDimension(), maxVal * 0.9f);
 
 			nppiSet_32f_C1R(1.0f, (Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare);
-			nppiSet_32f_C1MR(0.0f, (Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare, (Npp8u*)badPixelMask_d.GetDevicePtr(), badPixelMask_d.GetPitch());
+			nppiSet_32f_C1MR(0.0f, (Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare, (Npp8u*)badPixelMask_d.GetDevicePtr(), (int)badPixelMask_d.GetPitch());
 
 			maxShiftWeightedKernel(projSquare_d, proj.GetMaxDimension() * sizeof(float), proj.GetMaxDimension(), maxShift);
 
@@ -2016,32 +2019,32 @@ float2 Reconstructor::GetDisplacement(bool MultiPeakDetection, float* CCValue)
 				(float*)((char*)projSquare_d.GetDevicePtr() + roiCC1.y * proj.GetMaxDimension() * sizeof(float) + roiCC1.x * sizeof(float)),
 				proj.GetMaxDimension() * sizeof(float),
 				(float*)((char*)ccMap_d.GetDevicePtr() + roiDestCC1.y * ccMap_d.GetPitch() + roiDestCC1.x * sizeof(float)),
-				ccMap_d.GetPitch(), ccSize));
+				(int)ccMap_d.GetPitch(), ccSize));
 
 			nppSafeCall(nppiCopy_32f_C1R(
 				(float*)((char*)projSquare_d.GetDevicePtr() + roiCC2.y * proj.GetMaxDimension() * sizeof(float) + roiCC2.x * sizeof(float)),
 				proj.GetMaxDimension() * sizeof(float),
 				(float*)((char*)ccMap_d.GetDevicePtr() + roiDestCC2.y * ccMap_d.GetPitch() + roiDestCC2.x * sizeof(float)),
-				ccMap_d.GetPitch(), ccSize));
+				(int)ccMap_d.GetPitch(), ccSize));
 
 			nppSafeCall(nppiCopy_32f_C1R(
 				(float*)((char*)projSquare_d.GetDevicePtr() + roiCC3.y * proj.GetMaxDimension() * sizeof(float) + roiCC3.x * sizeof(float)),
 				proj.GetMaxDimension() * sizeof(float),
 				(float*)((char*)ccMap_d.GetDevicePtr() + roiDestCC3.y * ccMap_d.GetPitch() + roiDestCC3.x * sizeof(float)),
-				ccMap_d.GetPitch(), ccSize));
+				(int)ccMap_d.GetPitch(), ccSize));
 
 			nppSafeCall(nppiCopy_32f_C1R(
 				(float*)((char*)projSquare_d.GetDevicePtr() + roiCC4.y * proj.GetMaxDimension() * sizeof(float) + roiCC4.x * sizeof(float)),
 				proj.GetMaxDimension() * sizeof(float),
 				(float*)((char*)ccMap_d.GetDevicePtr() + roiDestCC4.y * ccMap_d.GetPitch() + roiDestCC4.x * sizeof(float)),
-				ccMap_d.GetPitch(), ccSize));
+				(int)ccMap_d.GetPitch(), ccSize));
 
 			ccMap_d.CopyDeviceToHost(ccMapMulti);
 		}
 
 		//Get shift:
-		shift.x = maxPixels[0];
-		shift.y = maxPixels[1];
+		shift.x = (float)maxPixels[0];
+		shift.y = (float)maxPixels[1];
 
 		if (shift.x > proj.GetMaxDimension() / 2)
 		{

@@ -68,9 +68,9 @@ using namespace Cuda;
 #include <limits.h>
 #endif
 
-typedef struct {
-	float3 m[3];
-} float3x3;
+//typedef struct {
+//	float3 m[3];
+//} float3x3;
 
 typedef struct {
 	int particleNr;
@@ -318,7 +318,7 @@ int main(int argc, char* argv[])
 
 		printf("Using CUDA device %s\n", cuCtx->GetDeviceProperties()->GetDeviceName().c_str()); fflush(stdout);
 
-		printf("Available Memory on device: %i MB\n", cuCtx->GetFreeMemorySize() / 1024 / 1024); fflush(stdout);
+		printf("Available Memory on device: %llu MB\n", cuCtx->GetFreeMemorySize() / 1024 / 1024); fflush(stdout);
 		
 		ProjectionSource* projSource;
 		//Load projection data file
@@ -452,8 +452,8 @@ int main(int argc, char* argv[])
 		{
 			sizeDataType = sizeof(float);
 		}
-		if (mpi_part == 0) printf("Memory space required by volume data: %i MB\n", aConfig.RecDimensions.x * aConfig.RecDimensions.y * aConfig.RecDimensions.z * sizeDataType / 1024 / 1024);
-		if (mpi_part == 0) printf("Memory space required by partial volume: %i MB\n", aConfig.RecDimensions.x * aConfig.RecDimensions.y * (size_t)subVolDim.z * sizeDataType / 1024 / 1024);
+		if (mpi_part == 0) printf("Memory space required by volume data: %llu MB\n", (size_t)aConfig.RecDimensions.x * (size_t)aConfig.RecDimensions.y * (size_t)aConfig.RecDimensions.z * sizeDataType / 1024 / 1024);
+		if (mpi_part == 0) printf("Memory space required by partial volume: %llu MB\n", (size_t)aConfig.RecDimensions.x * (size_t)aConfig.RecDimensions.y * (size_t)subVolDim.z * sizeDataType / 1024 / 1024);
 
 		//Load Kernels
 		KernelModuls modules(cuCtx);
@@ -472,7 +472,7 @@ int main(int argc, char* argv[])
 			arrayFormat = CU_AD_FORMAT_FLOAT;
 		}
 
-		CudaArray3D vol_Array(arrayFormat, volSize.x, volSize.y, volSize.z, 1, 2);
+		CudaArray3D vol_Array(arrayFormat, (int)volSize.x, (int)volSize.y, (int)volSize.z, 1, 2);
 		CudaTextureObject3D texObj(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, &vol_Array);
 
 		CudaArray3D vol_ArraySubVol(arrayFormat, aConfig.SizeSubVol, aConfig.SizeSubVol, aConfig.SizeSubVol, 1, 2);
@@ -540,7 +540,7 @@ int main(int argc, char* argv[])
 		{
 			printf("Projection index list:\n");
 			log << "Projection index list:" << endl;
-			for (uint i = 0; i < projCount; i++)
+			for (int i = 0; i < projCount; i++)
 			{
 				printf("%3d,", indexList[i]);
 				log << indexList[i];
@@ -554,13 +554,13 @@ int main(int argc, char* argv[])
 		Reconstructor reconstructor(aConfig, proj, projSource, markers, *defocus, modules, mpi_part, mpi_size);
 
 
-		if (mpi_part == 0) printf("Free Memory on device after allocations: %i MB\n", cuCtx->GetFreeMemorySize() / 1024 / 1024);
+		if (mpi_part == 0) printf("Free Memory on device after allocations: %llu MB\n", cuCtx->GetFreeMemorySize() / 1024 / 1024);
 		/////////////////////////////////////
 		/// Filter Projections
 		/////////////////////////////////////
 		if (mpi_part == 0)
 		{
-			float lp = aConfig.fourFilterLP, hp = aConfig.fourFilterHP, lps = aConfig.fourFilterLPS, hps = aConfig.fourFilterHPS;
+			float lp = (float)aConfig.fourFilterLP, hp = (float)aConfig.fourFilterHP, lps = (float)aConfig.fourFilterLPS, hps = (float)aConfig.fourFilterHPS;
 			bool skipFilter = aConfig.SkipFilter;
 
 			if (!reconstructor.ComputeFourFilter() && !skipFilter)
@@ -696,7 +696,7 @@ int main(int argc, char* argv[])
 				
 		for (int group = 0; group < ml.GetGroupCount(aConfig.GroupMode); group++)
 		{
-			Matrix<float> magAnisotropyInv(reconstructor.GetMagAnistropyMatrix(1.0f / aConfig.MagAnisotropyAmount, aConfig.MagAnisotropyAngleInDeg, proj.GetWidth(), proj.GetHeight()));
+			Matrix<float> magAnisotropyInv(reconstructor.GetMagAnistropyMatrix(1.0f / aConfig.MagAnisotropyAmount, aConfig.MagAnisotropyAngleInDeg, (float)proj.GetWidth(), (float)proj.GetHeight()));
 
 			//reset Volume:
 			{
@@ -739,7 +739,7 @@ int main(int argc, char* argv[])
 				float binningAdjust = aConfig.VoxelSize.x / aConfig.VoxelSizeSubVol;
 
 				//adjust subVolsize to radius --> / 2!
-				volWithoutSubVols->RemoveSubVolume(posSubVol.x + shift.x, posSubVol.y + shift.y, posSubVol.z + shift.z, aConfig.SizeSubVol / binningAdjust / 2, 0, mpi_part);
+				volWithoutSubVols->RemoveSubVolume((int)(posSubVol.x + shift.x), (int)(posSubVol.y + shift.y), (int)(posSubVol.z + shift.z), (int)(aConfig.SizeSubVol / binningAdjust / 2.0f), 0, mpi_part);
 			}
 
 			//Remove the supporting subVolumes from the reconstruction and fill the space with zeros:
@@ -753,7 +753,7 @@ int main(int argc, char* argv[])
 				float binningAdjust = aConfig.VoxelSize.x / aConfig.VoxelSizeSubVol;
 
 				//adjust subVolsize to radius --> / 2!
-				volWithoutSubVols->RemoveSubVolume(posSubVol.x + shift.x, posSubVol.y + shift.y, posSubVol.z + shift.z, volsSupport[m.index]->GetDimension().x / binningAdjust / 2, 0, mpi_part);
+				volWithoutSubVols->RemoveSubVolume((int)(posSubVol.x + shift.x), (int)(posSubVol.y + shift.y), (int)(posSubVol.z + shift.z), (int)(volsSupport[m.index]->GetDimension().x / binningAdjust / 2.0f), 0, mpi_part);
 			}
 			//Copy the holey volume to GPU
 			vol_Array.CopyFromHostToArray(volWithoutSubVols->GetPtrToSubVolume(mpi_part));
@@ -825,13 +825,13 @@ int main(int argc, char* argv[])
 						//printf("HitPoint: (%d, %d)\n", hitPoint.x, hitPoint.y);
 
 						float hitX, hitY;
-						MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), hitPoint.x, hitPoint.y, hitX, hitY);
+						MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)hitPoint.x, (float)hitPoint.y, hitX, hitY);
 
-						int safeDist = 100 + aConfig.VoxelSizeSubVol * aConfig.SizeSubVol * 2 + aConfig.MaxShift * 2;
-						int hitXMin = floor(hitX) - safeDist;
-						int hitXMax = ceil(hitX) + safeDist;
-						int hitYMin = floor(hitY) - safeDist;
-						int hitYMax = ceil(hitY) + safeDist;
+						int safeDist = 100 + (int)(aConfig.VoxelSizeSubVol * (float)aConfig.SizeSubVol * 2.0f) + aConfig.MaxShift * 2;
+						int hitXMin = (int)floor(hitX) - safeDist;
+						int hitXMax = (int)ceil(hitX) + safeDist;
+						int hitYMin = (int)floor(hitY) - safeDist;
+						int hitYMax = (int)ceil(hitY) + safeDist;
 
 						if (hitXMin < 0) hitXMin = 0;
 						if (hitYMin < 0) hitYMin = 0;
@@ -880,13 +880,13 @@ int main(int argc, char* argv[])
 						//printf("HitPoint: (%d, %d)\n", hitPoint.x, hitPoint.y);
 
 						float hitX, hitY;
-						MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), hitPoint.x, hitPoint.y, hitX, hitY);
+						MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)hitPoint.x, (float)hitPoint.y, hitX, hitY);
 
-						int safeDist = 100 + aConfig.VoxelSizeSubVol * aConfig.SizeSubVol * 2 + aConfig.MaxShift * 2;
-						int hitXMin = floor(hitX) - safeDist;
-						int hitXMax = ceil(hitX) + safeDist;
-						int hitYMin = floor(hitY) - safeDist;
-						int hitYMax = ceil(hitY) + safeDist;
+						int safeDist = 100 + (int)(aConfig.VoxelSizeSubVol * (float)aConfig.SizeSubVol * 2.0f) + aConfig.MaxShift * 2;
+						int hitXMin = (int)floor(hitX) - safeDist;
+						int hitXMax = (int)ceil(hitX) + safeDist;
+						int hitYMin = (int)floor(hitY) - safeDist;
+						int hitYMax = (int)ceil(hitY) + safeDist;
 
 						if (hitXMin < 0) hitXMin = 0;
 						if (hitYMin < 0) hitYMin = 0;
@@ -1035,9 +1035,9 @@ int main(int argc, char* argv[])
 
 							// Convert to my_float to avoid FileIO dependency on Cuda
 							sf.SetValue(index, totalIdx, my_float2(shift.x, shift.y));
-							groupRelationList[totalIdx].particleNr = m.partNr;
-							groupRelationList[totalIdx].particleNrInTomo = m.partNrInTomo;
-							groupRelationList[totalIdx].tomoNr = m.tomoNr;
+							groupRelationList[totalIdx].particleNr = (int)m.partNr;
+							groupRelationList[totalIdx].particleNrInTomo = (int)m.partNrInTomo;
+							groupRelationList[totalIdx].tomoNr = (int)m.tomoNr;
 							groupRelationList[totalIdx].obtainedShiftFromID = group;
 							groupRelationList[totalIdx].CCValue = ccValue;
 						}
@@ -1062,9 +1062,9 @@ int main(int argc, char* argv[])
 								closeIndx.push_back(pair<int, float>(totalIdx2, d));
 								count++;
 
-								groupRelationList[totalIdx2].particleNr = m2.partNr;
-								groupRelationList[totalIdx2].particleNrInTomo = m2.partNrInTomo;
-								groupRelationList[totalIdx2].tomoNr = m2.tomoNr;
+								groupRelationList[totalIdx2].particleNr = (int)m2.partNr;
+								groupRelationList[totalIdx2].particleNrInTomo = (int)m2.partNrInTomo;
+								groupRelationList[totalIdx2].tomoNr = (int)m2.tomoNr;
 								groupRelationList[totalIdx2].obtainedShiftFromID = totalIdx;
 								groupRelationList[totalIdx2].CCValue = ccValue;
 							}

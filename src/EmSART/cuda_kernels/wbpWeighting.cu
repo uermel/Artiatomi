@@ -134,12 +134,11 @@ void wbpWeighting(cuComplex* img, size_t stride, unsigned int pixelcount, float 
 		break;
 	}
 	
-	
-	cuComplex res = img[y * stride / sizeof(cuComplex) + x];
+	cuComplex res = *(((cuComplex*)((char*)img + stride * y)) + x);
 	res.x *= weight;
 	res.y *= weight;
    
-	img[y * stride / sizeof(cuComplex) + x] = res;
+	*(((cuComplex*)((char*)img + stride * y)) + x) = res;
 	
 }
 
@@ -205,10 +204,10 @@ void fourierFilter(float2* img, size_t stride, int pixelcount, float lp, float h
 		}
 	}
 
-	float2 erg = img[y * stride / sizeof(float2) + x];
+	float2 erg = *(((float2*)((char*)img + stride * y)) + x);
 	erg.x *= fil;
 	erg.y *= fil;
-	img[y * stride / sizeof(float2) + x] = erg;
+	*(((float2*)((char*)img + stride * y)) + x) = erg;
 }
 
 extern "C"
@@ -233,10 +232,10 @@ void doseWeighting(float2* img, size_t stride, int pixelcount, float dose, float
 	dist = dist / (pixelcount / 2 / pixelsize);
 	fil = expf(-dose * dist);
 
-	float2 erg = img[y * stride / sizeof(float2) + x];
+	float2 erg = *(((float2*)((char*)img + stride * y)) + x);
 	erg.x *= fil;
 	erg.y *= fil;
-	img[y * stride / sizeof(float2) + x] = erg;
+	*(((float2*)((char*)img + stride * y)) + x) = erg;
 }
 
 extern "C"
@@ -249,14 +248,14 @@ void conjMul(float2* complxA, float2* complxB, size_t stride, int pixelcount)
 
 	if (x >= pixelcount / 2 + 1) return;
 	if (y >= pixelcount) return;
-
-	float2 a = complxA[y * stride / sizeof(float2) + x];
-	float2 b = complxB[y * stride / sizeof(float2) + x];
+	
+	float2 a = *(((float2*)((char*)complxA + stride * y)) + x);
+	float2 b = *(((float2*)((char*)complxB + stride * y)) + x);
 	float2 erg;
 	//conj. complex of a: -a.y
 	erg.x = a.x * b.x + a.y * b.y;
 	erg.y = a.x * b.y - a.y * b.x;
-	complxA[y * stride / sizeof(float2) + x] = erg;
+	*(((float2*)((char*)complxA + stride * y)) + x) = erg;
 
 }
 
@@ -287,8 +286,7 @@ void maxShift(float* img, size_t stride, int pixelcount, int maxShift)
 
 	if (dist > maxShift)
 	{
-		float* row = (float*)((char*)img + stride * y);
-		row[x] = 0;
+		*(((float*)((char*)img + stride * y)) + x) = 0;
 	}
 }
 
@@ -315,14 +313,13 @@ void maxShiftWeighted(float* img, size_t stride, int pixelcount, int maxShift)
 
 	dist = sqrtf(mx * mx + my * my);
 
-	float* row = (float*)((char*)img + stride * y);
 	if (dist > maxShift)
 	{
-		row[x] = 0;
+		*(((float*)((char*)img + stride * y)) + x) = 0;
 	}
 	else
 	{
-		row[x] /= dist+0.0001f;
+		*(((float*)((char*)img + stride * y)) + x) /= dist+0.0001f;
 	}
 }
 

@@ -50,8 +50,6 @@
 
 #include "float.h"
 
-//texture< float, 3, cudaReadModeElementType > t_dataset;
-
 
 extern "C"
 __global__
@@ -67,7 +65,6 @@ void march(int proj_x, int proj_y, size_t stride, float* projection, float* volu
 	const unsigned int x = (blockIdx.x * blockDim.x) + threadIdx.x;
 	const unsigned int y = (blockIdx.y * blockDim.y) + threadIdx.y;
 
-	//if (x >= proj_x || y >= proj_y) return;
 	if (x >= roiMax.x || y >= roiMax.y) return;
 	if (x < roiMin.x || y < roiMin.y) return;
 
@@ -76,7 +73,7 @@ void march(int proj_x, int proj_y, size_t stride, float* projection, float* volu
 	float temp = 0.0f;
 	g.z = 0;
 	g.x = 0;
-	//No oversampling now (to enable OS use osx = osy = 0.25f)
+
 	for (float  osx = 0.25f; osx < 0.9f; osx+=0.5f)
 	{
 		for (float osy = 0.25f; osy < 0.9f; osy+=0.5f)
@@ -154,9 +151,8 @@ void march(int proj_x, int proj_y, size_t stride, float* projection, float* volu
 		}
 	}
 
-	unsigned int i = (y * stride / sizeof(float)) + x;
-	projection[i] += temp * 0.25f; //  With Oversampling use * 0.25f
-	volume_traversal_length[i] = fmaxf(0,g.z/g.x);
+	*(((float*)((char*)projection + stride * y)) + x) += temp * 0.25f; //  With Oversampling use * 0.25f
+	*(((float*)((char*)volume_traversal_length + stride * y)) + x) = fmaxf(0,g.z/g.x);
 }
 
 #endif

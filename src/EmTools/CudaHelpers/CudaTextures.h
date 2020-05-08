@@ -454,6 +454,53 @@ namespace Cuda
 
 		CUtexObject GetTexObject();
 	};
+
+	class CudaTextureObject2D
+	{
+	private:
+		CUtexObject mTexObj;
+		CUDA_RESOURCE_DESC mResDesc;
+		CUDA_TEXTURE_DESC mTexDesc;
+		CUDA_RESOURCE_VIEW_DESC mResViewDesc;
+
+		CudaPitchedDeviceVariable* mData; //CUDA Array where the texture data is stored
+		bool mCleanUp; //Indicates if the cuda array was created by the object itself
+
+	public:
+		CudaTextureObject2D(CUaddress_mode aAddressMode0, CUaddress_mode aAddressMode1,
+			CUfilter_mode aFilterMode, uint aTexRefSetFlag, CudaPitchedDeviceVariable* aArray, CUarray_format aDataFormat, uint aNumChannels);
+		CudaTextureObject2D();
+
+		~CudaTextureObject2D();
+
+		void Bind(CUaddress_mode aAddressMode0, CUaddress_mode aAddressMode1,
+			CUfilter_mode aFilterMode, uint aTexRefSetFlag, CudaPitchedDeviceVariable* aArray, CUarray_format aDataFormat, uint aNumChannels);
+
+		CudaPitchedDeviceVariable* GetData();
+
+		CUtexObject GetTexObject();
+	};
+
+
+
+	class CudaSurfaceObject3D
+	{
+	private:
+		CUsurfObject mSurfObj;
+		CUDA_RESOURCE_DESC mResDesc;
+
+		CudaArray3D* mArray; //CUDA Array where the texture data is stored
+		bool mCleanUp; //Indicates if the cuda array was created by the object itself
+
+	public:
+		CudaSurfaceObject3D(CudaArray3D* aArray);
+
+		~CudaSurfaceObject3D();
+
+		CudaArray3D* GetArray();
+
+		CUsurfObject GetSurfObject();
+	};
 }
 #endif //USE_CUDA
 #endif //CUDATEXTURES_H

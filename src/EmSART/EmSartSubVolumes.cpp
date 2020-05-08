@@ -300,7 +300,7 @@ int main(int argc, char* argv[])
 
 		printf("Using CUDA device %s\n", cuCtx->GetDeviceProperties()->GetDeviceName().c_str()); fflush(stdout);
 
-		printf("Available Memory on device: %i MB\n", cuCtx->GetFreeMemorySize() / 1024 / 1024); fflush(stdout);
+		printf("Available Memory on device: %llu MB\n", cuCtx->GetFreeMemorySize() / 1024 / 1024); fflush(stdout);
 
 		ProjectionSource* projSource;
 		//Load projection data file
@@ -395,8 +395,8 @@ int main(int argc, char* argv[])
 		size_t sizeDataType;
 		sizeDataType = sizeof(float);
 		
-		if (mpi_part == 0) printf("Memory space required by volume data: %i MB\n", aConfig.RecDimensions.x * aConfig.RecDimensions.y * aConfig.RecDimensions.z * sizeDataType / 1024 / 1024);
-		if (mpi_part == 0) printf("Memory space required by partial volume: %i MB\n", aConfig.RecDimensions.x * aConfig.RecDimensions.y * (size_t)subVolDim.z * sizeDataType / 1024 / 1024);
+		if (mpi_part == 0) printf("Memory space required by volume data: %llu MB\n", (size_t)aConfig.RecDimensions.x * (size_t)aConfig.RecDimensions.y * (size_t)aConfig.RecDimensions.z * sizeDataType / 1024 / 1024);
+		if (mpi_part == 0) printf("Memory space required by partial volume: %llu MB\n", (size_t)aConfig.RecDimensions.x * (size_t)aConfig.RecDimensions.y * (size_t)subVolDim.z * sizeDataType / 1024 / 1024);
 
 		//Load Kernels
 		KernelModuls modules(cuCtx);
@@ -437,8 +437,8 @@ int main(int argc, char* argv[])
 		//CudaArray3D vol_ArraySubVol(arrayFormat, aConfig.SizeSubVol, aConfig.SizeSubVol, aConfig.SizeSubVol, 1, 2);
 		//CudaTextureObject3D texObjSubVol(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, &vol_ArraySubVol);
 
-		CUsurfref surfref;
-		cudaSafeCall(cuModuleGetSurfRef(&surfref, modules.modBP, "surfref"));
+		//CUsurfref surfref;
+		//cudaSafeCall(cuModuleGetSurfRef(&surfref, modules.modBP, "surfref"));
 		
 
 		
@@ -456,7 +456,7 @@ int main(int argc, char* argv[])
 		{
 			printf("Projection index list:\n");
 			log << "Projection index list:" << endl;
-			for (uint i = 0; i < projCount; i++)
+			for (int i = 0; i < projCount; i++)
 			{
 				printf("%3d,", indexList[i]);
 				log << indexList[i];
@@ -471,7 +471,7 @@ int main(int argc, char* argv[])
 		Reconstructor reconstructor(aConfig, proj, projSource, markers, *defocus, modules, mpi_part, mpi_size);
 
 
-		if (mpi_part == 0) printf("Free Memory on device after allocations: %i MB\n", cuCtx->GetFreeMemorySize() / 1024 / 1024);
+		if (mpi_part == 0) printf("Free Memory on device after allocations: %llu MB\n", cuCtx->GetFreeMemorySize() / 1024 / 1024);
 		/////////////////////////////////////
 		/// Filter Projections
 		/////////////////////////////////////
@@ -679,7 +679,7 @@ int main(int argc, char* argv[])
 				reconstructor.CopyProjectionToDevice(SIRTBuffer[0]);
 
 				//Do Backprojection on vector data:
-				reconstructor.BackProjection(volReconstructed, vecVols, vecExtraShifts, vecArrays, surfref, index);
+				reconstructor.BackProjection(volReconstructed, vecVols, vecExtraShifts, vecArrays, index);
 			}
 
 			//Write all sub-volumes to disk:

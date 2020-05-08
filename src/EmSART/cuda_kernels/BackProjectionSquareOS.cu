@@ -87,13 +87,9 @@ void MatrixVector3Mul(float4x4 M, float3* v)
 extern volatile __shared__ unsigned char sBuffer[];
 
 
-surface<void, cudaSurfaceType3D> surfref;
-
-
-
 extern "C"
 __global__ 
-void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, float maxOverSampleInv, float* img, int stride, float distMin, float distMax)
+void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, float maxOverSampleInv, CUtexObject img, CUsurfObject surfref, float distMin, float distMax)
 {
 	float3 ray;
 	float3 borderMin;
@@ -359,11 +355,11 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 			if((t_out - t_in) > 0.0f )
 			{
 				#ifdef CONST_LENGTH_MODE
-				voxelD[index2].x += (tex2D(tex, xAniso, yAniso)) * (c_voxelSize.x);
+				voxelD[index2].x += (tex2D<float>(img, xAniso, yAniso)) * (c_voxelSize.x);
 				distanceD[index2].x += (c_voxelSize.x);
 				#endif
 				#ifdef PRECISE_LENGTH_MODE
-				voxelD[index2].x += (tex2D(tex, xAniso, yAniso)) * (t_out-t_in);
+				voxelD[index2].x += (tex2D<float>(img, xAniso, yAniso)) * (t_out-t_in);
 				distanceD[index2].x += (t_out-t_in);
 				#endif
 			}
@@ -396,11 +392,11 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 			if((t_out - t_in) > 0.0f )
 			{
 				#ifdef CONST_LENGTH_MODE
-				voxelD[index2].y += (tex2D(tex, xAniso, yAniso)) * (c_voxelSize.x);
+				voxelD[index2].y += (tex2D<float>(img, xAniso, yAniso)) * (c_voxelSize.x);
 				distanceD[index2].y += (c_voxelSize.x);
 				#endif
 				#ifdef PRECISE_LENGTH_MODE
-				voxelD[index2].y += (tex2D(tex, xAniso, yAniso)) * (t_out-t_in);
+				voxelD[index2].y += (tex2D<float>(img, xAniso, yAniso)) * (t_out-t_in);
 				distanceD[index2].y += (t_out-t_in);
 				#endif
 			}
@@ -435,11 +431,11 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 			if((t_out - t_in) > 0.0f )
 			{
 				#ifdef CONST_LENGTH_MODE
-				voxelD[index2].z += (tex2D(tex, xAniso, yAniso)) * (c_voxelSize.x);
+				voxelD[index2].z += (tex2D<float>(img, xAniso, yAniso)) * (c_voxelSize.x);
 				distanceD[index2].z += (c_voxelSize.x);
 				#endif
 				#ifdef PRECISE_LENGTH_MODE
-				voxelD[index2].z += (tex2D(tex, xAniso, yAniso)) * (t_out-t_in);
+				voxelD[index2].z += (tex2D<float>(img, xAniso, yAniso)) * (t_out-t_in);
 				distanceD[index2].z += (t_out-t_in);
 				#endif
 			}
@@ -472,11 +468,11 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 			if((t_out - t_in) > 0.0f )
 			{
 				#ifdef CONST_LENGTH_MODE
-				voxelD[index2].w += (tex2D(tex, xAniso, yAniso)) * (c_voxelSize.x);
+				voxelD[index2].w += (tex2D<float>(img, xAniso, yAniso)) * (c_voxelSize.x);
 				distanceD[index2].w += (c_voxelSize.x);
 				#endif
 				#ifdef PRECISE_LENGTH_MODE
-				voxelD[index2].w += (tex2D(tex, xAniso, yAniso)) * (t_out-t_in);
+				voxelD[index2].w += (tex2D<float>(img, xAniso, yAniso)) * (t_out-t_in);
 				distanceD[index2].w += (t_out-t_in);
 				#endif
 			}// if hit voxel
@@ -505,7 +501,7 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 
 extern "C"
 __global__ 
-void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample, float maxOverSampleInv, float* img, int stride, float distMin, float distMax)
+void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample, float maxOverSampleInv, CUtexObject img, CUsurfObject surfref, float distMin, float distMax)
 {
 	float3 ray;
 	float3 borderMin;
@@ -777,11 +773,11 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 			if((t_out - t_in) > 0.0f )
 			{
 				#ifdef CONST_LENGTH_MODE
-				voxelD[index2].x += (tex2D(tex, xAniso, yAniso)) * (c_voxelSize.x);
+				voxelD[index2].x += (tex2D<float>(img, xAniso, yAniso)) * (c_voxelSize.x);
 				distanceD[index2].x += (c_voxelSize.x);
 				#endif
 				#ifdef PRECISE_LENGTH_MODE
-				voxelD[index2].x += (tex2D(tex, xAniso, yAniso)) * (t_out-t_in);
+				voxelD[index2].x += (tex2D<float>(img, xAniso, yAniso)) * (t_out-t_in);
 				distanceD[index2].x += (t_out-t_in);
 				#endif
 			}
@@ -814,11 +810,11 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 			if((t_out - t_in) > 0.0f )
 			{
 				#ifdef CONST_LENGTH_MODE
-				voxelD[index2].y += (tex2D(tex, xAniso, yAniso)) * (c_voxelSize.x);
+				voxelD[index2].y += (tex2D<float>(img, xAniso, yAniso)) * (c_voxelSize.x);
 				distanceD[index2].y += (c_voxelSize.x);
 				#endif
 				#ifdef PRECISE_LENGTH_MODE
-				voxelD[index2].y += (tex2D(tex, xAniso, yAniso)) * (t_out-t_in);
+				voxelD[index2].y += (tex2D<float>(img, xAniso, yAniso)) * (t_out-t_in);
 				distanceD[index2].y += (t_out-t_in);
 				#endif
 			}
@@ -853,11 +849,11 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 			if((t_out - t_in) > 0.0f )
 			{
 				#ifdef CONST_LENGTH_MODE
-				voxelD[index2].z += (tex2D(tex, xAniso, yAniso)) * (c_voxelSize.x);
+				voxelD[index2].z += (tex2D<float>(img, xAniso, yAniso)) * (c_voxelSize.x);
 				distanceD[index2].z += (c_voxelSize.x);
 				#endif
 				#ifdef PRECISE_LENGTH_MODE
-				voxelD[index2].z += (tex2D(tex, xAniso, yAniso)) * (t_out-t_in);
+				voxelD[index2].z += (tex2D<float>(img, xAniso, yAniso)) * (t_out-t_in);
 				distanceD[index2].z += (t_out-t_in);
 				#endif
 			}
@@ -890,11 +886,11 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 			if((t_out - t_in) > 0.0f )
 			{
 				#ifdef CONST_LENGTH_MODE
-				voxelD[index2].w += (tex2D(tex, xAniso, yAniso)) * (c_voxelSize.x);
+				voxelD[index2].w += (tex2D<float>(img, xAniso, yAniso)) * (c_voxelSize.x);
 				distanceD[index2].w += (c_voxelSize.x);
 				#endif
 				#ifdef PRECISE_LENGTH_MODE
-				voxelD[index2].w += (tex2D(tex, xAniso, yAniso)) * (t_out-t_in);
+				voxelD[index2].w += (tex2D<float>(img, xAniso, yAniso)) * (t_out-t_in);
 				distanceD[index2].w += (t_out-t_in);
 				#endif
 			}// if hit voxel
@@ -926,7 +922,7 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 
 extern "C"
 __global__ 
-void convertVolumeFP16ToFP32(float* volPlane, int stride, unsigned int z)
+void convertVolumeFP16ToFP32(float* volPlane, int stride, CUsurfObject surfref, unsigned int z)
 {
 	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -949,15 +945,15 @@ void convertVolumeFP16ToFP32(float* volPlane, int stride, unsigned int z)
 	//adopt x coordinate to single voxels, not voxelBlocks
 	x = x * 4;
 	
-	volPlane[y * stride + x + 0] = -voxelBlock.x;
-	volPlane[y * stride + x + 1] = -voxelBlock.y;
-	volPlane[y * stride + x + 2] = -voxelBlock.z;
-	volPlane[y * stride + x + 3] = -voxelBlock.w;
+	*(((float*)((char*)volPlane + stride * y)) + x + 0) = -voxelBlock.x;
+	*(((float*)((char*)volPlane + stride * y)) + x + 1) = -voxelBlock.y;
+	*(((float*)((char*)volPlane + stride * y)) + x + 2) = -voxelBlock.z;
+	*(((float*)((char*)volPlane + stride * y)) + x + 3) = -voxelBlock.w;
 }
 
 extern "C"
 __global__
-void convertVolume3DFP16ToFP32(float* volPlane, int stride)
+void convertVolume3DFP16ToFP32(float* volPlane, int stride, CUsurfObject surfref)
 {
 	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -981,10 +977,10 @@ void convertVolume3DFP16ToFP32(float* volPlane, int stride)
 	//adopt x coordinate to single voxels, not voxelBlocks
 	x = x * 4;
 
-	volPlane[y * stride + x + 0] = -voxelBlock.x;
-	volPlane[y * stride + x + 1] = -voxelBlock.y;
-	volPlane[y * stride + x + 2] = -voxelBlock.z;
-	volPlane[y * stride + x + 3] = -voxelBlock.w;
+	*(((float*)((char*)volPlane + stride * y)) + x + 0) = -voxelBlock.x;
+	*(((float*)((char*)volPlane + stride * y)) + x + 1) = -voxelBlock.y;
+	*(((float*)((char*)volPlane + stride * y)) + x + 2) = -voxelBlock.z;
+	*(((float*)((char*)volPlane + stride * y)) + x + 3) = -voxelBlock.w;
 }
 
 #endif //BACKPROJECTIONSQUAREOS_CU

@@ -58,29 +58,23 @@ void slicer(int proj_x, int proj_y, size_t stride, float* projection, float tmin
 {
 	float t_in;
 	float t_out;
-	float4 f;      //helper variable
-	float3 g;											//helper variable
+	float4 f;   //helper variable
+	float3 g;	//helper variable
 	float3 c_source;
-	//float val = 0;
 
 	// integer pixel coordinates
 	const unsigned int x = (blockIdx.x * blockDim.x) + threadIdx.x;
 	const unsigned int y = (blockIdx.y * blockDim.y) + threadIdx.y;
 	
-	//if (x >= proj_x || y >= proj_y) return;
 	if (x >= roiMax.x || y >= roiMax.y) return;
 	if (x < roiMin.x || y < roiMin.y) return;
 
-
 	c_source = c_detektor;
 
-	//c_source = c_source + ((float)x + 0.5f) * c_uPitch;
-	//c_source = c_source + ((float)y + 0.5f) * c_vPitch;
 	float temp = 0.0f;
 	g.z = 0;
 	g.x = 0;
 
-	//No oversampling now (to enable OS use osx = osy = 0.25f)
 	for (float  osx = 0.25f; osx < 0.8f; osx+=0.5f)
 	{
 		for (float osy = 0.25f; osy < 0.8f; osy+=0.5f)
@@ -153,70 +147,12 @@ void slicer(int proj_x, int proj_y, size_t stride, float* projection, float tmin
 					f.x += f.w * c_projNorm.x;
 					f.y += f.w * c_projNorm.y;
 					f.z += f.w * c_projNorm.z;
-				}
-
-				/*f.x += (t * c_projNorm.x);
-				f.y += (t * c_projNorm.y);
-				f.z += (t * c_projNorm.z);
-
-				f.x = (f.x - c_bBoxMin.x) * c_volumeBBoxRcp.x * c_volumeDim.x;
-				f.y = (f.y - c_bBoxMin.y) * c_volumeBBoxRcp.y * c_volumeDim.y;
-				f.z = (f.z - c_bBoxMin.z) * c_volumeBBoxRcp.z * c_volumeDim.z - c_zShiftForPartialVolume;
-				*///if (x == 2048 && y == 2048)
-					//val = f.z;
-				//val += tex3D(t_dataset, f.x, f.y, f.z);
-				//float distX = 1.0f;
-				//float distY = 1.0f;
-				//float distZ = 1.0f;
-				////dim border
-				//float filterWidth = 150.0f;
-				//if (f.y < filterWidth)
-				//{
-				//	float w = f.y / filterWidth;
-				//	if (w<0) w = 0;
-				//	distY = 1.0f - expf(-(w * w * 9.0f));
-				//}
-				//else if (f.y > c_volumeDimComplete.y - filterWidth)
-				//{
-				//	float w = (c_volumeDimComplete.y-f.y-1.0f) / filterWidth;
-				//	if (w<0) w = 0;
-				//	distY = 1.0f - expf(-(w * w * 9.0f));
-				//}
-
-				//if (f.x < filterWidth)
-				//{
-				//	float w = f.x / filterWidth;
-				//	if (w<0) w = 0;
-				//	distX = 1.0f - expf(-(w * w * 9.0f));
-				//}
-				//else if (f.x > c_volumeDimComplete.x - filterWidth)
-				//{
-				//	float w = (c_volumeDimComplete.x-f.x-1.0f) / filterWidth;
-				//	if (w<0) w = 0;
-				//	distX = 1.0f - expf(-(w * w * 9.0f));
-				//}
-
-				//if (f.z < 50.0f)
-				//{
-				//	float w = f.z / 50.0f;
-				//	if (w<0) w = 0;
-				//	distZ = 1.0f - expf(-(w * w * 9.0f));
-				//}
-				//else if (f.z > c_volumeDimComplete.z - 50.0f)
-				//{
-				//	float w = (c_volumeDimComplete.z-f.z-1.0f) / 50.0f;
-				//	if (w<0) w = 0;
-				//	distZ = 1.0f - expf(-(w * w * 9.0f));
-				//}
-				//val = val * distX * distY * distZ;
-				//val = val * (expf(-(distX * distX + distY * distY + distZ * distZ)));
-				
+				}				
 			}
 		}
 	}
 
-	unsigned int i = (y * stride / sizeof(float)) + x;
-	projection[i] += temp * 0.25f; // With Oversampling use * 0.25f
+	*(((float*)((char*)projection + stride * y)) + x) += temp * 0.25f; // With Oversampling use * 0.25f	
 }
 
 extern "C"
@@ -228,15 +164,10 @@ void volTraversalLength(int proj_x, int proj_y, size_t stride, float* volume_tra
 	float3 c_source;
 	float val = 0;
 
-	//volume_traversal_length[0] = c_detektor.x;
-	//volume_traversal_length[1] = c_detektor.y;
-	//volume_traversal_length[2] = c_detektor.z;
 	// integer pixel coordinates
 	const unsigned int x = (blockIdx.x * blockDim.x) + threadIdx.x;
 	const unsigned int y = (blockIdx.y * blockDim.y) + threadIdx.y;
 
-
-	//if (x >= proj_x || y >= proj_y) return;
 	if (x >= roiMax.x || y >= roiMax.y) return;
 	if (x < roiMin.x || y < roiMin.y) return;
 
@@ -250,7 +181,6 @@ void volTraversalLength(int proj_x, int proj_y, size_t stride, float* volume_tra
 	c_source = c_source + (yAniso) * c_vPitch;
 
 
-	//No oversampling now (to enable OS use osx = osy = 0.25f)
 	for (float  osx = 0.5f; osx < 0.8f; osx+=0.5f)
 	{
 		for (float osy = 0.5f; osy < 0.8f; osy+=0.5f)
@@ -283,7 +213,7 @@ void volTraversalLength(int proj_x, int proj_y, size_t stride, float* volume_tra
 		}
 	}
 
-	unsigned int i = (y * stride / sizeof(float)) + x;
-	volume_traversal_length[i] += val; // With Oversampling use * 0.25f
+	*(((float*)((char*)volume_traversal_length + stride * y)) + x) += val; // With Oversampling use * 0.25f
+	
 }
 #endif
