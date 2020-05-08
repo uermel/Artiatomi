@@ -898,6 +898,10 @@ int main(int argc, char* argv[])
 					emwrite("testWedge.em", testWedge, size, size, size);
 					delete[] testWedge;
 
+					float maxVal = 0;
+					temp.CopyDeviceToHost(&maxVal, sizeof(float));
+					cout << "Max value wedge: " << maxVal << endl;
+
 					wedgeNorm.WedgeNorm(wedgeSum, partCplx, temp, 0);
 
 					fft.FFTShift2(partCplx, tempCplx);
