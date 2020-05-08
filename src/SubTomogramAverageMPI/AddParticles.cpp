@@ -878,6 +878,12 @@ int main(int argc, char* argv[])
 					partSum.CopyDeviceToHost(test2);
 					emwrite("Z:\\kunz\\Documents\\TestSubTomogramAveraging\\testPart.em", test2, 128, 128, 128);*/
 
+					/* TODO AS Write Particle into EM file */
+					float* testParticle = new float[size*size*size];
+					partSum.CopyDeviceToHost(testParticle);
+					emwrite("testParticle.em", testParticle, size, size, size);
+					delete[] testParticle;
+
 					makecplx.MakeCplxWithSub(partSum, partCplx, 0);
 					cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)partCplx.GetDevicePtr(), (cufftComplex*)tempCplx.GetDevicePtr(), CUFFT_FORWARD));
 					fft.FFTShift2(tempCplx, partCplx);
@@ -886,6 +892,12 @@ int main(int argc, char* argv[])
 					wedgeSum.CopyDeviceToHost(test);
 					emwrite("Z:\\kunz\\Documents\\TestSubTomogramAveraging\\testWedge.em", test, 128, 128, 128);*/
 					
+					/* TODO AS Write Out wedge to file */
+					float* testWedge = new float[size*size*size];
+					wedgeSum.CopyDeviceToHost(testWedge);
+					emwrite("testWedge.em", testWedge, size, size, size);
+					delete[] testWedge;
+
 					wedgeNorm.WedgeNorm(wedgeSum, partCplx, temp, 0);
 
 					fft.FFTShift2(partCplx, tempCplx);
