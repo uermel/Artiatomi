@@ -146,7 +146,7 @@ public:
 	WbpWeightingKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
 	WbpWeightingKernel(CUmodule aModule);
 
-	float operator()(Cuda::CudaDeviceVariable& img, size_t stride, unsigned int pixelcount, float psiAngle, FilterMethod fm);
+	float operator()(Cuda::CudaDeviceVariable& img, size_t stride, unsigned int pixelcount, float psiAngle, FilterMethod fm, int proj_index, int projectionCount, float thickness, Cuda::CudaDeviceVariable& tiltAngles);
 };
 
 class FourFilterKernel : public Cuda::CudaKernel

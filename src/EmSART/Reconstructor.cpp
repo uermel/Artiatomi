@@ -369,6 +369,11 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 	if (bufferSize2 > bufferSize)
 		bufferSize = bufferSize2;
 
+	if (markers.GetProjectionCount() * sizeof(float) > bufferSize)
+	{
+		bufferSize = markers.GetProjectionCount() * sizeof(float); //for exact WBP filter
+	}
+
 	meanbuffer.Alloc(bufferSize * 10);
 	meanval.Alloc(sizeof(double));
 	stdval.Alloc(sizeof(double));
@@ -1408,8 +1413,50 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 		}
 		if (config.WBP_NoSART)
 		{
+			if (config.WBPFilter == FM_EXACT)
+			{
+				float* tiltAngles = new float[markers.GetProjectionCount()];
+				for (int i = 0; i < markers.GetProjectionCount(); i++)
+				{
+					tiltAngles[i] = markers(MFI_TiltAngle, i, 0) * M_PI / 180.0f;
+					if (!markers.CheckIfProjIndexIsGood(i))
+					{
+						tiltAngles[i] = -999.0f;
+					}
+				}
+				meanbuffer.CopyHostToDevice(tiltAngles, markers.GetProjectionCount() * sizeof(float));
+				delete[] tiltAngles;
+			}
+
+			float volumeHeight = config.RecDimensions.z; 
+			float voxelSize = config.VoxelSize.z;
+			volumeHeight *= voxelSize;
+#ifdef SUBVOLREC_MODE
+			/*volumeHeight = config.SizeSubVol; 
+			voxelSize = config.VoxelSizeSubVol;*/
+#endif
+			float D = (proj.GetMaxDimension() / 2) / volumeHeight * 2.0f; 
+
+
 			//Do WBP weighting
-			wbp(fft_d, roiFFT.width * sizeof(Npp32fc), proj.GetMaxDimension(), 0, config.WBPFilter);
+			wbp(fft_d, roiFFT.width * sizeof(Npp32fc), proj.GetMaxDimension(), 0, config.WBPFilter, proj_index, markers.GetProjectionCount(), D, meanbuffer);
+
+
+			/*float2* test = new float2[fft_d.GetSize() / 4 / 2];
+			float* test2 = new float[fft_d.GetSize() / 4 / 2];
+			fft_d.CopyDeviceToHost(test);
+
+			for (size_t i = 0; i < fft_d.GetSize() / 4 / 2; i++)
+			{
+				test2[i] = test[i].x;
+			}
+
+			stringstream ss;
+			ss << "projFilter_" << proj_index << ".em";
+			emwrite(ss.str(), test2, proj.GetMaxDimension() / 2 + 1, proj.GetMaxDimension());
+			delete[] test;
+			delete[] test2;*/
+
 		}
 
 		cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));

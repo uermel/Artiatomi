@@ -450,18 +450,23 @@ using namespace Cuda;
 	}
 
 
-	float WbpWeightingKernel::operator()(CudaDeviceVariable& img, size_t stride, unsigned int pixelcount, float psiAngle, FilterMethod fm)
+	float WbpWeightingKernel::operator()(CudaDeviceVariable& img, size_t stride, unsigned int pixelcount, float psiAngle, FilterMethod fm, int proj_index, int projectionCount, float thickness, Cuda::CudaDeviceVariable& tiltAngles)
 	{
 		CUdeviceptr img_dptr = img.GetDevicePtr();
+		CUdeviceptr tiltAngles_dptr = tiltAngles.GetDevicePtr();
 		float _angle = -psiAngle / 180.0f * (float)M_PI;
 
-		void** arglist = (void**)new void*[5];
+		void** arglist = (void**)new void*[9];
 
 		arglist[0] = &img_dptr;
 		arglist[1] = &stride;
 		arglist[2] = &pixelcount;
 		arglist[3] = &_angle;
 		arglist[4] = &fm;
+		arglist[5] = &proj_index;
+		arglist[6] = &projectionCount;
+		arglist[7] = &thickness;
+		arglist[8] = &tiltAngles_dptr;
 
 		float ms;
 
