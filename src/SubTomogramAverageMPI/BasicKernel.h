@@ -162,6 +162,7 @@ class CudaFFT
 private:
 	CudaKernel* conv;
 	CudaKernel* correl;
+	CudaKernel* phaseCorrel;
 	CudaKernel* bandpass;
 	CudaKernel* bandpassFFTShift;
 	CudaKernel* fftshift;
@@ -178,6 +179,7 @@ private:
 
 	void runConvKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
 	void runCorrelKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
+	void runPhaseCorrelKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
 	void runBandpassKernel(CudaDeviceVariable& d_vol, float rDown, float rUp, float smooth);
 	void runBandpassFFTShiftKernel(CudaDeviceVariable& d_vol, float rDown, float rUp, float smooth);
 	void runFFTShiftKernel(CudaDeviceVariable& d_vol);
@@ -190,6 +192,7 @@ public:
 
 	void Conv(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
 	void Correl(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
+	void PhaseCorrel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
 	void Bandpass(CudaDeviceVariable& d_vol, float rDown, float rUp, float smooth);
 	void BandpassFFTShift(CudaDeviceVariable& d_vol, float rDown, float rUp, float smooth);
 	void FFTShift(CudaDeviceVariable& d_vol);

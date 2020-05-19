@@ -48,6 +48,12 @@ namespace Configuration
 		NC_TomogramParticle //Tomogram nr from line 5 and particle nr from line 6
 	};
 
+	enum CorrelationMethod
+	{
+		CM_CrossCorrelation,
+		CM_PhaseCorrelation
+	};
+
 	//! Parse structured config files
 	/*!
 		Config files contains lines with name-value assignements in the form "<name> = <value>".
@@ -122,7 +128,7 @@ namespace Configuration
 			float BFactor;
 			float PixelSize;
 			bool ComputeCCValOnly;
-
+			CorrelationMethod Correlation;
 
 
             static Config& GetConfig();

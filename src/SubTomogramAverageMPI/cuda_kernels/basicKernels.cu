@@ -279,6 +279,33 @@ __global__ void correl(int size, float2* inVol, float2* outVol)
 }
 
 
+
+extern "C"
+__global__ void phaseCorrel(int size, float2 * inVol, float2 * outVol)
+{
+	const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+	const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+	const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+	float2 o = outVol[z * size * size + y * size + x];
+	float2 i = inVol[z * size * size + y * size + x];
+	float2 erg;
+	erg.x = (o.x * i.x) + (o.y * i.y);
+	erg.y = (o.x * i.y) - (o.y * i.x);
+	float amplitude = sqrtf(erg.x * erg.x + erg.y * erg.y);
+	if (amplitude != 0)
+	{
+		erg.x /= amplitude;
+		erg.y /= amplitude;
+	}
+	else
+	{
+		erg.x = erg.y = 0;
+	}
+	outVol[z * size * size + y * size + x] = erg;
+}
+
+
 extern "C"
 __global__ void bandpass(int size, float2* vol, float rDown, float rUp, float smooth)
 {

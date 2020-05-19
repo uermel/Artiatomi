@@ -345,6 +345,7 @@ CudaFFT::CudaFFT(int aVolSize, CUstream aStream, CudaContext* context)
 	
 	conv = new CudaKernel("conv", cuMod);
 	correl = new CudaKernel("correl", cuMod);
+	phaseCorrel = new CudaKernel("phaseCorrel", cuMod);
 	bandpass = new CudaKernel("bandpass", cuMod);
 	bandpassFFTShift = new CudaKernel("bandpassFFTShift", cuMod);
 	fftshiftReal = new CudaKernel("fftshiftReal", cuMod);
@@ -393,6 +394,27 @@ void CudaFFT::runCorrelKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d
 void CudaFFT::Correl(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata)
 {
 	runCorrelKernel(d_idata, d_odata);
+}
+
+void CudaFFT::runPhaseCorrelKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata)
+{
+    CUdeviceptr in_dptr = d_idata.GetDevicePtr();
+    CUdeviceptr out_dptr = d_odata.GetDevicePtr();
+
+    void** arglist = (void**)new void* [3];
+
+    arglist[0] = &volSize;
+    arglist[1] = &in_dptr;
+    arglist[2] = &out_dptr;
+
+    cudaSafeCall(cuLaunchKernel(phaseCorrel->GetCUfunction(), gridSize.x, gridSize.y,
+        gridSize.z, blockSize.x, blockSize.y, blockSize.z, 0, stream, arglist, NULL));
+
+    delete[] arglist;
+}
+void CudaFFT::PhaseCorrel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata)
+{
+    runPhaseCorrelKernel(d_idata, d_odata);
 }
 
 void CudaFFT::runBandpassFFTShiftKernel(CudaDeviceVariable& d_vol, float rDown, float rUp, float smooth)

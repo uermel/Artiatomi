@@ -115,6 +115,7 @@ public:
 	~AvgProcess();
 
 	maxVals_t execute(float* _data, float* wedge, float* filter, float oldphi, float oldpsi, float oldtheta, float rDown, float rUp, float smooth, float3 oldShift, bool couplePhiToPsi, bool computeCCValOnly, int oldIndex);
+	maxVals_t executePhaseCorrelation(float* _data, float* wedge, float* filter, float oldphi, float oldpsi, float oldtheta, float rDown, float rUp, float smooth, float3 oldShift, bool couplePhiToPsi, bool computeCCValOnly, int oldIndex);
 
 	//maxVals_t executeMaxAll(float* _data, float oldphi, float oldpsi, float oldtheta, float rDown, float rUp, float smooth, vector<float>& allCCs);
 };

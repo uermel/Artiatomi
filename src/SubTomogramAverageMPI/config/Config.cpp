@@ -60,7 +60,8 @@ namespace Configuration
 		LinearInterpolation(true),
 		BFactor(0),
 		PixelSize(1),
-		ComputeCCValOnly(false)
+		ComputeCCValOnly(false),
+		Correlation(CM_PhaseCorrelation)
 	{
 		while (appEnvp && *appEnvp) {
 			string envEntry = *appEnvp;
@@ -255,6 +256,13 @@ namespace Configuration
 		}
 
 		ComputeCCValOnly = GetBool("ComputeCCValOnly", false);
+
+		string correlation = GetStringOptional("CorrelationMethod");
+		if (correlation == "CrossCorrelation" || correlation == "CC" || correlation == "Cross Correlation" ||
+			correlation == "cross correlation" || correlation == "cc")
+		{
+			Correlation = CM_CrossCorrelation;
+		}
 
 	}
     Config* Config::config = NULL;
