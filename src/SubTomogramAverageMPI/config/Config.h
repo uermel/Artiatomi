@@ -129,6 +129,7 @@ namespace Configuration
 			float PixelSize;
 			bool ComputeCCValOnly;
 			CorrelationMethod Correlation;
+			int CertaintyMaxDistance;
 
 
             static Config& GetConfig();
@@ -175,6 +176,10 @@ namespace Configuration
 			//! get int config entry; value is parsed using stringstream
 			// get int config entry; value is parsed using stringstream
 			int GetInt(string aName);
+
+			//! get int config entry; value is parsed using stringstream
+			// get int config entry; value is parsed using stringstream
+			int GetInt(string aName, int defaultVal);
 
 			//! get dim3 config entry; value is parsed using stringstream
 			// get dim3 config entry; value is parsed using stringstream

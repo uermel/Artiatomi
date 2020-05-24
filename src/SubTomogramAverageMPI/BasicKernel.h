@@ -168,6 +168,7 @@ private:
 	CudaKernel* fftshift;
 	CudaKernel* fftshiftReal;
 	CudaKernel* fftshift2;
+	CudaKernel* splitDataset;
 	CudaKernel* energynorm;
 
 	CudaContext* ctx;
@@ -185,6 +186,7 @@ private:
 	void runFFTShiftKernel(CudaDeviceVariable& d_vol);
 	void runFFTShiftRealKernel(CudaDeviceVariable& d_volIn, CudaDeviceVariable& d_volOut);
 	void runFFTShiftKernel2(CudaDeviceVariable& d_volIn, CudaDeviceVariable& d_volOut);
+	void runSplitDataset(CudaDeviceVariable& d_volIn, CudaDeviceVariable& d_volOutA, CudaDeviceVariable& d_volOutB);
 	void runEnergyNormKernel(CudaDeviceVariable& d_particle, CudaDeviceVariable& d_partSqr, CudaDeviceVariable& d_cccMap, CudaDeviceVariable& energyRef, CudaDeviceVariable& nVox);
 
 public:
@@ -198,6 +200,7 @@ public:
 	void FFTShift(CudaDeviceVariable& d_vol);
 	void FFTShiftReal(CudaDeviceVariable& d_volIn, CudaDeviceVariable& d_volOut);
 	void FFTShift2(CudaDeviceVariable& d_volIn, CudaDeviceVariable& d_volOut);
+	void SplitDataset(CudaDeviceVariable& d_volIn, CudaDeviceVariable& d_volOutA, CudaDeviceVariable& d_volOutB);
 	void EnergyNorm(CudaDeviceVariable& d_particle, CudaDeviceVariable& d_partSqr, CudaDeviceVariable& d_cccMap, CudaDeviceVariable& energyRef, CudaDeviceVariable& nVox);
 
 };
@@ -206,6 +209,7 @@ class CudaMax
 {
 private:
 	CudaKernel* max;
+	CudaKernel* maxWithCertainty;
 
 	CudaContext* ctx;
 	dim3 blockSize;
@@ -214,11 +218,15 @@ private:
 	CUstream stream;
 
 	void runMaxKernel(CudaDeviceVariable& maxVals, CudaDeviceVariable& index, CudaDeviceVariable& val, float rphi, float rpsi, float rthe);
+	void runMaxWithCertainty(CudaDeviceVariable& maxVals, CudaDeviceVariable& index, CudaDeviceVariable& val, CudaDeviceVariable& indexA, CudaDeviceVariable& indexB, float rphi, float rpsi, float rthe, int volSize, int limit);
+
 
 public:
 	CudaMax(CUstream aStream, CudaContext* context);
 
 	void Max(CudaDeviceVariable& maxVals, CudaDeviceVariable& index, CudaDeviceVariable& val, float rphi, float rpsi, float rthe);
+	void MaxWithCertainty(CudaDeviceVariable& maxVals, CudaDeviceVariable& index, CudaDeviceVariable& val, CudaDeviceVariable& indexA, CudaDeviceVariable& indexB, float rphi, float rpsi, float rthe, int volSize, int limit);
+	//findmaxWithCertainty(float* maxVals, float* index, float* val, float* indexA, float* indexB, float rphi, float rpsi, float rthe, int volSize, int limit)
 };
 
 

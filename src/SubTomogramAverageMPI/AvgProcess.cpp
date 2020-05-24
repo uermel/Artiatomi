@@ -381,7 +381,7 @@ maxVals_t AvgProcess::execute(float* _data, float* wedge, float* filter, float o
 }
 
 
-maxVals_t AvgProcess::executePhaseCorrelation(float* _data, float* wedge, float* filter, float oldphi, float oldpsi, float oldtheta, float rDown, float rUp, float smooth, float3 oldShift, bool couplePhiToPsi, bool computeCCValOnly, int oldIndex)
+maxVals_t AvgProcess::executePhaseCorrelation(float* _data, float* wedge, float* filter, float oldphi, float oldpsi, float oldtheta, float rDown, float rUp, float smooth, float3 oldShift, bool couplePhiToPsi, bool computeCCValOnly, int oldIndex, int certaintyDistance)
 {
 	int oldWedge = -1;
 	maxVals_t m;
@@ -397,7 +397,7 @@ maxVals_t AvgProcess::executePhaseCorrelation(float* _data, float* wedge, float*
 
 	//we need to know what the maximum correlation value would be. inverse Fourier transfrom an ideal correlation result to get the normalization factor
 	d_particle.Memset(0);
-	makecplx.MakeCplxWithSub(d_particle, d_particleCplx_orig, -1); //falt spectrum everywhere +1
+	makecplx.MakeCplxWithSub(d_particle, d_particleCplx_orig, -1); //flat spectrum everywhere +1
 	mul.MulVol(d_wedge, d_particleCplx_orig);
 
 	//apply fourier filter: put more weight on "good" frequencies
@@ -536,6 +536,33 @@ maxVals_t AvgProcess::executePhaseCorrelation(float* _data, float* wedge, float*
 					fft.BandpassFFTShift(d_referenceCplx, rDown, rUp, smooth);
 				}
 
+				if (certaintyDistance >= 0)
+				{
+					fft.SplitDataset(d_referenceCplx, d_particleCplx, d_particleSqrCplx);
+					cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)d_particleCplx.GetDevicePtr(), (cufftComplex*)d_particleCplx.GetDevicePtr(), CUFFT_INVERSE));
+					cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)d_particleSqrCplx.GetDevicePtr(), (cufftComplex*)d_particleSqrCplx.GetDevicePtr(), CUFFT_INVERSE));
+					//FFT normalization
+					mul.Mul(1.0f / sizeTot / maxPCCValue, d_particleCplx);
+					mul.Mul(1.0f / sizeTot / maxPCCValue, d_particleSqrCplx);
+
+
+					fft.FFTShift2(d_particleCplx, d_ffttemp);
+					mul.MulVol(d_ccMask, d_ffttemp);
+					reduce.MaxIndexCplx(d_ffttemp, d_buffer, sum);
+
+					/*float* test2 = new float[sizeTot * 2];
+					d_ffttemp.CopyDeviceToHost(test2, sizeTot * 2 * 4);
+					emwrite("C:\\Users\\kunz_\\Desktop\\Data\\Average\\checkA.em", test2, 96 * 2, 96, 96);*/
+
+					fft.FFTShift2(d_particleSqrCplx, d_ffttemp);
+					mul.MulVol(d_ccMask, d_ffttemp);
+					reduce.MaxIndexCplx(d_ffttemp, d_buffer, sumSqr);
+
+					/*d_ffttemp.CopyDeviceToHost(test2, sizeTot * 2 * 4);
+					emwrite("C:\\Users\\kunz_\\Desktop\\Data\\Average\\checkB.em", test2, 96 * 2, 96, 96);
+					delete[] test2;*/
+				}
+
 				/*float* test2 = new float[sizeTot * 2];
 				d_referenceCplx.CopyDeviceToHost(test2, sizeTot * 2 * 4);
 
@@ -570,7 +597,14 @@ maxVals_t AvgProcess::executePhaseCorrelation(float* _data, float* wedge, float*
 					reduce.MaxIndexCplx(d_ffttemp, d_buffer, d_index);
 				}
 
-				max.Max(maxVals, d_index, d_buffer, rphi, rpsi, rthe);
+				if (certaintyDistance >= 0)
+				{
+					max.MaxWithCertainty(maxVals, d_index, d_buffer, sum, sumSqr, rphi, rpsi, rthe, sizeVol, certaintyDistance);
+				}
+				else
+				{
+					max.Max(maxVals, d_index, d_buffer, rphi, rpsi, rthe);
+				}
 
 			}
 		}

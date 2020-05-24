@@ -61,7 +61,8 @@ namespace Configuration
 		BFactor(0),
 		PixelSize(1),
 		ComputeCCValOnly(false),
-		Correlation(CM_PhaseCorrelation)
+		Correlation(CM_PhaseCorrelation),
+		CertaintyMaxDistance(-1)
 	{
 		while (appEnvp && *appEnvp) {
 			string envEntry = *appEnvp;
@@ -264,6 +265,8 @@ namespace Configuration
 			Correlation = CM_CrossCorrelation;
 		}
 
+		CertaintyMaxDistance = GetInt("CertaintyMaxDistance", -1);
+
 	}
     Config* Config::config = NULL;
 	Config& Config::GetConfig(string aConfigFile, int argc, char** argv, int mpiPart, char** appEnvp)
@@ -449,6 +452,17 @@ namespace Configuration
 		{
 			ConfigValueException ex(mConfigFileName, aName, "Integer");
 			throw ex;
+		}
+		return retVal;
+	}
+
+	int Config::GetInt(string aName, int defaultVal) {
+		string val = GetStringOptional(aName);
+		stringstream ss(val);
+		int retVal = 0;
+		if ((ss >> retVal).fail())
+		{
+			return defaultVal;
 		}
 		return retVal;
 	}

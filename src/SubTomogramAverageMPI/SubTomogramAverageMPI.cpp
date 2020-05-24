@@ -658,7 +658,7 @@ int main(int argc, char* argv[])
 					}
 					else if (aConfig.Correlation == Configuration::CM_PhaseCorrelation)
 					{
-						temp = aps[ref]->executePhaseCorrelation((float*)part.GetData(), (float*)wedges[wedgeIdx]->GetData(), filterData, mot.phi, mot.psi, mot.theta, (float)aConfig.HighPass, (float)aConfig.LowPass, (float)aConfig.Sigma, make_float3(mot.x_Shift, mot.y_Shift, mot.z_Shift), aConfig.CouplePhiToPsi, aConfig.ComputeCCValOnly, oldIndex);
+						temp = aps[ref]->executePhaseCorrelation((float*)part.GetData(), (float*)wedges[wedgeIdx]->GetData(), filterData, mot.phi, mot.psi, mot.theta, (float)aConfig.HighPass, (float)aConfig.LowPass, (float)aConfig.Sigma, make_float3(mot.x_Shift, mot.y_Shift, mot.z_Shift), aConfig.CouplePhiToPsi, aConfig.ComputeCCValOnly, oldIndex, aConfig.CertaintyMaxDistance);
 					}
 					
 					//cout << temp.ccVal << endl;
@@ -764,7 +764,7 @@ int main(int argc, char* argv[])
 				}
 				else if (aConfig.Correlation == Configuration::CM_PhaseCorrelation)
 				{
-					v = p.executePhaseCorrelation((float*)part.GetData(), (float*)wedges[wedgeIdx]->GetData(), filterData, mot.phi, mot.psi, mot.theta, (float)aConfig.HighPass, (float)aConfig.LowPass, (float)aConfig.Sigma, make_float3(mot.x_Shift, mot.y_Shift, mot.z_Shift), aConfig.CouplePhiToPsi, aConfig.ComputeCCValOnly, oldIndex);
+					v = p.executePhaseCorrelation((float*)part.GetData(), (float*)wedges[wedgeIdx]->GetData(), filterData, mot.phi, mot.psi, mot.theta, (float)aConfig.HighPass, (float)aConfig.LowPass, (float)aConfig.Sigma, make_float3(mot.x_Shift, mot.y_Shift, mot.z_Shift), aConfig.CouplePhiToPsi, aConfig.ComputeCCValOnly, oldIndex, aConfig.CertaintyMaxDistance);
 				}
 
 				int sx, sy, sz;
@@ -894,6 +894,11 @@ int main(int argc, char* argv[])
 				{
 					motlMot[i].classNo *= -1;
 				}
+				////if ccCoeff is negative (either no good CC match or bad phase correlation coherence check, then discard the particle
+				//if (motlMot[i].ccCoeff < 0)
+				//{
+				//	motlMot[i].classNo = -999;
+				//}
 			}
 
 			if (!onlySumUp)
@@ -1016,6 +1021,11 @@ int main(int argc, char* argv[])
 						continue;
 					}
 					if (mot.ccCoeff < limit)
+					{
+						skipped++;
+						continue;
+					}
+					if (mot.ccCoeff < 0)
 					{
 						skipped++;
 						continue;
