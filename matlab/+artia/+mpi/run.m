@@ -1,3 +1,4 @@
+
 function [status, result] = run(command, nodes, config, varargin)
 % artia.mpi.run executes Artiatomi tools using mpiexec locally orr
 % remotely.
@@ -19,6 +20,8 @@ function [status, result] = run(command, nodes, config, varargin)
 %       Value Pair remoteHost. Requires passwordless ssh setup.
 %   remoteHost (str):
 %       The remote host to run the command on.
+%   remotePort (str):
+%       The port on the remote host to connect to, if applicable.
 %   execDir (str):
 %       Directory where the process should be run.
 %
@@ -30,6 +33,10 @@ function [status, result] = run(command, nodes, config, varargin)
 %
 % Author:
 %   UE, 2019
+%
+% Edited by:
+%   KS, 2020 - added remotePort argument
+%
 
     % Default params
     defs = struct();
@@ -37,6 +44,7 @@ function [status, result] = run(command, nodes, config, varargin)
     defs.runRemote.val = false;
     defs.remoteHost.val = '';
     defs.execDir.val = '';
+    defs.remotePort.val = '';
     artia.sys.getOpts(varargin, defs);
     
     com = sprintf('mpiexec -n %d %s -u %s', nodes, command, config);
@@ -46,7 +54,11 @@ function [status, result] = run(command, nodes, config, varargin)
     end
     
     if runRemote
-        com = sprintf('ssh -t %s "%s"', remoteHost, com);
+        if ~isempty(remotePort)
+            com = sprintf('ssh -t %s -p %s "%s"', remoteHost, remotePort, com);
+        else
+            com = sprintf('ssh -t %s "%s"', remoteHost, com);
+        end
     end
     
     if suppressOutput
