@@ -1,7 +1,8 @@
 function outMotl = apply_transforms(transforms, inMotl)
 % artia.motl.apply_transforms transforms the orientation and translations
 % of particles in a particle list given a list of successive
-% transformations on the reference volume.
+% transformations on the reference volume. To apply transformations to just
+% one particle, use artia.motl.transform_one_particle.
 %
 % Parameters:
 %   transforms (struct):
