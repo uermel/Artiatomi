@@ -74,47 +74,49 @@ function [average] = extract_write(motivelistFilename, upScaleFactor, tomogramFi
     for t = 1:numel(tomos)
 
         tomogramFilename = tomogramFilenameArray{tomos(t)};
-        tempMotl = motl(:, motl(5, :) == tomos(t));
-        npart = size(tempMotl, 2);
-        tempMotl(8:16, :) = upScaleFactor * round(tempMotl(8:16, :));
+        if tomogramFilename ~= ""
+            tempMotl = motl(:, motl(5, :) == tomos(t));
+            npart = size(tempMotl, 2);
+            tempMotl(8:16, :) = upScaleFactor * round(tempMotl(8:16, :));
 
-        fprintf('Working on %s\n',tomogramFilename);
-        n = 0;
+            fprintf('Working on %s\n',tomogramFilename);
+            n = 0;
 
-        for i = 1:npart
-            if ~doTranslate
-                tempMotl(11, i) = 0;
-                tempMotl(12, i) = 0;
-                tempMotl(13, i) = 0;
+            for i = 1:npart
+                if ~doTranslate
+                    tempMotl(11, i) = 0;
+                    tempMotl(12, i) = 0;
+                    tempMotl(13, i) = 0;
+                end
+
+                x=tempMotl(8, i)  + tempMotl(11, i);
+                y=tempMotl(9, i)  + tempMotl(12, i);
+                z=tempMotl(10, i) + tempMotl(13, i);
+
+                part = artia.em.read_inc(tomogramFilename, [x y z], [2*r 2*r 2*r]);
+
+                if doNormalize
+                    partMean = mean(part(:));
+                    partStd = std(part(:));
+                    part = (part-partMean);
+                end
+
+                phi = tempMotl(17, i); 
+                psi = tempMotl(18, i); 
+                theta = tempMotl(19, i);
+                
+                if doRotate
+                    part = artia.img.rot(part, [-psi, -phi, -theta])
+                end
+
+                artia.em.write(part, sprintf([partPref '%d_%d.em'], tempMotl(5, i), tempMotl(6, i)));
+                average = average + part;
+
+                msg = sprintf('Read %d/%d particles.\n', i, npart);
+                fprintf(repmat('\b',1,n));
+                fprintf(msg);
+                n=numel(msg);
             end
-
-            x=tempMotl(8, i)  + tempMotl(11, i);
-            y=tempMotl(9, i)  + tempMotl(12, i);
-            z=tempMotl(10, i) + tempMotl(13, i);
-          
-            part = artia.em.read_inc(tomogramFilename, [x y z], [2*r 2*r 2*r]);
-            
-            if doNormalize
-                partMean = mean(part(:));
-                partStd = std(part(:));
-                part = (part-partMean);
-            end
-
-            phi = tempMotl(17, i); 
-            psi = tempMotl(18, i); 
-            theta = tempMotl(19, i);
-
-            if doRotate
-                part = artia.img.rot(part, [-psi, -phi, -theta]);
-            end
-
-            artia.em.write(part, sprintf([partPref '%d_%d.em'], tempMotl(5, i), tempMotl(6, i)));
-            average = average + part;
-            
-            msg = sprintf('Read %d/%d particles.\n', i, npart);
-            fprintf(repmat('\b',1,n));
-            fprintf(msg);
-            n=numel(msg);
         end
     end
 end
