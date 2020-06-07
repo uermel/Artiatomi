@@ -35,7 +35,7 @@ function [status, result] = run(command, nodes, config, varargin)
 %   UE, 2019
 %
 % Edited by:
-%   KS, 2020 - added remotePort argument
+%   KS, 2020 - added remotePort, support for no config tools (i.e. cAligner)
 %
 
     % Default params
@@ -47,7 +47,11 @@ function [status, result] = run(command, nodes, config, varargin)
     defs.remotePort.val = '';
     artia.sys.getOpts(varargin, defs);
     
-    com = sprintf('mpiexec -n %d %s -u %s', nodes, command, config);
+    if configs == ""
+        com = sprintf('mpiexec -n %d %s', nodes, command);
+    else
+        com = sprintf('mpiexec -n %d %s -u %s', nodes, command, config);
+    end
     
     if ~isempty(execDir)
         com = sprintf('cd %s; %s', execDir, com);
