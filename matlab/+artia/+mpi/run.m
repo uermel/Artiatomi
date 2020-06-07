@@ -47,7 +47,7 @@ function [status, result] = run(command, nodes, config, varargin)
     defs.remotePort.val = '';
     artia.sys.getOpts(varargin, defs);
     
-    if configs == ""
+    if config == ""
         com = sprintf('mpiexec -n %d %s', nodes, command);
     else
         com = sprintf('mpiexec -n %d %s -u %s', nodes, command, config);
