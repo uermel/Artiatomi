@@ -1439,7 +1439,19 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 
 
 			//Do WBP weighting
-			wbp(fft_d, roiFFT.width * sizeof(Npp32fc), proj.GetMaxDimension(), 0, config.WBPFilter, proj_index, markers.GetProjectionCount(), D, meanbuffer);
+            double psiAngle = markers(MFI_RotationPsi, (uint)proj_index, 0) / 180.0 * (double)M_PI;
+            if (Configuration::Config::GetConfig().UseFixPsiAngle)
+                psiAngle = Configuration::Config::GetConfig().PsiAngle / 180.0 * (double)M_PI;
+
+            // Fix for WBP of rectangular images (otherwise stuff is rotated out too far)
+            float flipAngle;
+            if (abs(abs(psiAngle) - ((double)M_PI/2.)) < ((double)M_PI/4.)){
+                flipAngle = 90.;
+            } else {
+                flipAngle = 0.;
+            }
+
+			wbp(fft_d, roiFFT.width * sizeof(Npp32fc), proj.GetMaxDimension(), flipAngle, config.WBPFilter, proj_index, markers.GetProjectionCount(), D, meanbuffer);
 
 
 			/*float2* test = new float2[fft_d.GetSize() / 4 / 2];

@@ -80,7 +80,7 @@ void wbpWeighting(cuComplex* img, size_t stride, unsigned int pixelcount, float 
 
 	xpos = cosin * xpos - sinus * ypos;
 	ypos = sinus * temp + cosin * ypos;
-	
+
 	float length = ypos / (pixelcount / 2.0f);
 	float weight = 1;
 	switch (fm)
@@ -94,6 +94,10 @@ void wbpWeighting(cuComplex* img, size_t stride, unsigned int pixelcount, float 
 			float x_st = -ypos * cos(tiltAngles[proj_index])*sin(psiAngle) - xpos *cos(psiAngle);
 			float y_st =  ypos * cos(tiltAngles[proj_index])*cos(psiAngle) - xpos *sin(psiAngle);
 			float z_st =  ypos * sin(tiltAngles[proj_index]);
+
+            //float x_st = -xpos * cos(tiltAngles[proj_index])*sin(psiAngle) - ypos *cos(psiAngle);
+            //float y_st =  xpos * cos(tiltAngles[proj_index])*cos(psiAngle) - ypos *sin(psiAngle);
+            //float z_st =  xpos * sin(tiltAngles[proj_index]);
 
 			float w = 0;
 

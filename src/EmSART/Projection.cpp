@@ -88,7 +88,12 @@ float Projection::GetImageRotationToCompensate(uint aIndex)
 	if (Configuration::Config::GetConfig().UseFixPsiAngle)
 		psiAngle = -Configuration::Config::GetConfig().PsiAngle / 180.0 * (double)M_PI;
 
-	return (float)psiAngle;
+	// Fix for WBP of rectangular images (otherwise stuff is rotated out too far)
+	if (abs(abs(psiAngle) - ((double)M_PI/2.)) < ((double)M_PI/4.)){
+        return (float)psiAngle-((double)M_PI/2.);
+	} else {
+        return (float)psiAngle;
+	}
 }
 
 Matrix<float> Projection::RotateMatrix(uint aIndex, Matrix<float>& matrix)
@@ -102,7 +107,12 @@ Matrix<float> Projection::RotateMatrix(uint aIndex, Matrix<float>& matrix)
 
 	if (compensateImageRotation)
 	{
-		psiAngle = 0;
+        // Fix for WBP of rectangular images (otherwise stuff is rotated out too far)
+        if (abs(abs(psiAngle) - ((double)M_PI/2.)) < ((double)M_PI/4.)){
+            psiAngle = ((double)M_PI/2.);
+        } else {
+            psiAngle = 0;
+        }
 	}
 	
 	Matrix<double> matrixD(3,1);
