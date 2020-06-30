@@ -166,7 +166,7 @@ namespace Configuration
 			float MaxDistanceSupport;
 			bool MultiPeakDetection;
 			int TomogramIndex;
-			bool SubtractError:
+			bool SubtractError;
 #endif
 
 #ifdef SUBVOLREC_MODE

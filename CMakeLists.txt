@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
-set(CMAKE_CUDA_COMPILER /usr/local/cuda-10.2/bin/nvcc)
+set(CMAKE_CUDA_COMPILER /usr/local/cuda-10.1/bin/nvcc)
 project(Artiatomi LANGUAGES CUDA CXX)
 
 set(CMAKE_BUILD_TYPE Debug)
@@ -52,7 +52,7 @@ set(CUDA_LIBS ${CUDA_CUDA_LIBRARY}
 				${CUDA_LIBRARIES})
 
 #set(CUDA_LIBS ${CUDA_LIBRARIES})
-set(BIN2C_EXEC /usr/local/cuda-10.2/bin/bin2c) #in cuda toolkit binary path
+set(BIN2C_EXEC /usr/local/cuda-10.1/bin/bin2c) #in cuda toolkit binary path
 ######################### CUDA #############################
 if (UNIX)
 	set(OpenCL_INCLUDE_DIR "/usr/local/cuda/include")
