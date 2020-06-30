@@ -337,10 +337,10 @@ using namespace Cuda;
 
 	}
 
-    float BPKernel::operator()(int proj_x, int proj_y, float lambda, int maxOverSample, float maxOverSampleInv, CudaPitchedDeviceVariable& img, float distMin, float distMax)
+    float BPKernel::operator()(int proj_x, int proj_y, float lambda, int maxOverSample, float maxOverSampleInv, Cuda::CudaTextureObject2D& img, Cuda::CudaSurfaceObject3D& surf, float distMin, float distMax)
 	{
-		CUdeviceptr img_ptr = img.GetDevicePtr();
-		int stride = (int)img.GetPitch();
+		CUtexObject texObj = img.GetTexObject();
+		CUsurfObject surfObj = surf.GetSurfObject();
 
 		void** arglist = (void**)new void*[9];
 
@@ -349,8 +349,8 @@ using namespace Cuda;
 		arglist[2] = &lambda;
 		arglist[3] = &maxOverSample;
 		arglist[4] = &maxOverSampleInv;
-		arglist[5] = &img_ptr;
-		arglist[6] = &stride;
+		arglist[5] = &texObj;
+		arglist[6] = &surfObj;
 		arglist[7] = &distMin;
 		arglist[8] = &distMax;
 
@@ -451,18 +451,23 @@ using namespace Cuda;
 	}
 
 
-	float WbpWeightingKernel::operator()(CudaDeviceVariable& img, size_t stride, unsigned int pixelcount, float psiAngle, FilterMethod fm)
+	float WbpWeightingKernel::operator()(CudaDeviceVariable& img, size_t stride, unsigned int pixelcount, float psiAngle, FilterMethod fm, int proj_index, int projectionCount, float thickness, Cuda::CudaDeviceVariable& tiltAngles)
 	{
 		CUdeviceptr img_dptr = img.GetDevicePtr();
+		CUdeviceptr tiltAngles_dptr = tiltAngles.GetDevicePtr();
 		float _angle = -psiAngle / 180.0f * (float)M_PI;
 
-		void** arglist = (void**)new void*[5];
+		void** arglist = (void**)new void*[9];
 
 		arglist[0] = &img_dptr;
 		arglist[1] = &stride;
 		arglist[2] = &pixelcount;
 		arglist[3] = &_angle;
 		arglist[4] = &fm;
+		arglist[5] = &proj_index;
+		arglist[6] = &projectionCount;
+		arglist[7] = &thickness;
+		arglist[8] = &tiltAngles_dptr;
 
 		float ms;
 
@@ -811,11 +816,10 @@ using namespace Cuda;
 		int _borderSizeY = borderSizeY;
 		bool _mirrorY = mirrorY;
 		bool _fillZero = fillZero;
-		int proj_x = aIn.GetWidth();
-		int proj_y = aIn.GetHeight();
-		int stride = (int)aIn.GetPitch() / sizeof(float);
+		int proj_x = (int)aIn.GetWidth();
+		int proj_y = (int)aIn.GetHeight();
+		int stride = (int)aIn.GetPitch();
 
-		//printf("\n\nStride: %ld, %ld\n", stride, stride / sizeof(float));
 
 		void** arglist = (void**)new void*[10];
 
@@ -855,26 +859,33 @@ using namespace Cuda;
 	}
 
 
-
-	SamplesToCoefficients2DX::SamplesToCoefficients2DX(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim)
-		: CudaKernel("SamplesToCoefficients2DX", aModule, aGridDim, aBlockDim, 0)
+	DimBordersKernel::DimBordersKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim)
+		: CudaKernel("dimBorders", aModule, aGridDim, aBlockDim, 0)
 	{
 
 	}
 
-	float SamplesToCoefficients2DX::operator()(CudaPitchedDeviceVariable& image)
+	DimBordersKernel::DimBordersKernel(CUmodule aModule)
+		: CudaKernel("dimBorders", aModule, make_dim3(1, 1, 1), make_dim3(16, 16, 1), 0)
 	{
-		CUdeviceptr in_dptr = image.GetDevicePtr();
-		uint _pitch = image.GetPitch();
-		uint _width = image.GetWidth();
-		uint _height = image.GetHeight();
 
-		void** arglist = (void**)new void*[4];
+	}
 
-		arglist[0] = &in_dptr;
-		arglist[1] = &_pitch;
-		arglist[2] = &_width;
-		arglist[3] = &_height;
+	float DimBordersKernel::operator()(CudaPitchedDeviceVariable& image, float4 crop, float4 cropDim)
+	{
+		CUdeviceptr image_dptr = image.GetDevicePtr();
+		int proj_x = (int)image.GetWidth();
+		int proj_y = (int)image.GetHeight();
+		size_t stride = image.GetPitch();
+
+		void** arglist = (void**)new void* [6];
+
+		arglist[0] = &proj_x;
+		arglist[1] = &proj_y;
+		arglist[2] = &stride;
+		arglist[3] = &image_dptr;
+		arglist[4] = &crop;
+		arglist[5] = &cropDim;
 
 		float ms;
 
@@ -892,60 +903,13 @@ using namespace Cuda;
 		cudaSafeCall(cuEventRecord(eventEnd, stream));
 		cudaSafeCall(cuEventSynchronize(eventEnd));
 		cudaSafeCall(cuEventElapsedTime(&ms, eventStart, eventEnd));
-		
+
 		cudaSafeCall(cuEventDestroy(eventStart));
 		cudaSafeCall(cuEventDestroy(eventEnd));
 
 		delete[] arglist;
 		return ms;
 	}
-
-
-	SamplesToCoefficients2DY::SamplesToCoefficients2DY(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim)
-		: CudaKernel("SamplesToCoefficients2DY", aModule, aGridDim, aBlockDim, 0)
-	{
-
-	}
-
-	float SamplesToCoefficients2DY::operator()(CudaPitchedDeviceVariable& image)
-	{
-		CUdeviceptr in_dptr = image.GetDevicePtr();
-		uint _pitch = image.GetPitch();
-		uint _width = image.GetWidth();
-		uint _height = image.GetHeight();
-
-		void** arglist = (void**)new void*[4];
-
-		arglist[0] = &in_dptr;
-		arglist[1] = &_pitch;
-		arglist[2] = &_width;
-		arglist[3] = &_height;
-
-		float ms;
-
-		CUevent eventStart;
-		CUevent eventEnd;
-		CUstream stream = 0;
-		cudaSafeCall(cuEventCreate(&eventStart, CU_EVENT_BLOCKING_SYNC));
-		cudaSafeCall(cuEventCreate(&eventEnd, CU_EVENT_BLOCKING_SYNC));
-
-		cudaSafeCall(cuEventRecord(eventStart, stream));
-		cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, NULL, arglist, NULL));
-
-		cudaSafeCall(cuCtxSynchronize());
-
-		cudaSafeCall(cuEventRecord(eventEnd, stream));
-		cudaSafeCall(cuEventSynchronize(eventEnd));
-		cudaSafeCall(cuEventElapsedTime(&ms, eventStart, eventEnd));
-		
-		cudaSafeCall(cuEventDestroy(eventStart));
-		cudaSafeCall(cuEventDestroy(eventEnd));
-
-		delete[] arglist;
-		return ms;
-	}
-
-
 	
 void SetConstantValues(CudaKernel& kernel, Volume<unsigned short>& vol, Projection& proj, int index, int subVol, Matrix<float>& m, Matrix<float>& mInv)
 {
@@ -1118,9 +1082,9 @@ void SetConstantValues(CTFKernel& kernel, Projection& proj, int index, float cs,
 
     _pixelsize = _pixelsize * powf(10, -9);
     kernel.SetConstantValue("c_pixelsize", &_pixelsize);
-    float _pixelcount = proj.GetMaxDimension();
+    float _pixelcount = (float)proj.GetMaxDimension();
     kernel.SetConstantValue("c_pixelcount", &_pixelcount);
-    float _maxFreq = 1.0 / (_pixelsize * 2.0f);
+    float _maxFreq = 1.0f / (_pixelsize * 2.0f);
     kernel.SetConstantValue("c_maxFreq", &_maxFreq);
     float _freqStepSize = _maxFreq / (_pixelcount / 2.0f);
 	//printf("_freqStepSize: %f; _pixelsize: %f\n", _freqStepSize, _pixelsize);
@@ -1144,16 +1108,18 @@ ConvVolKernel::ConvVolKernel(CUmodule aModule)
 
 }
 
-float ConvVolKernel::operator()(Cuda::CudaPitchedDeviceVariable& img, unsigned int z)
+float ConvVolKernel::operator()(Cuda::CudaPitchedDeviceVariable& img, Cuda::CudaSurfaceObject3D& surf, unsigned int z)
 {
 	CUdeviceptr img_ptr = img.GetDevicePtr();
-	int stride = (int)img.GetPitch() / img.GetElementSize();
+	int stride = (int)img.GetPitch();
+	CUsurfObject surfObj = surf.GetSurfObject();
 
-	void** arglist = (void**)new void*[3];
+	void** arglist = (void**)new void*[4];
 
 	arglist[0] = &img_ptr;
 	arglist[1] = &stride;
-	arglist[2] = &z;
+	arglist[2] = &surfObj;
+	arglist[3] = &z;
 
 	float ms;
 
@@ -1191,15 +1157,17 @@ ConvVol3DKernel::ConvVol3DKernel(CUmodule aModule)
 
 }
 
-float ConvVol3DKernel::operator()(Cuda::CudaPitchedDeviceVariable& img)
+float ConvVol3DKernel::operator()(Cuda::CudaPitchedDeviceVariable& img, Cuda::CudaSurfaceObject3D& surf)
 {
 	CUdeviceptr img_ptr = img.GetDevicePtr();
-	int stride = (int)img.GetPitch() / img.GetElementSize();
+	int stride = (int)img.GetPitch();
+	CUsurfObject surfObj = surf.GetSurfObject();
 
-	void** arglist = (void**)new void*[2];
+	void** arglist = (void**)new void*[3];
 
 	arglist[0] = &img_ptr;
 	arglist[1] = &stride;
+	arglist[2] = &surfObj;
 
 	float ms;
 

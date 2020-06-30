@@ -24,7 +24,6 @@
 #ifndef WBPWEIGHTING_CU
 #define WBPWEIGHTING_CU
 
-
 //Includes for IntelliSense 
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
@@ -34,6 +33,10 @@
 
 #include <stdio.h>
 #include "cufft.h"
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 
 // transform vector by matrix
@@ -47,9 +50,19 @@ enum FilterMethod
 	FM_CONTRAST30
 };
 
+__device__ float sinc(float x)
+{
+	float res = 1;
+	if (x != 0)
+	{
+		res = sinf(M_PI * x) / (M_PI * x);
+	}
+	return res;
+}
+
 extern "C"
 __global__ 
-void wbpWeighting(cuComplex* img, size_t stride, unsigned int pixelcount, float psiAngle, FilterMethod fm)
+void wbpWeighting(cuComplex* img, size_t stride, unsigned int pixelcount, float psiAngle, FilterMethod fm, int proj_index, int projectionCount, float thickness, const float* __restrict__ tiltAngles)
 {
 	//compute x,y,z indiced
 	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;	
@@ -69,13 +82,54 @@ void wbpWeighting(cuComplex* img, size_t stride, unsigned int pixelcount, float 
 
 	xpos = cosin * xpos - sinus * ypos;
 	ypos = sinus * temp + cosin * ypos;
-	
-	float length = ypos / pixelcount / 2.0f;
+
+	float length = ypos / (pixelcount / 2.0f);
 	float weight = 1;
 	switch (fm)
 	{
 	case FM_RAMP:
 		weight = fminf(abs(length), 1.0f);
+		break;
+	case FM_EXACT:
+		{
+			//psiAngle += M_PI * 0.5f;
+			float x_st = -ypos * cos(tiltAngles[proj_index])*sin(psiAngle) - xpos *cos(psiAngle);
+			float y_st =  ypos * cos(tiltAngles[proj_index])*cos(psiAngle) - xpos *sin(psiAngle);
+			float z_st =  ypos * sin(tiltAngles[proj_index]);
+
+            //float x_st = -xpos * cos(tiltAngles[proj_index])*sin(psiAngle) - ypos *cos(psiAngle);
+            //float y_st =  xpos * cos(tiltAngles[proj_index])*cos(psiAngle) - ypos *sin(psiAngle);
+            //float z_st =  xpos * sin(tiltAngles[proj_index]);
+
+			float w = 0;
+
+			for (int tilt = 0; tilt < projectionCount; tilt++)
+			{
+				if (tilt != proj_index && tiltAngles[tilt] != -999.0f)
+				{
+					// Berechnung der geometrischen Distanz zu der Ebene
+					float d_tmp = x_st*sin(tiltAngles[tilt])*sin(psiAngle) - y_st*sin(tiltAngles[tilt])*cos(psiAngle) + z_st*cos(tiltAngles[tilt]);
+
+					float d2 = abs(sin(tiltAngles[tilt])) * thickness + cos(tiltAngles[tilt]);
+
+					if (abs(d_tmp) > d2)
+						d_tmp = d2;
+
+					w += sinc(d_tmp / d2);
+				}
+			}
+			// Normalize, such that the center is 1 / number of projections, and
+			// the boundary is one!!
+			w += 1.0f;
+			w = 1.0f / w;
+
+			//Added normalization(zero frequencies set to zero)
+			if (ypos == 0)
+			{
+				w = 0;
+			}
+			weight = w;
+		}
 		break;
 	case FM_CONTRAST2:
 		{//1.000528623371163   0.006455924123082   0.005311341463650   0.001511856638478 1024
@@ -136,12 +190,13 @@ void wbpWeighting(cuComplex* img, size_t stride, unsigned int pixelcount, float 
 		break;
 	}
 	
-	
-	cuComplex res = img[y * stride / sizeof(cuComplex) + x];
+	cuComplex res = *(((cuComplex*)((char*)img + stride * y)) + x);
 	res.x *= weight;
 	res.y *= weight;
-   
-	img[y * stride / sizeof(cuComplex) + x] = res;
+	/*res.x = weight;
+	res.y = 0;*/
+
+	*(((cuComplex*)((char*)img + stride * y)) + x) = res;
 	
 }
 
@@ -207,10 +262,10 @@ void fourierFilter(float2* img, size_t stride, int pixelcount, float lp, float h
 		}
 	}
 
-	float2 erg = img[y * stride / sizeof(float2) + x];
+	float2 erg = *(((float2*)((char*)img + stride * y)) + x);
 	erg.x *= fil;
 	erg.y *= fil;
-	img[y * stride / sizeof(float2) + x] = erg;
+	*(((float2*)((char*)img + stride * y)) + x) = erg;
 }
 
 extern "C"
@@ -235,10 +290,10 @@ void doseWeighting(float2* img, size_t stride, int pixelcount, float dose, float
 	dist = dist / (pixelcount / 2 / pixelsize);
 	fil = expf(-dose * dist);
 
-	float2 erg = img[y * stride / sizeof(float2) + x];
+	float2 erg = *(((float2*)((char*)img + stride * y)) + x);
 	erg.x *= fil;
 	erg.y *= fil;
-	img[y * stride / sizeof(float2) + x] = erg;
+	*(((float2*)((char*)img + stride * y)) + x) = erg;
 }
 
 extern "C"
@@ -252,13 +307,13 @@ void conjMul(float2* complxA, float2* complxB, size_t stride, int pixelcount)
 	if (x >= pixelcount / 2 + 1) return;
 	if (y >= pixelcount) return;
 
-	float2 a = complxA[y * stride / sizeof(float2) + x];
-	float2 b = complxB[y * stride / sizeof(float2) + x];
+	float2 a = *(((float2*)((char*)complxA + stride * y)) + x);
+	float2 b = *(((float2*)((char*)complxB + stride * y)) + x);
 	float2 erg;
 	//conj. complex of a: -a.y
 	erg.x = a.x * b.x + a.y * b.y;
 	erg.y = a.x * b.y - a.y * b.x;
-	complxA[y * stride / sizeof(float2) + x] = erg;
+	*(((float2*)((char*)complxA + stride * y)) + x) = erg;
 
 }
 
@@ -289,8 +344,7 @@ void maxShift(float* img, size_t stride, int pixelcount, int maxShift)
 
 	if (dist > maxShift)
 	{
-		float* row = (float*)((char*)img + stride * y);
-		row[x] = 0;
+		*(((float*)((char*)img + stride * y)) + x) = 0;
 	}
 }
 
@@ -317,14 +371,13 @@ void maxShiftWeighted(float* img, size_t stride, int pixelcount, int maxShift)
 
 	dist = sqrtf(mx * mx + my * my);
 
-	float* row = (float*)((char*)img + stride * y);
 	if (dist > maxShift)
 	{
-		row[x] = 0;
+		*(((float*)((char*)img + stride * y)) + x) = 0;
 	}
 	else
 	{
-		row[x] /= dist+0.0001f;
+		*(((float*)((char*)img + stride * y)) + x) /= dist+0.0001f;
 	}
 }
 

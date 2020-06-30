@@ -32,11 +32,6 @@ endif()
 
 find_package(CUDA 9.0 REQUIRED)
 
-#find_library(CUDA_LIBRARY cuda ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
-#find_library(CUFFT_LIBRARY cufft ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
-#find_library(NPPC_LIBRARY nppc  ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
-#find_library(NPPI_LIBRARY nppi ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
-
 set(CUDA_LIBS ${CUDA_CUDA_LIBRARY} 
 				${CUDA_CUFFT_LIBRARIES}
 				${CUDA_nppc_LIBRARY}
@@ -56,16 +51,18 @@ set(CUDA_LIBS ${CUDA_CUDA_LIBRARY}
 #set(CUDA_LIBS ${CUDA_LIBRARIES})
 set(BIN2C_EXEC bin2c) #in cuda toolkit binary path
 ######################### CUDA #############################
-set(OpenCL_INCLUDE_DIR "/usr/local/cuda/include")
-set(OpenCL_LIBRARY "/usr/local/cuda/lib64/libOpenCL.so")
-
+if (UNIX)
+	set(OpenCL_INCLUDE_DIR "/usr/local/cuda/include")
+	set(OpenCL_LIBRARY "/usr/local/cuda/lib64/libOpenCL.so")
+endif()
+	
 find_package(OpenCL REQUIRED)
 find_package(OpenGL REQUIRED)
 
 message( ${OpenCL_INCLUDE_DIR} )
 message( ${OpenCL_LIBRARIES} )
-message( ${OPENGL_INCLUDE_DIR} )
-message( ${OPENGL_LIBRARIES} )
+#message( ${OPENGL_INCLUDE_DIR} )
+#message( ${OPENGL_LIBRARIES} )
 ######################### OpenCL #############################
 
 ######################### FFTW ###########################

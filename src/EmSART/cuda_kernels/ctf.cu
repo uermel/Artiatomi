@@ -81,7 +81,7 @@ extern "C"
 __global__ 
 void ctf(cuComplex* ctf, size_t stride, float defocusMin, float defocusMax, float angle, bool applyForFP, bool phaseFlipOnly, float WienerFilterNoiseLevel, float4 betaFac)
 {
-	//compute x,y,z indiced
+	//compute x,y indiced
 	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;	
 	unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
 	
@@ -89,9 +89,8 @@ void ctf(cuComplex* ctf, size_t stride, float defocusMin, float defocusMax, floa
 	if (y >= c_pixelcount) return;
 
 			
-	//float length = sqrtf((x-c_pixelcount/2) * (x-c_pixelcount/2) + (y-c_pixelcount/2) * (y-c_pixelcount/2));
 	float xpos = x;
-	float ypos = y;//-c_pixelcount/2;
+	float ypos = y;
 	if (ypos > c_pixelcount * 0.5f)
 		ypos = (c_pixelcount - ypos) * -1.0f;
 	
@@ -106,26 +105,10 @@ void ctf(cuComplex* ctf, size_t stride, float defocusMin, float defocusMax, floa
 	float def0 = defocusMin;
 	float def1 = defocusMax;
 
-	float defocus = def0 + (1 - cos(2*beta)) * (def1 - def0);
+	float defocus = def0 + (1 - cos(2*beta)) * (def1 - def0) * 0.5f;
 
 	float length = sqrtf(xpos * xpos + ypos * ypos);
 
-	//float angle = 76.0f / M_PI * 180.0f;
-	//float stretchX = 1.066f;
-	/*float angle = 80.0f / M_PI * 180.0f;
-	float stretchX = 1.026f;
-
-	float temp = cos(angle) * xpos - sin(angle) * ypos;
-	ypos = sin(angle) * xpos + cos(angle) * ypos;
-	xpos = temp;
-	xpos *= stretchX;*/
-	
-	//float w = 1.0f;
-	//if (length > c_pixelcount * 0.5f)
-	//{
-	//	w = (length - c_pixelcount * 0.1f) / (c_pixelcount - c_pixelcount * 0.1f) ;
-	//	w = expf(-(w * w * 9 * 9));
-	//}
     length *= c_freqStepSize;
 
     float o = expf(-14.238829f * (c_openingAngle * c_openingAngle * ((Cs * lambda * lambda * length * length * length - defocus * length) * (Cs * lambda * lambda * length * length * length - defocus * length))));
@@ -134,61 +117,28 @@ void ctf(cuComplex* ctf, size_t stride, float defocusMin, float defocusMax, floa
 
     float m = -PhaseShift + (M_PI / 2.0f) * (Cs * lambda * lambda * lambda * length * length * length * length - 2 * defocus * lambda * length * length);
     float n = c_phaseContrast * sinf(m) + c_ampContrast * cosf(m);
-
-    //float r = (o * p * ((1 - c_applyScatteringProfile) + (q * c_applyScatteringProfile))) * c_applyEnvelopeFunction + (1 - c_applyEnvelopeFunction);
-
-    cuComplex res = ctf[y * stride / sizeof(cuComplex) + x];
-//res.x = 1;res.y=0;
-    //float limit1 = 4084-(sinf(5.5f * 3.14159265f / 180.0f) * x);
-    //float limit2 = 4095-(sinf(1.5f * 3.14159265f / 180.0f) * x);
+	
+	cuComplex res = *(((cuComplex*)((char*)ctf + stride * y)) + x);
 	
     if (applyForFP && sqrtf(xpos * xpos + ypos * ypos) > betaFac.x && !phaseFlipOnly)// && length < 317382812)
     {
-		//double faq = coeefs[0] * Math.Exp(-(Math.Abs(coeefs[1])) * freq - coeefs[2] * freq * freq - coeefs[3] * freq * freq * freq);
-		//const float coeff0 = 1.0f;
 		length = length / 100000000.0f;
-		/*const float coeff1 = 0.0000000000000001f;
-		const float coeff2 = -0.00652468f;
-		const float coeff3 = 0.003948657f;*/
-		/*const float coeff1 = 0;
-		const float coeff2 = 0.008f;
-		const float coeff3 = 0;*/
 		float coeff1 = betaFac.y;
 		float coeff2 = betaFac.z;
 		float coeff3 = betaFac.w;
 		float expfun = expf((-coeff1 * length - coeff2 * length * length - coeff3 * length * length * length));
 		expfun = max(expfun, 0.01f);
 		float val = n * expfun;
-		//val = fmaxf(val, 0.005f);
 		if (abs(val) < 0.0001f && val >=0 ) val = 0.0001f;
 		if (abs(val) < 0.0001f && val < 0 ) val = -0.0001f;
 		
 		
 		res.x = res.x * -val;
 		res.y = res.y * -val;
-		//res.x *= val;
-		//res.y *= val;
     }
-  //   if (n > 0)//)// && y <= limit2 && length < 317382812)&& y < 4040 && (y <= limit1 && y > 1)
-  //  {
-		//res.x *= -1.0f;
-		//res.y *= -1.0f;
-  //  }
-    /*if (n > 0 && !absolut)//)// && y <= limit2 && length < 317382812)&& y < 4040 && (y <= limit1 && y > 1)
-    {
-		res.x *= -1.0f;
-		res.y *= -1.0f;
-    }*/
-	//else
-	//{
-	//	/*res.x = 0;
-	//	res.y = 0;*/
-	//}
-	//res.x = 1;
+
     if (!applyForFP && sqrtf(xpos * xpos + ypos * ypos) > betaFac.x && !phaseFlipOnly)// && length < 317382812)
     {
-		//double faq = coeefs[0] * Math.Exp(-(Math.Abs(coeefs[1])) * freq - coeefs[2] * freq * freq - coeefs[3] * freq * freq * freq);
-		//const float coeff0 = 1.0f;
 		length = length / 100000000.0f;
 		float coeff1 = betaFac.y;
 		float coeff2 = betaFac.z;
@@ -196,15 +146,9 @@ void ctf(cuComplex* ctf, size_t stride, float defocusMin, float defocusMax, floa
 		float expfun = expf((-coeff1 * length - coeff2 * length * length - coeff3 * length * length * length));
 		expfun = max(expfun, WienerFilterNoiseLevel);
 		float val = n * expfun;
-		//val = fmaxf(val, 0.005f);
-		/*if (abs(val) < 0.00001f && val >=0 ) val = 0.00001f;
-		if (abs(val) < 0.00001f && val < 0 ) val = -0.00001f;*/
-		
 		
 		res.x = res.x * -val / (val * val + WienerFilterNoiseLevel);
 		res.y = res.y * -val / (val * val + WienerFilterNoiseLevel);
-		//res.x = expfun;
-		//res.y = expfun;
     }
     
 	if (phaseFlipOnly)
@@ -216,27 +160,7 @@ void ctf(cuComplex* ctf, size_t stride, float defocusMin, float defocusMax, floa
 		}
 	}
     
-    //else
-    //{
-	//if (abs(r*n) > 0.5f)
-	//{
-	    //res.x /= abs(r*n);
-	    //res.y /= abs(r*n);
-        //}
-    //}
-    //res.x = 1;
-    //if (absolut)
-    //    res.y = r * n * w;
-    //else
-    //{
-        //res.y = r * n;
-        //if (r * n < 0) //res.y = 1.0f;
-        //else 
-	//res.y *= -1.0f;	
-    //res.x = 0; res.y = 0;
-    ctf[y * stride / sizeof(cuComplex) + x] = res;
-    //}
-//res.x = w;
+	*(((cuComplex*)((char*)ctf + stride * y)) + x) = res;
 }
 
 #endif

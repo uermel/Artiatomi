@@ -41,15 +41,11 @@
 #include "utils/Config.h"
 #include "utils/CudaConfig.h"
 #include <Matrix.h>
-//#include "io/Dm4FileStack.h"
-//#include "io/MRCFile.h"
 #ifdef USE_MPI
 #include "io/MPISource.h"
 #endif
 #include <MarkerFile.h>
 #include "io/writeBMP.h"
-//#include "io/mrcHeader.h"
-//#include "io/emHeader.h"
 #include <CtfFile.h>
 #include <time.h>
 #include <cufft.h>
@@ -76,6 +72,10 @@ public:
 };
 
 typedef struct {
+    float3 m[3];
+} float3x3;
+
+typedef struct {
 	float4 m[4];
 } float4x4;
 
@@ -97,6 +97,7 @@ private:
 	DoseWeightingKernel doseWeightingKernel;
 	ConjKernel conjKernel;
 	MaxShiftKernel maxShiftKernel;
+	DimBordersKernel dimBordersKernel;
 #ifdef REFINE_MODE
 	MaxShiftWeightedKernel maxShiftWeightedKernel;
 	FindPeakKernel findPeakKernel;
@@ -122,6 +123,8 @@ private:
 	Cuda::CudaDeviceVariable		projSquare_d;
 	Cuda::CudaPitchedDeviceVariable badPixelMask_d;
 	Cuda::CudaPitchedDeviceVariable volTemp_d;
+
+	Cuda::CudaTextureObject2D		texImage;
 
 	cufftHandle handleR2C;
 	cufftHandle handleC2R;
@@ -163,15 +166,15 @@ private:
 	void ForwardProjectionNoCTFROI(Volume<TVol>* vol, Cuda::CudaTextureObject3D& tevVol, int index, bool volumeIsEmpty, int2 roiMin, int2 roiMax, bool noSync);
 		
 	template<typename TVol>
-	void BackProjectionNoCTF(Volume<TVol>* vol, int proj_index, float SIRTCount);
+	void BackProjectionNoCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
 	template<typename TVol>
-	void BackProjectionCTF(Volume<TVol>* vol, int proj_index, float SIRTCount);
+	void BackProjectionCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
 
 #ifdef SUBVOLREC_MODE
 	template<typename TVol>
-	void BackProjectionNoCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& subVolumes, vector<float2>& vecExtraShifts, vector<Cuda::CudaArray3D*>& vecArrays, CUsurfref surfref, int proj_index);
+	void BackProjectionNoCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& subVolumes, vector<float2>& vecExtraShifts, vector<Cuda::CudaArray3D*>& vecArrays, int proj_index);
 	template<typename TVol>
-	void BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& subVolumes, vector<float2>& vecExtraShifts, vector<Cuda::CudaArray3D*>& vecArrays, CUsurfref surfref, int proj_index);
+	void BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& subVolumes, vector<float2>& vecExtraShifts, vector<Cuda::CudaArray3D*>& vecArrays, int proj_index);
 #endif
 
 	template<typename TVol>
@@ -208,23 +211,23 @@ public:
 
 	//Assumes image to back project stored in proj_d. SIRTCount is overridable to config-file!
 	template<typename TVol>
-	void BackProjection(Volume<TVol>* vol, int proj_index, float SIRTCount);
+	void BackProjection(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
 	
 #ifdef SUBVOLREC_MODE
 	//Assumes image to back project stored in proj_d.
 	template<typename TVol>
-	void BackProjection(Volume<TVol>* vol, vector<Volume<TVol>*>& subVolumes, vector<float2>& vecExtraShifts, vector<Cuda::CudaArray3D*>& vecArrays, CUsurfref surfref, int proj_index);
+	void BackProjection(Volume<TVol>* vol, vector<Volume<TVol>*>& subVolumes, vector<float2>& vecExtraShifts, vector<Cuda::CudaArray3D*>& vecArrays, int proj_index);
 #endif
 
-	template<typename TVol>
+	/*template<typename TVol>
 	void BackProjectionWithPriorWBPFilter(Volume<TVol>* vol, int proj_index, char* originalImage, float* MPIBuffer);
 
 	template<typename TVol>
 	void RemoveProjectionFromVol(Volume<TVol>* vol, int proj_index, char* originalImage, float* MPIBuffer);
 
 	template<typename TVol>
-	void OneSARTStep(Volume<TVol>* vol, Cuda::CudaTextureObject3D& texVol, int index, bool volumeIsEmpty, char* originalImage, float SIRTCount, float* MPIBuffer);
-	
+	void OneSARTStep(Volume<TVol>* vol, Cuda::CudaTextureObject3D& texVol, Cuda::CudaSurfaceObject3D& surface, int index, bool volumeIsEmpty, char* originalImage, float SIRTCount, float* MPIBuffer);
+	*/
 
 	void ResetProjectionsDevice();
 	void CopyProjectionToHost(float* buffer);
@@ -243,10 +246,10 @@ public:
 	float* GetCCMapMulti();
 #endif
 
-	void ConvertVolumeFP16(float* slice, int z);
-	void ConvertVolume3DFP16(float* volume);
+	void ConvertVolumeFP16(float* slice, Cuda::CudaSurfaceObject3D& surf, int z);
+	void ConvertVolume3DFP16(float* volume, Cuda::CudaSurfaceObject3D& surf);
 	void MatrixVector3Mul(float4x4 M, float3* v);
-
+    void MatrixVector3Mul(float3x3& M, float xIn, float yIn, float& xOut, float& yOut);
 };
 
 #endif // !RECONSTRUCTOR_H

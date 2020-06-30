@@ -56,12 +56,12 @@ void compare(int proj_x, int proj_y, size_t stride, float* real_raw, float* virt
 	if (x >= proj_x || y >= proj_y)
 		return;
 
-	unsigned int i = (y * stride / sizeof(float)) + x;
-	
+		
 	// save error difference in virtual projection
-	float val = vol_distance_map[i];
+	
+	float val = *(((float*)((char*)vol_distance_map + stride * y)) + x);
 	float error;
-	////float err2 = 0;
+	
     float distXA = 1.0f;
     float distXB = 1.0f;
     float distYA = 1.0f;
@@ -69,10 +69,7 @@ void compare(int proj_x, int proj_y, size_t stride, float* real_raw, float* virt
 
 	if (val >= 1.0f)
 	{
-		error = ((real_raw[i]) - ((virtual_raw[i] / projValScale) / val * realLength )) / realLength * projValScale;
-		//error = ((real_raw[i]) - (virtual_raw[i]  )) / val;
-//error = 0.5f;
-		//err2 = 	((virtual_raw[i] / val * realLength )) / realLength;	 
+		error = ((*(((float*)((char*)real_raw + stride * y)) + x)) - ((*(((float*)((char*)virtual_raw + stride * y)) + x) / projValScale) / val * realLength )) / realLength * projValScale;
 	}
 	else
 	{
@@ -93,7 +90,13 @@ void compare(int proj_x, int proj_y, size_t stride, float* real_raw, float* virt
 		
 	if (y > proj_y - dimLength.w-cutLength.w - 1)
 	{
-		float w = ((proj_y - y - 1) - cutLength.w - (proj_y - 1)) / dimLength.w;
+		
+        // incorrect:
+        //float w = ((proj_y - y - 1) - cutLength.w - (proj_y - 1)) / dimLength.w;
+
+        //correct:
+        float w = (proj_y - 1 - y - cutLength.w) / dimLength.w;
+
 		if (w<0) w = 0.0f;
 		distYA = 1.0f - expf(-(w * w * 9.0f));
 	}
@@ -115,7 +118,13 @@ void compare(int proj_x, int proj_y, size_t stride, float* real_raw, float* virt
 		
 	if (x > proj_x - dimLength.x-cutLength.x - 1)
 	{
-		float w = ((proj_x - x - 1) - cutLength.x - (proj_x - 1)) / dimLength.x;
+		
+        // incorrect:
+        //float w = ((proj_x - x - 1) - cutLength.x - (proj_x - 1)) / dimLength.x;
+
+        // correct:
+        float w = (proj_x - 1 - x - cutLength.x)/dimLength.x;
+
 		if (w<0) w = 0.0f;
 		distXA = 1.0f - expf(-(w * w * 9.0f));
 	}
@@ -124,9 +133,87 @@ void compare(int proj_x, int proj_y, size_t stride, float* real_raw, float* virt
         distXA = 1.0f;
     }
 
-	virtual_raw[i] = distXA * distXB * distYA * distYB * error;//
-	//real_raw[i] = err2;
+	*(((float*)((char*)virtual_raw + stride * y)) + x) = distXA * distXB * distYA * distYB * error;
+}
 
+extern "C"
+__global__
+void dimBorders(int proj_x, int proj_y, size_t stride, float* image, float4 cutLength, float4 dimLength)
+{
+	// integer pixel coordinates	
+	const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+	const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (x >= proj_x || y >= proj_y)
+		return;
+
+	
+	float pixel = *(((float*)((char*)image + stride * y)) + x);
+	float distXA = 1.0f;
+	float distXB = 1.0f;
+	float distYA = 1.0f;
+	float distYB = 1.0f;
+
+
+	//dim border
+	if (y < cutLength.z + dimLength.z)
+	{
+		float w = (y - cutLength.z) / dimLength.z;
+		if (w < 0) w = 0;
+		distYB = 1.0f - expf(-(w * w * 9.0f));
+	}
+	else
+	{
+		distYB = 1.0f;
+	}
+
+	if (y > proj_y - dimLength.w - cutLength.w - 1)
+	{
+		
+        // incorrect:
+        //float w = ((proj_y - y - 1) - cutLength.w - (proj_y - 1)) / dimLength.w;
+
+        //correct:
+        float w = (proj_y - 1 - y - cutLength.w) / dimLength.w;
+
+		if (w < 0) w = 0.0f;
+		distYA = 1.0f - expf(-(w * w * 9.0f));
+	}
+	else
+	{
+		distYA = 1.0f;
+	}
+
+	if (x < cutLength.y + dimLength.y)
+	{
+		float w = (x - cutLength.y) / dimLength.y;
+		if (w < 0) w = 0;
+		distXB = 1.0f - expf(-(w * w * 9.0f));
+	}
+	else
+	{
+		distXB = 1.0f;
+	}
+
+	if (x > proj_x - dimLength.x - cutLength.x - 1)
+	{
+		
+        // incorrect:
+        //float w = ((proj_x - x - 1) - cutLength.x - (proj_x - 1)) / dimLength.x;
+
+        // correct:
+        float w = (proj_x - 1 - x - cutLength.x)/dimLength.x;
+
+		if (w < 0) w = 0.0f;
+		distXA = 1.0f - expf(-(w * w * 9.0f));
+	}
+	else
+	{
+		distXA = 1.0f;
+	}
+
+	
+	*(((float*)((char*)image + stride * y)) + x) = distXA * distXB * distYA * distYB * pixel;
 }
 
 __device__ float distance(float ax, float ay, float bx, float by)
@@ -176,8 +263,6 @@ void cropBorder(int proj_x, int proj_y, size_t stride, float* image, float2 cutL
 
 	if (x >= proj_x || y >= proj_y)
 		return;
-
-	unsigned int i = (y * stride / sizeof(float)) + x;
 	
     float distX = 0.0f;
     float distY = 0.0f;
@@ -217,63 +302,10 @@ void cropBorder(int proj_x, int proj_y, size_t stride, float* image, float2 cutL
 			if (w < 0) w = 0;
 			distY = 1.0f - expf(-(w * w * 9.0f));
 		}
-
-		/*distX = minDistX;
-		distY = minDistY;*/
 	}
 
 
-
-
-	//
-	////dim border
-	//if (y < cutLength.y + dimLength.y + minPix.y)
-	//{
-	//	float w = (y - cutLength.y - minPix.y) / dimLength.y;
-	//	//w -= cutLength/dimLength;
-	//	if (w<0) w = 0;
-	//	distY = 1.0f - expf(-(w * w * 9.0f));
-	//}
-	//else if (y > maxPix.y - dimLength.y-cutLength.y)
-	//{
-	//	//float w = (proj_y-y-1) / dimLength;
-	//	//float w = (dimLength - (y - cutLength - maxPix.y) - 1) / dimLength;
-	//	float w = ((proj_y - y - 1) - cutLength.y - (proj_y - maxPix.y - 1)) / dimLength.y;
-	//	//w -= cutLength / dimLength;
-	//	if (w<0) w = 0.0f;
-	//	//if (w>1) w = 0.0f;
-	//	distY = 1.0f - expf(-(w * w * 9.0f));
-	//	//distY = 0.5f;
-	//}
- //   else
- //   {
- //       distY = 1;
- //   }
-
-	//if (x < cutLength.x + dimLength.x + minPix.x)
-	//{
-	//	float w = (x - cutLength.x - minPix.x) / dimLength.x;
-	//	//w -= cutLength / dimLength;
-	//	if (w<0) w = 0;
-	//	distX = 1.0f - expf(-(w * w * 9.0f));
-	//}
-	//else if (x > maxPix.x - dimLength.x-cutLength.x)
-	//{
-	//	//float w = (proj_x-x-1) / dimLength;
-	//	//float w = (dimLength - (x - cutLength - maxPix.x) - 1) / dimLength;
-	//	float w = ((proj_x - x - 1) - cutLength.x - (proj_x - maxPix.x - 1)) / dimLength.x;
-	//	//w -= cutLength / dimLength;
-	//	if (w<0) w = 0.0f;
-	//	//if (w>1) w = 0.0f;
-	//	distX = 1.0f - expf(-(w * w * 9.0f));
-	//	//distX = 0.5f;
-	//}
- //   else
- //   {
- //       distX = 1;
- //   }
-
-	image[i] = distX * distY * image[i];
+	*(((float*)((char*)image + stride * y)) + x) *= distX * distY;
 }
 
 #endif

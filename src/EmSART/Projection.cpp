@@ -25,8 +25,8 @@
 #include "utils/Config.h"
 #include <algorithm>
 
-Projection::Projection(ProjectionSource* aPs, MarkerFile* aMarkers)
-	: ps(aPs), markers(aMarkers), extraShifts(new float2[aPs->GetProjectionCount()])
+Projection::Projection(ProjectionSource* aPs, MarkerFile* aMarkers, bool aCompensateImageRotation)
+	: ps(aPs), markers(aMarkers), extraShifts(new float2[aPs->GetProjectionCount()]), compensateImageRotation(aCompensateImageRotation)
 {
 	float2 zero;
 	zero.x = 0;
@@ -77,14 +77,43 @@ float Projection::GetPixelSize()
 	return ps->GetPixelSize(); // --> already in nm! / 10.0f;  //Angstrom to nm
 }
 
+float Projection::GetImageRotationToCompensate(uint aIndex)
+{
+	if (!compensateImageRotation)
+	{
+		return 0;
+	}
+
+	double psiAngle = -(*markers)(MFI_RotationPsi, aIndex, 0) / 180.0 * (double)M_PI;
+	if (Configuration::Config::GetConfig().UseFixPsiAngle)
+		psiAngle = -Configuration::Config::GetConfig().PsiAngle / 180.0 * (double)M_PI;
+
+	// Fix for WBP of rectangular images (otherwise stuff is rotated out too far)
+	if (abs(abs(psiAngle) - ((double)M_PI/2.)) < ((double)M_PI/4.)){
+        return (float)psiAngle-((double)M_PI/2.);
+	} else {
+        return (float)psiAngle;
+	}
+}
+
 Matrix<float> Projection::RotateMatrix(uint aIndex, Matrix<float>& matrix)
 {
-	double tiltAngle = ((*markers)(MFI_TiltAngle, aIndex, 0) + Configuration::Config::GetConfig().AddTiltAngle) / 180.0 * (double)M_PI;
+	double tiltAngle = ((double)(*markers)(MFI_TiltAngle, aIndex, 0) + (double)Configuration::Config::GetConfig().AddTiltAngle) / 180.0 * (double)M_PI;
 	double tiltXAngle = (Configuration::Config::GetConfig().AddTiltXAngle) / 180.0 * (double)M_PI;
 	double psiAngle  = -(*markers)(MFI_RotationPsi, aIndex, 0) / 180.0 * (double)M_PI;
 	if (Configuration::Config::GetConfig().UseFixPsiAngle)
         psiAngle = -Configuration::Config::GetConfig().PsiAngle / 180.0 * (double)M_PI;
 	double phiAngle = Configuration::Config::GetConfig().PhiAngle / 180.0 * (double)M_PI;
+
+	if (compensateImageRotation)
+	{
+        // Fix for WBP of rectangular images (otherwise stuff is rotated out too far)
+        if (abs(abs(psiAngle) - ((double)M_PI/2.)) < ((double)M_PI/4.)){
+            psiAngle = ((double)M_PI/2.);
+        } else {
+            psiAngle = 0;
+        }
+	}
 	
 	Matrix<double> matrixD(3,1);
 	Matrix<double> mPsi(3,3);
@@ -182,6 +211,19 @@ float3 Projection::GetPosition(uint aIndex)
 	}
 	float shiftX = (*markers)(MFI_X_Shift, aIndex, 0) + extraShifts[aIndex].x;
 	float shiftY = (*markers)(MFI_Y_Shift, aIndex, 0) + extraShifts[aIndex].y;
+
+	if (compensateImageRotation)
+	{
+		float rotAngle = GetImageRotationToCompensate(aIndex);
+		float cosAngle = cos(rotAngle); 
+		float sinAngle = sin(rotAngle);
+
+		float rotatedShiftX = cosAngle * shiftX - sinAngle * shiftY;
+		float rotatedShiftY = sinAngle * shiftX + cosAngle * shiftY;
+
+		shiftX = rotatedShiftX;
+		shiftY = rotatedShiftY;
+	}
 
 	Matrix<float> vec = float3ToMatrix(pos);
 
@@ -426,9 +468,9 @@ int Projection::GetMinimumTiltIndex()
 float2 Projection::GetMinimumTiltShift()
 {
 	float2 shift;
-	int minTiltIndex = GetMinimumTiltIndex();
+	/*int minTiltIndex = GetMinimumTiltIndex();
     shift.x = -GetPixelUPitch(minTiltIndex).x * (*markers)(MFI_X_Shift, minTiltIndex, 0) - GetPixelVPitch(minTiltIndex).x * (*markers)(MFI_X_Shift, minTiltIndex, 0);
-	shift.y = -GetPixelUPitch(minTiltIndex).y * (*markers)(MFI_Y_Shift, minTiltIndex, 0) - GetPixelVPitch(minTiltIndex).y * (*markers)(MFI_Y_Shift, minTiltIndex, 0);
+	shift.y = -GetPixelUPitch(minTiltIndex).y * (*markers)(MFI_Y_Shift, minTiltIndex, 0) - GetPixelVPitch(minTiltIndex).y * (*markers)(MFI_Y_Shift, minTiltIndex, 0);*/
 
 
 	shift.x = 0;//(*markers)(MFI_Y_Shift, minTiltIndex, 0);
@@ -781,48 +823,28 @@ void Projection::ComputeHitPoints(Volume<unsigned short>& vol, uint index, int2&
 	MatrixVector3Mul((float4*)matrix, &p3);
 	MatrixVector3Mul((float4*)matrix, &p4);
 
-	if  (fabs(p1.x) < fabs(p2.x))
-		pA.x = p1.x;
-	else
-		pA.x = p2.x;
-	if  (fabs(p1.y) < fabs(p2.y))
-		pA.y = p1.y;
-	else
-		pA.y = p2.y;
-	
-	if  (fabs(p3.x) < fabs(p4.x))
-		pB.x = p3.x;
-	else
-		pB.x = p4.x;
-	if  (fabs(p3.y) < fabs(p4.y))
-		pB.y = p3.y;
-	else
-		pB.y = p4.y;
-
-	
 	MatrixVector3Mul((float4*)matrix, &p5);
 	MatrixVector3Mul((float4*)matrix, &p6);
 	MatrixVector3Mul((float4*)matrix, &p7);
 	MatrixVector3Mul((float4*)matrix, &p8);
 
-	
-	if  (fabs(p5.x) < fabs(p6.x))
-		pC.x = p5.x;
-	else
-		pC.x = p6.x;
-	if  (fabs(p5.y) < fabs(p6.y))
-		pC.y = p5.y;
-	else
-		pC.y = p6.y;
-	
-	if  (fabs(p7.x) < fabs(p8.x))
-		pD.x = p7.x;
-	else
-		pD.x = p8.x;
-	if  (fabs(p7.y) < fabs(p8.y))
-		pD.y = p7.y;
-	else
-		pD.y = p8.y;
+    // Correctly find those points most distant from the center
+    // pA.x --> min(x), pA.y --> min(y)
+    // pB.x --> min(x), pB.y --> max(y)
+    // pC.x --> max(x), pC.y --> min(y)
+    // pD.x --> max(x), pD.y --> max(y)
+
+    // Get minimum/maximum
+    float minX = min({p1.x, p2.x, p3.x, p4.x, p5.x, p6.x, p7.x, p8.x});
+    float maxX = max({p1.x, p2.x, p3.x, p4.x, p5.x, p6.x, p7.x, p8.x});
+    float minY = min({p1.y, p2.y, p3.y, p4.y, p5.y, p6.y, p7.y, p8.y});
+    float maxY = max({p1.y, p2.y, p3.y, p4.y, p5.y, p6.y, p7.y, p8.y});
+
+    // Set
+    pA.x = (int)minX; pA.y = (int)minY;
+    pB.x = (int)minX; pB.y = (int)maxY;
+    pC.x = (int)maxX; pC.y = (int)minY;
+    pD.x = (int)maxX; pD.y = (int)maxY;
 
 
 
@@ -981,50 +1003,30 @@ void Projection::ComputeHitPoints(Volume<float>& vol, uint index, int2& pA, int2
 	MatrixVector3Mul((float4*)matrix, &p2);
 	MatrixVector3Mul((float4*)matrix, &p3);
 	MatrixVector3Mul((float4*)matrix, &p4);
-
-	if  (fabs(p1.x) < fabs(p2.x))
-		pA.x = p1.x;
-	else
-		pA.x = p2.x;
-	if  (fabs(p1.y) < fabs(p2.y))
-		pA.y = p1.y;
-	else
-		pA.y = p2.y;
-	
-	if  (fabs(p3.x) < fabs(p4.x))
-		pB.x = p3.x;
-	else
-		pB.x = p4.x;
-	if  (fabs(p3.y) < fabs(p4.y))
-		pB.y = p3.y;
-	else
-		pB.y = p4.y;
-
 	
 	MatrixVector3Mul((float4*)matrix, &p5);
 	MatrixVector3Mul((float4*)matrix, &p6);
 	MatrixVector3Mul((float4*)matrix, &p7);
 	MatrixVector3Mul((float4*)matrix, &p8);
 
-	
-	if  (fabs(p5.x) < fabs(p6.x))
-		pC.x = p5.x;
-	else
-		pC.x = p6.x;
-	if  (fabs(p5.y) < fabs(p6.y))
-		pC.y = p5.y;
-	else
-		pC.y = p6.y;
-	
-	if  (fabs(p7.x) < fabs(p8.x))
-		pD.x = p7.x;
-	else
-		pD.x = p8.x;
-	if  (fabs(p7.y) < fabs(p8.y))
-		pD.y = p7.y;
-	else
-		pD.y = p8.y;
 
+	// Correctly find those points most distant from the center
+	// pA.x --> min(x), pA.y --> min(y)
+	// pB.x --> min(x), pB.y --> max(y)
+	// pC.x --> max(x), pC.y --> min(y)
+	// pD.x --> max(x), pD.y --> max(y)
+
+	// Get minimum/maximum
+    float minX = min({p1.x, p2.x, p3.x, p4.x, p5.x, p6.x, p7.x, p8.x});
+    float maxX = max({p1.x, p2.x, p3.x, p4.x, p5.x, p6.x, p7.x, p8.x});
+    float minY = min({p1.y, p2.y, p3.y, p4.y, p5.y, p6.y, p7.y, p8.y});
+    float maxY = max({p1.y, p2.y, p3.y, p4.y, p5.y, p6.y, p7.y, p8.y});
+
+    // Set
+    pA.x = (int)minX; pA.y = (int)minY;
+    pB.x = (int)minX; pB.y = (int)maxY;
+    pC.x = (int)maxX; pC.y = (int)minY;
+    pD.x = (int)maxX; pD.y = (int)maxY;
 
 
 	//hitPoint = fminf(MC_bBoxMin, MC_bBoxMax);

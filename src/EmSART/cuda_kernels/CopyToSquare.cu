@@ -56,8 +56,8 @@ void makeSquare(int proj_x, int proj_y, int maxsize, int stride, float* aIn, flo
 			if (mirrorY)
 			{
 				yIn = proj_y - yIn - 1;
-			}
-			val = aIn[(yIn * stride) + xIn];
+			}			
+			val = *(((float*)((char*)aIn + stride * yIn)) + xIn);
 		}
 		aOut[y * maxsize + x] = val;
 	}
@@ -83,12 +83,8 @@ void makeSquare(int proj_x, int proj_y, int maxsize, int stride, float* aIn, flo
 			yIn = proj_y - yIn - 1;
 		}
 	
-		aOut[y * maxsize + x] = aIn[(yIn * stride) + xIn];
+		aOut[y * maxsize + x] = *(((float*)((char*)aIn + stride * yIn)) + xIn);
 	}
-	/*float a = aIn[(y * stride) + x];
-	if (a > 60.0f) a = 60;
-	if (a < 0) a = 0;
-	aOut[y * maxsize + x] = a;*/
 }
 
 #endif

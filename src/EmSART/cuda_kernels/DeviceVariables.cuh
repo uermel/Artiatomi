@@ -33,11 +33,6 @@ __device__ __constant__ float c_zShiftForPartialVolume;
 __device__ __constant__ float3x3 c_magAniso;
 __device__ __constant__ float3x3 c_magAnisoInv;
 
-texture<float, 2, cudaReadModeElementType> tex;
-texture<float, 2, cudaReadModeElementType> texDist;
-//texture<unsigned short, 3, cudaReadModeNormalizedFloat> texVol;
-//texture<float, 3, cudaReadModeNormalizedFloat> texVol;
-
 // transform vector by matrix
 __device__
 void MatrixVector3Mul(float3x3& M, float xIn, float yIn, float& xOut, float& yOut)

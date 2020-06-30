@@ -818,5 +818,127 @@ namespace Cuda
 	{
 		return mTexObj;
 	}
+
+
+
+	CudaTextureObject2D::CudaTextureObject2D(CUaddress_mode aAddressMode0, CUaddress_mode aAddressMode1,
+		CUfilter_mode aFilterMode, uint aTexRefSetFlag, CudaPitchedDeviceVariable* aData, CUarray_format aDataFormat, uint aNumChannels)
+		: mCleanUp(false)
+	{
+		mData = aData;
+		memset(&mResDesc, 0, sizeof(CUDA_RESOURCE_DESC));
+		memset(&mTexDesc, 0, sizeof(CUDA_TEXTURE_DESC));
+		memset(&mResViewDesc, 0, sizeof(CUDA_RESOURCE_VIEW_DESC));
+
+		mResDesc.flags = 0;
+		mResDesc.res.pitch2D.devPtr = mData->GetDevicePtr();
+		mResDesc.res.pitch2D.format = aDataFormat;
+		mResDesc.res.pitch2D.height = mData->GetHeight();
+		mResDesc.res.pitch2D.numChannels = aNumChannels;
+		mResDesc.res.pitch2D.pitchInBytes = mData->GetPitch();
+		mResDesc.res.pitch2D.width = mData->GetWidth();
+		mResDesc.resType = CU_RESOURCE_TYPE_PITCH2D;
+
+		mTexDesc.addressMode[0] = aAddressMode0;
+		mTexDesc.addressMode[1] = aAddressMode1;
+		mTexDesc.addressMode[2] = aAddressMode1;
+		mTexDesc.filterMode = aFilterMode;
+		mTexDesc.flags = aTexRefSetFlag;
+
+		cudaSafeCall(cuTexObjectCreate(&mTexObj, &mResDesc, &mTexDesc, NULL));
+
+	}
+
+	void CudaTextureObject2D::Bind(CUaddress_mode aAddressMode0, CUaddress_mode aAddressMode1,
+		CUfilter_mode aFilterMode, uint aTexRefSetFlag, CudaPitchedDeviceVariable* aData, CUarray_format aDataFormat, uint aNumChannels)
+	{
+		mData = aData;
+		memset(&mResDesc, 0, sizeof(CUDA_RESOURCE_DESC));
+		memset(&mTexDesc, 0, sizeof(CUDA_TEXTURE_DESC));
+		memset(&mResViewDesc, 0, sizeof(CUDA_RESOURCE_VIEW_DESC));
+
+		mResDesc.flags = 0;
+		mResDesc.res.pitch2D.devPtr = mData->GetDevicePtr();
+		mResDesc.res.pitch2D.format = aDataFormat;
+		mResDesc.res.pitch2D.height = mData->GetHeight();
+		mResDesc.res.pitch2D.numChannels = aNumChannels;
+		mResDesc.res.pitch2D.pitchInBytes = mData->GetPitch();
+		mResDesc.res.pitch2D.width = mData->GetWidth();
+		mResDesc.resType = CU_RESOURCE_TYPE_PITCH2D;
+
+		mTexDesc.addressMode[0] = aAddressMode0;
+		mTexDesc.addressMode[1] = aAddressMode1;
+		mTexDesc.addressMode[2] = aAddressMode1;
+		mTexDesc.filterMode = aFilterMode;
+		mTexDesc.flags = aTexRefSetFlag;
+
+		cudaSafeCall(cuTexObjectCreate(&mTexObj, &mResDesc, &mTexDesc, NULL));
+	}
+
+	CudaTextureObject2D::CudaTextureObject2D()
+		: mCleanUp(false), mData(NULL)
+	{
+		memset(&mResDesc, 0, sizeof(CUDA_RESOURCE_DESC));
+		memset(&mTexDesc, 0, sizeof(CUDA_TEXTURE_DESC));
+		memset(&mResViewDesc, 0, sizeof(CUDA_RESOURCE_VIEW_DESC));
+	}
+
+	CudaTextureObject2D::~CudaTextureObject2D()
+	{
+		cudaSafeCall(cuTexObjectDestroy(mTexObj));
+		if (mCleanUp && mData)
+		{
+			delete mData;
+			mData = NULL;
+		}
+	}
+
+	CudaPitchedDeviceVariable* CudaTextureObject2D::GetData()
+	{
+		return mData;
+	}
+
+	CUtexObject CudaTextureObject2D::GetTexObject()
+	{
+		return mTexObj;
+	}
+
+
+
+
+	CudaSurfaceObject3D::CudaSurfaceObject3D(CudaArray3D* aArray)
+		: mCleanUp(false)
+	{
+		mArray = aArray;
+		memset(&mResDesc, 0, sizeof(CUDA_RESOURCE_DESC));
+
+		mResDesc.flags = 0;
+		mResDesc.res.array.hArray = mArray->GetCUarray();
+		mResDesc.resType = CU_RESOURCE_TYPE_ARRAY;
+
+
+		cudaSafeCall(cuSurfObjectCreate(&mSurfObj, &mResDesc));
+
+	}
+
+	CudaSurfaceObject3D::~CudaSurfaceObject3D()
+	{
+		cudaSafeCall(cuSurfObjectDestroy(mSurfObj));
+		if (mCleanUp && mArray)
+		{
+			delete mArray;
+			mArray = NULL;
+		}
+	}
+
+	CudaArray3D* CudaSurfaceObject3D::GetArray()
+	{
+		return mArray;
+	}
+
+	CUsurfObject CudaSurfaceObject3D::GetSurfObject()
+	{
+		return mSurfObj;
+	}
 }
 #endif //USE_CUDA

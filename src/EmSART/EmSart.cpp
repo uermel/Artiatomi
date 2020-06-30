@@ -28,31 +28,18 @@
 #include "EmSartDefault.h"
 #include "Projection.h"
 #include "Volume.h"
-//#include "Kernels.h"
-//#include <CudaArrays.h>
 #include <CudaContext.h>
-//#include <CudaTextures.h>
-//#include <CudaKernel.h>
-//#include <CudaDeviceProperties.h>
 #include "utils/Config.h"
-//#include "utils/CudaConfig.h"
-//#include "utils/Matrix.h"
-//#include "io/Dm4FileStack.h"
-//#include "io/MRCFile.h"
 #include "io/FileSource.h"
 #ifdef USE_MPI
 #include "io/MPISource.h"
 #endif
 #include <MarkerFile.h>
-//#include "io/MarkerFile.h"
 #include "io/writeBMP.h"
-//#include "io/mrcHeader.h"
-//#include "io/emHeader.h"
 #include <CtfFile.h>
 #include <time.h>
 #include <cufft.h>
 #include <npp.h>
-//#include "CudaKernelBinarys.h"
 #include <algorithm>
 #include "utils/SimpleLogger.h"
 #include "Reconstructor.h"
@@ -296,13 +283,13 @@ int main(int argc, char* argv[])
 		
 		if (!recDimOK) WaitForInput(-1);
 
-	    printf("Create CUDA context on device %i ... \n", aConfig.CudaDeviceIDs[mpi_offset + mpi_host_rank]);fflush(stdout);
+	    printf("Create CUDA context on device %d ... \n", aConfig.CudaDeviceIDs[mpi_offset + mpi_host_rank]);fflush(stdout);
 		//Create CUDA context
 		cuCtx = Cuda::CudaContext::CreateInstance(aConfig.CudaDeviceIDs[mpi_offset + mpi_host_rank]);
         
         printf("Using CUDA device %s\n", cuCtx->GetDeviceProperties()->GetDeviceName().c_str());fflush(stdout);
 
-        printf("Available Memory on device: %i MB\n", cuCtx->GetFreeMemorySize() / 1024 / 1024);fflush(stdout);
+        printf("Available Memory on device: %llu MB\n", cuCtx->GetFreeMemorySize() / 1024 / 1024);fflush(stdout);
 
         ProjectionSource* projSource;
 		//Load projection data file
@@ -348,7 +335,7 @@ int main(int argc, char* argv[])
 		MarkerFile markers(aConfig.MarkerFile, aConfig.ReferenceMarker);
 
 		//Create projection object to handle projection data
-		Projection proj(projSource, &markers);
+		Projection proj(projSource, &markers, aConfig.WBP_NoSART);
 
 		//Create volume dataset (host)
 		Volume<unsigned short> *volFP16 = NULL;
@@ -397,8 +384,8 @@ int main(int argc, char* argv[])
 		{
 			sizeDataType = sizeof(float);
 		}
-        if (mpi_part == 0) printf("Memory space required by volume data: %i MB\n", aConfig.RecDimensions.x * aConfig.RecDimensions.y * aConfig.RecDimensions.z * sizeDataType / 1024 / 1024);
-        if (mpi_part == 0) printf("Memory space required by partial volume: %i MB\n", aConfig.RecDimensions.x * aConfig.RecDimensions.y * (size_t)subVolDim.z * sizeDataType / 1024 / 1024);
+        if (mpi_part == 0) printf("Memory space required by volume data: %llu MB\n", (size_t)aConfig.RecDimensions.x * (size_t)aConfig.RecDimensions.y * (size_t)aConfig.RecDimensions.z * sizeDataType / 1024 / 1024);
+        if (mpi_part == 0) printf("Memory space required by partial volume: %llu MB\n", (size_t)aConfig.RecDimensions.x * (size_t)aConfig.RecDimensions.y * (size_t)subVolDim.z * sizeDataType / 1024 / 1024);
 
 		//Load Kernels
 		KernelModuls modules(cuCtx);
@@ -417,12 +404,9 @@ int main(int argc, char* argv[])
 			arrayFormat = CU_AD_FORMAT_FLOAT;
 		}
 
-		CudaArray3D vol_Array(arrayFormat, volSize.x, volSize.y, volSize.z, 1, 2);
+		CudaArray3D vol_Array(arrayFormat, (int)volSize.x, (int)volSize.y, (int)volSize.z, 1, 2);
 		CudaTextureObject3D texObj(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, &vol_Array);
-
-        CUsurfref surfref;
-        cudaSafeCall(cuModuleGetSurfRef(&surfref, modules.modBP, "surfref"));
-		cudaSafeCall(cuSurfRefSetArray(surfref, vol_Array.GetCUarray(), 0));
+		CudaSurfaceObject3D surfObj(&vol_Array);
 
         if (mpi_part == 0) printf("Copy volume to device ... ");
 
@@ -459,7 +443,7 @@ int main(int argc, char* argv[])
 		{
 			printf("Projection index list:\n");
 			log << "Projection index list:" << endl;
-			for (uint i = 0; i < projCount; i++)
+			for (int i = 0; i < projCount; i++)
 			{
 				printf("%3d,", indexList[i]);
 				log << indexList[i];
@@ -474,7 +458,7 @@ int main(int argc, char* argv[])
 		Reconstructor reconstructor(aConfig, proj, projSource, markers, *defocus, modules, mpi_part, mpi_size);
 
 
-        if (mpi_part == 0) printf("Free Memory on device after allocations: %i MB\n", cuCtx->GetFreeMemorySize() / 1024 / 1024);
+        if (mpi_part == 0) printf("Free Memory on device after allocations: %llu MB\n", cuCtx->GetFreeMemorySize() / 1024 / 1024);
 /////////////////////////////////////
 /// Filter Projections
 /////////////////////////////////////
@@ -578,19 +562,19 @@ int main(int argc, char* argv[])
 		
         for (int iter = 0; iter < aConfig.Iterations; iter++)
         {			
-			for (uint SIRTstep = 0; SIRTstep < (uint)(projCount + SIRTcount - 1) / (uint)SIRTcount; SIRTstep++)
+			for (int SIRTstep = 0; SIRTstep < (projCount + SIRTcount - 1) / SIRTcount; SIRTstep++)
 			{
 				if (!aConfig.WBP_NoSART)//normal SART/SIRT reconstruction
 				{
-					for (uint i = 0; i < (uint)SIRTcount; i++)
+					for (int i = 0; i < SIRTcount; i++)
 					{
-						if (SIRTstep * (uint)SIRTcount + i >= projCount) continue;
-						int index = indexList[SIRTstep * (uint)SIRTcount + i];
+						if (SIRTstep * SIRTcount + i >= projCount) continue;
+						int index = indexList[SIRTstep * SIRTcount + i];
 
 						if (mpi_part == 0)
 						{
 							printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
-							printf("Iter. %3i on proj. %3i/%3i, index %3i. FP  ", iter + 1, SIRTstep * (uint)SIRTcount + i + 1, projCount, index);
+							printf("Iter. %3i on proj. %3i/%3i, index %3i. FP  ", iter + 1, SIRTstep * SIRTcount + i + 1, projCount, index);
 							fflush(stdout);
 						}
 
@@ -646,29 +630,29 @@ int main(int argc, char* argv[])
 				//As compare step or file loading in WBP happens only on node 0, spread the content to all other nodes:
 				reconstructor.MPIBroadcast(SIRTBuffer, SIRTcount);
 
-                for (uint i = 0; i < (uint)SIRTcount; i++)
+                for (int i = 0; i < SIRTcount; i++)
                 {
-                    if (SIRTstep * (uint)SIRTcount + i >= projCount) continue;
+                    if (SIRTstep * SIRTcount + i >= projCount) continue;
                     volumeIsEmpty = false;
 
 					reconstructor.CopyProjectionToDevice(SIRTBuffer[i]);
                     
-                    uint index = indexList[SIRTstep * (uint)SIRTcount + i];
+                    int index = indexList[SIRTstep * SIRTcount + i];
 
 					if (mpi_part == 0)
 					{
 						printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
-						printf("Iter. %3i on proj. %3i/%3i, index %3i. BP  ", iter + 1, SIRTstep * (uint)SIRTcount + i + 1, projCount, index);
+						printf("Iter. %3i on proj. %3i/%3i, index %3i. BP  ", iter + 1, SIRTstep * SIRTcount + i + 1, projCount, index);
 						fflush(stdout);
 					}
 
 					if (aConfig.FP16Volume)
 					{
-						reconstructor.BackProjection(volFP16, index, (float)SIRTcount);
+						reconstructor.BackProjection(volFP16, surfObj, index, (float)SIRTcount);
 					}
 					else
 					{
-						reconstructor.BackProjection(vol, index, (float)SIRTcount);
+						reconstructor.BackProjection(vol, surfObj, index, (float)SIRTcount);
 					}
                 }
             }
@@ -784,7 +768,7 @@ int main(int argc, char* argv[])
 					float* volTemp_h = new float[aConfig.RecDimensions.x * aConfig.RecDimensions.y];
 					for (int zSlice = 0; zSlice < dim.z; zSlice++)
 					{
-						reconstructor.ConvertVolumeFP16(volTemp_h, zSlice);
+						reconstructor.ConvertVolumeFP16(volTemp_h, surfObj, zSlice);
 						mVol->write((char*)volTemp_h, dimI);
 						mVol->flush();
 					
@@ -837,12 +821,12 @@ int main(int argc, char* argv[])
 					int alreadyDone = 0;
 					for (int subVol = 0; subVol < mpi_part; subVol++)
 					{
-						alreadyDone += volFP16->GetSubVolumeDimension(subVol).z;
+						alreadyDone += (int)volFP16->GetSubVolumeDimension(subVol).z;
 					}
 					float* volTemp_h = new float[aConfig.RecDimensions.x * aConfig.RecDimensions.y];
 					for (int zSlice = 0; zSlice < dim.z; zSlice++)
 					{
-						reconstructor.ConvertVolumeFP16(volTemp_h, zSlice);
+						reconstructor.ConvertVolumeFP16(volTemp_h, surfObj, zSlice);
 						mVol->write((char*)volTemp_h, dimI);
 						mVol->flush();
 					
