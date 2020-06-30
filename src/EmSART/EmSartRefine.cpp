@@ -888,36 +888,34 @@ int main(int argc, char* argv[])
         int3 volmax = make_int3(xMax, yMax, zMax);
 
         auto errorStack = new float*[projCount];
+        if(aConfig.SubtractError){
+            //project Reconstruction without sub-Volumes:
+            if (mpi_part == 0) {
+                for (int i = 0; i < projCount; i++) {
+                    errorStack[i] = new float[proj.GetWidth() * proj.GetHeight()];
+                    int projIndex = projIndexList[i];
 
-        //project Reconstruction without sub-Volumes:
-        if (mpi_part == 0)
-        {
-            for (int i = 0; i < projCount; i++){
-                errorStack[i] = new float[proj.GetWidth() * proj.GetHeight()];
-                int projIndex = projIndexList[i];
+                    reconstructor.ResetProjectionsDevice();
+                    // Project full volume, result in proj_d
+                    reconstructor.ForwardProjection(volWithoutSubVols, texObj, projIndex, false);
+                    // Distance weighted error, result in proj_d
+                    reconstructor.Compare(volWithoutSubVols, projSource->GetProjection(projIndex), projIndex);
 
-                reconstructor.ResetProjectionsDevice();
-                // Project full volume, result in proj_d
-                reconstructor.ForwardProjection(volWithoutSubVols, texObj, projIndex, false);
-                // Distance weighted error, result in proj_d
-                reconstructor.Compare(volWithoutSubVols, projSource->GetProjection(projIndex), projIndex);
+                    reconstructor.CopyProjectionToHost(errorStack[i]);
+                    stringstream ss2;
+                    ss2 << "error_" << projIndex << ".em";
+                    emwrite(ss2.str(), errorStack[i], proj.GetWidth(), proj.GetHeight());
 
-                reconstructor.CopyProjectionToHost(errorStack[i]);
-                stringstream ss2;
-                ss2 << "error_" << projIndex << ".em";
-                emwrite(ss2.str(), errorStack[i], proj.GetWidth(), proj.GetHeight());
+                    // Subtract error from image, result in realproj_d
+                    //reconstructor.SubtractError();
+                    // Get realproj_d from device and save now.
+                    //reconstructor.CopyRealProjectionToHost(SIRTBuffer[0]);
 
-                // Subtract error from image, result in realproj_d
-                //reconstructor.SubtractError();
-                // Get realproj_d from device and save now.
-                //reconstructor.CopyRealProjectionToHost(SIRTBuffer[0]);
-
-                //stringstream ss;
-                //ss << "projWithoutError_" << projIndex << ".em";
-                //emwrite(ss.str(), SIRTBuffer[0], proj.GetWidth(), proj.GetHeight());
+                    //stringstream ss;
+                    //ss << "projWithoutError_" << projIndex << ".em";
+                    //emwrite(ss.str(), SIRTBuffer[0], proj.GetWidth(), proj.GetHeight());
+                }
             }
-
-
         }
 
 
@@ -1173,7 +1171,9 @@ int main(int argc, char* argv[])
 					reconstructor.Compare(volWithoutSubVols, projSource->GetProjection(projIndex), projIndex);
 					//We now have in proj_d the distance weighted 'noise free' approximation of the original projection, containing error.
 
-					reconstructor.SubtractError(errorStack[i]);
+					if(aConfig.SubtractError) {
+                        reconstructor.SubtractError(errorStack[i]);
+                    }
 					//We now have in proj_d the error and noise free approximation of the original projection.
 
 
