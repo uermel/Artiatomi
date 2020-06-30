@@ -70,9 +70,9 @@ using namespace Cuda;
 #include <limits.h>
 #endif
 
-typedef struct {
-	float3 m[3];
-} float3x3;
+//typedef struct {
+//	float3 m[3];
+//} float3x3;
 
 typedef struct {
 	int particleNr;
@@ -368,7 +368,7 @@ int main(int argc, char* argv[])
 		MarkerFile markers(aConfig.MarkerFile, aConfig.ReferenceMarker);
 
 		//Create projection object to handle projection data
-		Projection proj(projSource, &markers);
+		Projection proj(projSource, &markers, false);
 
         // Get header of reconstructed volume
         EmFile reconstructedVol(aConfig.OutVolumeFile);
@@ -588,6 +588,9 @@ int main(int argc, char* argv[])
         vector<CudaDeviceVariable*> vd_rot_particle;
         vector<CudaDeviceVariable*> vd_rot_refmask;
         vector<CudaDeviceVariable*> vd_rot_volmask;
+        // Mask kernels for masking volumes on the GPU
+        vector<ApplyMaskKernel*> vd_apply_mask_kernels;
+        vector<RestoreVolumeKernel*> vd_restore_vol_kernels;
 
         // Initialize the kernels and device variables
         for (size_t i = 0; i < unique_ref_count; i++)
@@ -618,6 +621,12 @@ int main(int argc, char* argv[])
             vd_volmask_rotators.push_back(volmask_rotator);
             // Create the output arrays
             vd_rot_volmask.push_back(new CudaDeviceVariable((int)vh_ori_volmask[i]->GetDimension().x * (int)vh_ori_volmask[i]->GetDimension().x * (int)vh_ori_volmask[i]->GetDimension().x * sizeof(float)));
+            // Create mask application kernels
+            auto volmask_apply = new ApplyMaskKernel(modules.modWBP, (int)vh_ori_volmask[i]->GetDimension().x);
+            vd_apply_mask_kernels.push_back(volmask_apply);
+            // Create volume restoration kernels
+            auto volmask_restore = new RestoreVolumeKernel(modules.modWBP, (int)vh_ori_volmask[i]->GetDimension().x);
+            vd_restore_vol_kernels.push_back(volmask_restore);
         }
 
         // Now rotate all particles/masks, apply rotated masks to rotated particles and store them on host
@@ -738,7 +747,7 @@ int main(int argc, char* argv[])
         vd_rot_volmask.clear();
 
         // Test particle
-        emwrite("/home/uermel/Programs/artia-build/refinement/testparticle.em", vh_rot_particle[0]->GetPtrToSubVolume(0), (int)vh_rot_particle[0]->GetSubVolumeDimension(0).x, (int)vh_rot_particle[0]->GetSubVolumeDimension(0).x, (int)vh_rot_particle[0]->GetSubVolumeDimension(0).x);
+        //emwrite("/home/uermel/Programs/artia-build/refinement/testparticle.em", vh_rot_particle[0]->GetPtrToSubVolume(0), (int)vh_rot_particle[0]->GetSubVolumeDimension(0).x, (int)vh_rot_particle[0]->GetSubVolumeDimension(0).x, (int)vh_rot_particle[0]->GetSubVolumeDimension(0).x);
 
         if (mpi_part == 0) printf("End preprocessing particles and masks\n");
         /////////////////////////////////////
@@ -815,6 +824,7 @@ int main(int argc, char* argv[])
 
 				float meanValue, stdValue;
 				int badPixels;
+				//TODO:reactivate this !!!!!!!!!!!!!!!!
 				reconstructor.PrepareProjection(imgUS, i, meanValue, stdValue, badPixels);
 
 				printf(" Bad Pixels: %d Mean: %f Std: %f", badPixels, meanValue, stdValue);
@@ -849,8 +859,11 @@ int main(int argc, char* argv[])
 		ShiftFile sf(aConfig.ShiftOutputFile, projSource->GetProjectionCount(), ml.GetParticleCount());
 		//printf("No crash here :)\n"); fflush(stdout);
 
-		//Load reconstruction:
+		// Load reconstruction:
 		volWithSubVols->LoadFromFile(aConfig.OutVolumeFile, mpi_part);
+
+		// Send to GPU
+		vol_Array.CopyFromHostToArray(volWithSubVols->GetPtrToSubVolume(mpi_part));
 
 		//int testGroupCount = ml.GetGroupCount(aConfig);
 
@@ -859,6 +872,54 @@ int main(int argc, char* argv[])
 		//	volSubVol->LoadFromFile(aConfig.Reference, 0);
 		//	reconstructor.setRotVolData(volSubVol->GetPtrToSubVolume(0));
 		//}
+
+        // Get min and max z of subvolume on this mpi-part (this is necessary for masking in 3D later
+        int zMin = 0;
+        int zMax = (int)volWithSubVols->GetSubVolumeDimension(0).z;
+        for (int i = 1; i <= mpi_part; i++)
+        {
+            zMin += (int)volWithSubVols->GetSubVolumeDimension(i).z;
+            zMax += (int)volWithSubVols->GetSubVolumeDimension(i).z;
+        }
+        int xMax = (int)volWithSubVols->GetSubVolumeDimension(mpi_part).x;
+        int yMax = (int)volWithSubVols->GetSubVolumeDimension(mpi_part).y;
+
+        int3 volmin = make_int3(0, 0, zMin);
+        int3 volmax = make_int3(xMax, yMax, zMax);
+
+        auto errorStack = new float*[projCount];
+
+        //project Reconstruction without sub-Volumes:
+        if (mpi_part == 0)
+        {
+            for (int i = 0; i < projCount; i++){
+                errorStack[i] = new float[proj.GetWidth() * proj.GetHeight()];
+                int projIndex = projIndexList[i];
+
+                reconstructor.ResetProjectionsDevice();
+                // Project full volume, result in proj_d
+                reconstructor.ForwardProjection(volWithoutSubVols, texObj, projIndex, false);
+                // Distance weighted error, result in proj_d
+                reconstructor.Compare(volWithoutSubVols, projSource->GetProjection(projIndex), projIndex);
+
+                reconstructor.CopyProjectionToHost(errorStack[i]);
+                stringstream ss2;
+                ss2 << "error_" << projIndex << ".em";
+                emwrite(ss2.str(), errorStack[i], proj.GetWidth(), proj.GetHeight());
+
+                // Subtract error from image, result in realproj_d
+                //reconstructor.SubtractError();
+                // Get realproj_d from device and save now.
+                //reconstructor.CopyRealProjectionToHost(SIRTBuffer[0]);
+
+                //stringstream ss;
+                //ss << "projWithoutError_" << projIndex << ".em";
+                //emwrite(ss.str(), SIRTBuffer[0], proj.GetWidth(), proj.GetHeight());
+            }
+
+
+        }
+
 
         /////////////////////////////////////
         /// Main refine loop START
@@ -882,31 +943,50 @@ int main(int argc, char* argv[])
             Matrix<float> magAnisotropyInv(reconstructor.GetMagAnistropyMatrix(1.0f / aConfig.MagAnisotropyAmount, aConfig.MagAnisotropyAngleInDeg, proj.GetWidth(), proj.GetHeight()));
 
             //Reset volume only after checking for skip.
-            {
-                volWithoutSubVols->LoadFromVolume(*volWithSubVols, mpi_part);
-            }
+            //{
+            //    volWithoutSubVols->LoadFromVolume(*volWithSubVols, mpi_part);
+            //}
 
             volumeIsEmpty = false;
 
 #ifdef USE_MPI
 			MPI_Barrier(MPI_COMM_WORLD);
 #endif
-			//Remove the subVolumes from the reconstruction and fill the space with zeros:
+
+			// Vector for restoration of masked regions
+			vector<CudaDeviceVariable*> vd_temp_store;
+
+			//Remove the subVolumes from the reconstruction and fill the space with zeros (on the GPU):
 			for (int motlIdx = 0; motlIdx < motives.size(); motlIdx++)
 			{
+			    // Get particle and associated ref_id
 				motive m = motives[motlIdx];
+                int globalIdx = ml.GetGlobalIdx(m);
+                int ref_id_idx = ref_ids[globalIdx];
 
-				float3 posSubVol = make_float3(m.x_Coord, m.y_Coord, m.z_Coord);
-				float3 shift = make_float3(m.x_Shift, m.y_Shift, m.z_Shift);
+				// Mask dimensions and positions
+				dim3 maskDims = vh_volmask_dims[ref_id_idx];
+                int3 dimMask = make_int3(maskDims.x, maskDims.y, maskDims.z);
+                int3 radiusMask = make_int3(maskDims.x/2, maskDims.y/2, maskDims.z/2);
+				int3 centerInVol = make_int3(roundf(m.x_Coord + m.x_Shift), roundf(m.y_Coord + m.y_Shift), roundf(m.z_Coord + m.z_Shift));
 
-				float binningAdjust = aConfig.VoxelSize.x / aConfig.VoxelSizeSubVol;
+                // Get rotated mask and create temporary storage
+                CudaDeviceVariable d_volmask(maskDims.x * maskDims.x * maskDims.x * sizeof(float));
+                d_volmask.CopyHostToDevice(vh_rot_volmask[globalIdx]->GetPtrToSubVolume(0));
+                auto temp = new CudaDeviceVariable(maskDims.x * maskDims.x * maskDims.x * sizeof(float));
+                temp->Memset(0);
+                vd_temp_store.push_back(temp);
 
-				//adjust subVolsize to radius --> / 2!
-				volWithoutSubVols->RemoveSubVolume(posSubVol.x + shift.x, posSubVol.y + shift.y, posSubVol.z + shift.z, aConfig.SizeSubVol / binningAdjust / 2, 0, mpi_part);
+                // Apply the mask
+                (*vd_apply_mask_kernels[ref_id_idx])(surfObj, d_volmask, *vd_temp_store[motlIdx], volmin, volmax, dimMask, radiusMask, centerInVol);
 			}
 
 			//Copy the holey volume to GPU
-			vol_Array.CopyFromHostToArray(volWithoutSubVols->GetPtrToSubVolume(mpi_part));
+			//vol_Array.CopyFromArrayToHost(volWithoutSubVols->GetPtrToSubVolume(mpi_part));
+
+            //stringstream ss10;
+            //ss10 << "holey_volume" << ".em";
+            //emwrite(ss10.str(), volWithoutSubVols->GetPtrToSubVolume(mpi_part), volWithoutSubVols->GetDimension().x, volWithoutSubVols->GetDimension().y, volWithoutSubVols->GetDimension().z);//proj.GetWidth(), proj.GetHeight());
 
 			if (mpi_part == 0)
 				switch (aConfig.GroupMode)
@@ -929,10 +1009,13 @@ int main(int argc, char* argv[])
 				}
 
 			// Load all particles onto the GPU first!
-            // Rotated particle's array on the device (needed for texture interpolation), (size: unique_ref_count)
+            // Rotated particle's cuda array on the device (needed for texture interpolation), (size: unique_ref_count)
             vector<CudaArray3D*> vd_arr_rot_particle;
             // Texture object of the rotated particle for SART, (size: unique_ref_count)
             vector<CudaTextureObject3D*> vd_tex_rot_particle;
+            // Rotated mask's device array
+            //vector<CudaDeviceVariable*> vd_rot_volmask;
+
 			for (size_t groupIdx = 0; groupIdx < motives.size(); groupIdx++)
             {
                 motive m = motives[groupIdx];
@@ -1037,7 +1120,7 @@ int main(int argc, char* argv[])
 				if (mpi_part == 0)
 				if (aConfig.DebugImages)//for debugging save images
 				{
-					printf("Save image...\n");
+					printf("Save bgsub...\n");
 					fflush(stdout);
 					reconstructor.CopyProjectionToHost(SIRTBuffer[0]);
 
@@ -1054,30 +1137,127 @@ int main(int argc, char* argv[])
 
 				//printf("ROIAfter: xMin: %d, yMin: %d, xMax: %d, yMax: %d\n", roiMin.x, roiMin.y, roiMax.x, roiMax.y);
 
+                int2 roiMin2 = make_int2(proj.GetWidth(), proj.GetHeight());
+                int2 roiMax2 = make_int2(0, 0);
+
+                int sz = 512;
+                auto bgsub = new float[sz * sz];
+                auto real = new float[sz * sz];
+
 				reconstructor.ResetProjectionsDevice();
 				//project Reconstruction without sub-Volumes:
 				{
 					reconstructor.ForwardProjectionROI(volWithoutSubVols, texObj, projIndex, false, roiMin, roiMax);
-					//reconstructor.ForwardProjection(volWithoutSubVols, texObj, index, false);
-					
-					/*reconstructor.CopyProjectionToHost(SIRTBuffer[0]);
+					//reconstructor.ForwardProjection(volWithoutSubVols, texObj, projIndex, false);
+
+
+
+					reconstructor.CopyProjectionToHost(SIRTBuffer[0]);
+
+
 
 					stringstream ss;
-					ss << "projVorComp_" << index << ".em";
+					ss << "projVorComp_" << projIndex << ".em";
 					emwrite(ss.str(), SIRTBuffer[0], proj.GetWidth(), proj.GetHeight());
 
 					reconstructor.CopyDistanceImageToHost(SIRTBuffer[0]);
 					stringstream ss2;
-					ss2 << "distVorComp_" << index << ".em";
-					emwrite(ss2.str(), SIRTBuffer[0], proj.GetWidth(), proj.GetHeight());*/
+					ss2 << "distVorComp_" << projIndex << ".em";
+					emwrite(ss2.str(), SIRTBuffer[0], proj.GetWidth(), proj.GetHeight());
 
+                    //reconstructor.CopyDistanceImageToHost(SIRTBuffer[0]);
+                    stringstream ss3;
+                    ss3 << "realProj_" << projIndex << ".em";
+                    emwrite(ss3.str(), (float *)projSource->GetProjection(projIndex), proj.GetWidth(), proj.GetHeight());
+                    printf("Reach here...\n");
 					reconstructor.Compare(volWithoutSubVols, projSource->GetProjection(projIndex), projIndex);
-					//We now have in proj_d the distance weighted 'noise free' approximation of the original projection.
+					//We now have in proj_d the distance weighted 'noise free' approximation of the original projection, containing error.
+
+					reconstructor.SubtractError(errorStack[i]);
+					//We now have in proj_d the error and noise free approximation of the original projection.
+
+
+
+//					reconstructor.CopyProjectionToHost(SIRTBuffer[0]);
+//
+//                    motive m = motives[0];
+//                    int globalIdx = ml.GetGlobalIdx(m);
+//                    int ref_id_idx = ref_ids[globalIdx];
+//
+//                    float3 posSubVol = make_float3(m.x_Coord, m.y_Coord, m.z_Coord);
+//                    float3 shift = make_float3(m.x_Shift, m.y_Shift, m.z_Shift);
+//
+//                    int2 hitPoint;
+//                    float3 bbMin = volWithoutSubVols->GetVolumeBBoxMin();
+//                    proj.ComputeHitPoint(bbMin.x + (posSubVol.x + shift.x - 1) * aConfig.VoxelSize.x + 0.5f * aConfig.VoxelSize.x,
+//                                         bbMin.y + (posSubVol.y + shift.y - 1) * aConfig.VoxelSize.y + 0.5f * aConfig.VoxelSize.y,
+//                                         bbMin.z + (posSubVol.z + shift.z - 1) * aConfig.VoxelSize.z + 0.5f * aConfig.VoxelSize.z,
+//                                         projIndex, hitPoint);
+//
+//                    float hitX, hitY;
+//                    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), hitPoint.x, hitPoint.y, hitX, hitY);
+//
+//                    int safeDist = sz/2;
+//                    int hitXMin = floor(hitX) - safeDist;
+//                    int hitXMax = ceil(hitX) + safeDist;
+//                    int hitYMin = floor(hitY) - safeDist;
+//                    int hitYMax = ceil(hitY) + safeDist;
+//
+//                    if (hitXMin < 0) hitXMin = 0;
+//                    if (hitYMin < 0) hitYMin = 0;
+//
+//                    if (hitXMin < roiMin2.x)
+//                        roiMin2.x = hitXMin;
+//                    if (hitXMax > roiMax2.x)
+//                        roiMax2.x = hitXMax;
+//
+//                    if (hitYMin < roiMin2.y)
+//                        roiMin2.y = hitYMin;
+//                    if (hitYMax > roiMax2.y)
+//                        roiMax2.y = hitYMax;
+//
+//                    int2 roiMinLocal = make_int2(hitXMin, hitYMin);
+//                    int2 roiMaxLocal = make_int2(hitXMax, hitYMax);
+//
+//                    //printf("ROILocal: xMin: %d, yMin: %d, xMax: %d, yMax: %d\n", roiMinLocal.x, roiMinLocal.y, roiMaxLocal.x, roiMaxLocal.y);
+//
+//                    for(int x = 0; x < sz; x++)
+//                        for(int y = 0; y < sz; y++){
+//                            //int ind = (y * 4096 / sizeof(float)) + x;
+//                            int xx = x+roiMinLocal.x;
+//                            int yy = y+roiMinLocal.y;
+//                            if((xx > proj.GetWidth()-1) || (yy>proj.GetHeight()-1)) {
+//                                bgsub[x + sz * y] = 0;
+//                                real[x + sz * y] = 0;
+//                            } else if((xx < 0) || (yy<0)) {
+//                                bgsub[x + sz * y] = 0;
+//                                real[x + sz * y] = 0;
+//                            } else {
+//                                bgsub[x + sz * y] = SIRTBuffer[0][xx + proj.GetWidth() * yy];
+//                                real[x + sz * y] = ((float*)projSource->GetProjection(projIndex))[xx + proj.GetWidth() * yy];
+//                            }
+//
+//                        }
+//
+//                    stringstream ss4;
+//                    ss4 << "bgsub_" << group << ".em";
+//                    emwrite(ss4.str(), bgsub, sz, sz);
+//
+//                    stringstream ss5;
+//                    ss5 << "real_" << group << ".em";
+//                    emwrite(ss5.str(), real, sz, sz);
+
+
 				}
+				delete[] bgsub;
+			    delete[] real;
+
+
+
 				if (mpi_part == 0)
 				if (aConfig.DebugImages)
 				{
-					printf("Save image...\n");
+					printf("Save bgsub...\n");
 					fflush(stdout);
 					reconstructor.CopyProjectionToHost(SIRTBuffer[0]);
 
@@ -1220,6 +1400,24 @@ int main(int argc, char* argv[])
 				}
 			}
 
+            // Reset reconstruction without subvolumes to old state (on the GPU)
+            for (int motlIdx = 0; motlIdx < motives.size(); motlIdx++)
+            {
+                // Get particle and associated ref_id
+                motive m = motives[motlIdx];
+                int globalIdx = ml.GetGlobalIdx(m);
+                int ref_id_idx = ref_ids[globalIdx];
+
+                // Mask dimensions and positions
+                dim3 maskDims = vh_volmask_dims[ref_id_idx];
+                int3 dimMask = make_int3(maskDims.x, maskDims.y, maskDims.z);
+                int3 radiusMask = make_int3(maskDims.x/2, maskDims.y/2, maskDims.z/2);
+                int3 centerInVol = make_int3(roundf(m.x_Coord + m.x_Shift), roundf(m.y_Coord + m.y_Shift), roundf(m.z_Coord + m.z_Shift));
+
+                // Restore the volume
+                (*vd_restore_vol_kernels[ref_id_idx])(surfObj, *vd_temp_store[motlIdx], volmin, volmax, dimMask, radiusMask, centerInVol);
+            }
+
 			if (mpi_part == 0)
 			{
 				printf("\n");
@@ -1251,6 +1449,12 @@ int main(int argc, char* argv[])
 		runtime = (double)(stop - start) / CLOCKS_PER_SEC;
 
 		if (mpi_part == 0) printf("\n\nTotal time for local shift measurements: %.2i:%.2i min.\n\n", (int)floor(runtime / 60.0), (int)floor(((runtime / 60.0) - floor(runtime / 60.0))*60.0));
+
+        for (int projIndex = 0; projIndex < projCount; projIndex++){
+            delete[] errorStack[projIndex];
+        }
+
+        delete[] errorStack;
 
 	}
 	catch (exception& e)

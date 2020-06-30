@@ -28,7 +28,9 @@ function fid = write_header(header, file)
     
     % Set up FEI extended header writing
     header.next = 1024 * 32 * 4;
-    header.extended = artia.mrc.ext2arr(header.extended);
+    if isstruct(class(header.extended))
+        header.extended = artia.mrc.ext2arr(header.extended);
+    end
     header_fmt.extended{3} = 'float32';
     
     for i = 1:numel(names)

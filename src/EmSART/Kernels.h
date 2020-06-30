@@ -74,6 +74,15 @@ public:
 	float operator()(Cuda::CudaPitchedDeviceVariable& real_raw, Cuda::CudaPitchedDeviceVariable& virtual_raw, Cuda::CudaPitchedDeviceVariable& vol_distance_map, float realLength, float4 crop, float4 cropDim, float projValScale);
 };
 
+class SubEKernel : public Cuda::CudaKernel
+{
+public:
+    SubEKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
+    SubEKernel(CUmodule aModule);
+
+    float operator()(Cuda::CudaPitchedDeviceVariable& real_raw, Cuda::CudaPitchedDeviceVariable& error, Cuda::CudaPitchedDeviceVariable& vol_distance_map);
+};
+
 class CropBorderKernel : public Cuda::CudaKernel
 {
 public:

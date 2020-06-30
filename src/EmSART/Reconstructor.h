@@ -86,6 +86,7 @@ private:
 	SlicerKernel slicerKernel;
 	VolTravLengthKernel volTravLenKernel;
 	CompKernel compKernel;
+	SubEKernel subEKernel;
 	WbpWeightingKernel wbp;
 	CropBorderKernel cropKernel;
 	BPKernel bpKernel;
@@ -208,6 +209,8 @@ public:
 
 	template<typename TVol>
 	void Compare(Volume<TVol>* vol, char* originalImage, int index);
+
+	void SubtractError(float* error);
 
 	//Assumes image to back project stored in proj_d. SIRTCount is overridable to config-file!
 	template<typename TVol>

@@ -56,12 +56,12 @@ void compare(int proj_x, int proj_y, size_t stride, float* real_raw, float* virt
 	if (x >= proj_x || y >= proj_y)
 		return;
 
-		
+
 	// save error difference in virtual projection
-	
+
 	float val = *(((float*)((char*)vol_distance_map + stride * y)) + x);
 	float error;
-	
+
     float distXA = 1.0f;
     float distXB = 1.0f;
     float distYA = 1.0f;
@@ -90,7 +90,7 @@ void compare(int proj_x, int proj_y, size_t stride, float* real_raw, float* virt
 		
 	if (y > proj_y - dimLength.w-cutLength.w - 1)
 	{
-		
+
         // incorrect:
         //float w = ((proj_y - y - 1) - cutLength.w - (proj_y - 1)) / dimLength.w;
 
@@ -111,14 +111,14 @@ void compare(int proj_x, int proj_y, size_t stride, float* real_raw, float* virt
 		if (w<0) w = 0;
 		distXB = 1.0f - expf(-(w * w * 9.0f));
 	}
-	else 
+	else
     {
         distXB = 1.0f;
     }
-		
+
 	if (x > proj_x - dimLength.x-cutLength.x - 1)
 	{
-		
+
         // incorrect:
         //float w = ((proj_x - x - 1) - cutLength.x - (proj_x - 1)) / dimLength.x;
 
@@ -140,14 +140,14 @@ extern "C"
 __global__
 void dimBorders(int proj_x, int proj_y, size_t stride, float* image, float4 cutLength, float4 dimLength)
 {
-	// integer pixel coordinates	
+	// integer pixel coordinates
 	const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
 
 	if (x >= proj_x || y >= proj_y)
 		return;
 
-	
+
 	float pixel = *(((float*)((char*)image + stride * y)) + x);
 	float distXA = 1.0f;
 	float distXB = 1.0f;
@@ -169,7 +169,7 @@ void dimBorders(int proj_x, int proj_y, size_t stride, float* image, float4 cutL
 
 	if (y > proj_y - dimLength.w - cutLength.w - 1)
 	{
-		
+
         // incorrect:
         //float w = ((proj_y - y - 1) - cutLength.w - (proj_y - 1)) / dimLength.w;
 
@@ -197,7 +197,7 @@ void dimBorders(int proj_x, int proj_y, size_t stride, float* image, float4 cutL
 
 	if (x > proj_x - dimLength.x - cutLength.x - 1)
 	{
-		
+
         // incorrect:
         //float w = ((proj_x - x - 1) - cutLength.x - (proj_x - 1)) / dimLength.x;
 
@@ -212,9 +212,37 @@ void dimBorders(int proj_x, int proj_y, size_t stride, float* image, float4 cutL
 		distXA = 1.0f;
 	}
 
-	
+
 	*(((float*)((char*)image + stride * y)) + x) = distXA * distXB * distYA * distYB * pixel;
 }
+
+extern "C"
+__global__
+void subtract_error(int proj_x, int proj_y, size_t stride, float* real_raw, const float* error, const float* vol_distance_map)
+{
+    // integer pixel coordinates
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (x >= proj_x || y >= proj_y)
+        return;
+
+    unsigned int i = (y * stride / sizeof(float)) + x;
+
+    // Is pixel covered by volume?
+    float val = vol_distance_map[i];
+
+    // If yes, subtract error, if no set 0
+    if (val >= 1.0f)
+    {
+        real_raw[i] = real_raw[i] - error[i];
+    }
+    else
+    {
+        real_raw[i] = 0.;
+    }
+}
+
 
 __device__ float distance(float ax, float ay, float bx, float by)
 {

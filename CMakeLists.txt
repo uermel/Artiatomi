@@ -1,10 +1,13 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.13)
+set(CMAKE_CUDA_COMPILER /usr/local/cuda-10.2/bin/nvcc)
 project(Artiatomi LANGUAGES CUDA CXX)
 
 set(CMAKE_BUILD_TYPE Debug)
 
 set(CUDA_COMPILE_OPTIONS --use_fast_math)
 #set(CUDA_COMPILE_OPTIONS -g -G -lineinfo) #to debug kernels
+
+
 
 set(CMAKE_CXX_STANDARD 14)
 
@@ -16,7 +19,7 @@ set(ISA_PATH "src/ImageStackAlignator" CACHE PATH "Path to ImageStackAlignator s
 set(STA_PATH "src/SubTomogramAverageMPI" CACHE PATH "Path to SubTomogramAverageMPI source.")
 
 if(UNIX)
-	set(CUDA_PATH "/usr/local/cuda" CACHE PATH "Path to CUDA root")
+	set(CUDA_PATH "/usr/local/cuda-10.2" CACHE PATH "Path to CUDA root")
 endif()
 
 if(WIN32)
@@ -24,13 +27,13 @@ if(WIN32)
 endif()
 
 ######################### CUDA #############################
-set(CUDA_TOOLKIT_ROOT_DIR ${CUDA_PATH})
+#set(CUDA_TOOLKIT_ROOT_DIR ${CUDA_PATH})
 if(NOT DEFINED CMAKE_CUDA_STANDARD)
     set(CMAKE_CUDA_STANDARD 14)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 endif()
 
-find_package(CUDA 9.0 REQUIRED)
+find_package(CUDA 9.2 REQUIRED)
 
 set(CUDA_LIBS ${CUDA_CUDA_LIBRARY} 
 				${CUDA_CUFFT_LIBRARIES}
@@ -49,7 +52,7 @@ set(CUDA_LIBS ${CUDA_CUDA_LIBRARY}
 				${CUDA_LIBRARIES})
 
 #set(CUDA_LIBS ${CUDA_LIBRARIES})
-set(BIN2C_EXEC bin2c) #in cuda toolkit binary path
+set(BIN2C_EXEC /usr/local/cuda-10.2/bin/bin2c) #in cuda toolkit binary path
 ######################### CUDA #############################
 if (UNIX)
 	set(OpenCL_INCLUDE_DIR "/usr/local/cuda/include")

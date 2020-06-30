@@ -222,6 +222,7 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 	conjKernel(modules.modWBP),
 	maxShiftKernel(modules.modWBP),
 	compKernel(modules.modComp),
+	subEKernel(modules.modComp),
 	cropKernel(modules.modComp),
 	bpKernel(modules.modBP, aConfig.FP16Volume),
 	convVolKernel(modules.modBP),
@@ -251,6 +252,7 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 	slicerKernel.SetComputeSize(proj.GetWidth(), proj.GetHeight(), 1);
 	volTravLenKernel.SetComputeSize(proj.GetWidth(), proj.GetHeight(), 1);
 	compKernel.SetComputeSize(proj.GetWidth(), proj.GetHeight(), 1);
+	subEKernel.SetComputeSize(proj.GetWidth(), proj.GetHeight(), 1);
 	cropKernel.SetComputeSize(proj.GetWidth(), proj.GetHeight(), 1);
 
 	wbp.SetComputeSize(proj.GetMaxDimension() / 2 + 1, proj.GetMaxDimension(), 1);
@@ -262,7 +264,7 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 	maxShiftKernel.SetComputeSize(proj.GetMaxDimension(), proj.GetMaxDimension(), 1);
 	convVolKernel.SetComputeSize(config.RecDimensions.x, config.RecDimensions.y, 1);
 	dimBordersKernel.SetComputeSize(proj.GetWidth(), proj.GetHeight(), 1);
-	
+
 	//Alloc device variables
 	realprojUS_d.Alloc(proj.GetWidth() * sizeof(int), proj.GetHeight(), sizeof(int));
 	proj_d.Alloc(proj.GetWidth() * sizeof(float), proj.GetHeight(), sizeof(float));
@@ -327,13 +329,13 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 	if (aConfig.CtfMode == Configuration::Config::CTFM_YES)
 	{
 		texImage.Bind(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, &dist_d, CU_AD_FORMAT_FLOAT, 1);
-		//CudaTextureLinearPitched2D::Bind(&bpKernel, "tex", CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, 
+		//CudaTextureLinearPitched2D::Bind(&bpKernel, "tex", CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP,
 		//	CU_TR_FILTER_MODE_LINEAR, 0, &dist_d, CU_AD_FORMAT_FLOAT, 1);
 	}
 	else
 	{
 		texImage.Bind(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, &proj_d, CU_AD_FORMAT_FLOAT, 1);
-		//CudaTextureLinearPitched2D::Bind(&bpKernel, "tex", CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, 
+		//CudaTextureLinearPitched2D::Bind(&bpKernel, "tex", CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP,
 		//	CU_TR_FILTER_MODE_POINT, 0, &proj_d, CU_AD_FORMAT_FLOAT, 1);
 	}
 
@@ -1373,9 +1375,9 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 		dimBordersKernel(realproj_d, config.Crop, config.CropDim);
 		realprojUS_d.Memset(0);
 
-		nppSafeCall(nppiWarpAffine_32f_C1R((Npp32f*)realproj_d.GetDevicePtr(), imageSize, (int)realproj_d.GetPitch(), roi, 
+		nppSafeCall(nppiWarpAffine_32f_C1R((Npp32f*)realproj_d.GetDevicePtr(), imageSize, (int)realproj_d.GetPitch(), roi,
 			(Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), roi, affineMatrix, NppiInterpolationMode::NPPI_INTER_CUBIC));
-		
+
 		float t = cts(realprojUS_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, false);
 	}
 
@@ -1428,14 +1430,14 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 				delete[] tiltAngles;
 			}
 
-			float volumeHeight = config.RecDimensions.z; 
+			float volumeHeight = config.RecDimensions.z;
 			float voxelSize = config.VoxelSize.z;
 			volumeHeight *= voxelSize;
 #ifdef SUBVOLREC_MODE
-			/*volumeHeight = config.SizeSubVol; 
+			/*volumeHeight = config.SizeSubVol;
 			voxelSize = config.VoxelSizeSubVol;*/
 #endif
-			float D = (proj.GetMaxDimension() / 2) / volumeHeight * 2.0f; 
+			float D = (proj.GetMaxDimension() / 2) / volumeHeight * 2.0f;
 
 
 			//Do WBP weighting
@@ -1538,9 +1540,9 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 	{
 		realprojUS_d.CopyDeviceToHost(img_h);
 
-		/*stringstream ss;
+		stringstream ss;
 		ss << "test_" << proj_index << ".em";
-		emwrite(ss.str(), (float*)img_h, proj.GetWidth(), proj.GetHeight());*/
+		emwrite(ss.str(), (float*)img_h, proj.GetWidth(), proj.GetHeight());
 	}
 }
 
@@ -1554,7 +1556,7 @@ void Reconstructor::Compare(Volume<TVol>* vol, char* originalImage, int index)
 		float z_VolMaxZ = vol->GetVolumeBBoxMax().z;
 		float volumeTraversalLength = fabs((DIST - z_VolMinZ) / z_Direction - (DIST - z_VolMaxZ) / z_Direction);
 
-		realproj_d.CopyHostToDevice(originalImage);
+        realproj_d.CopyHostToDevice(originalImage);
 
 
 
@@ -1567,6 +1569,15 @@ void Reconstructor::Compare(Volume<TVol>* vol, char* originalImage, int index)
 }
 template void Reconstructor::Compare(Volume<unsigned short>* vol, char* originalImage, int index);
 template void Reconstructor::Compare(Volume<float>* vol, char* originalImage, int index);
+
+void Reconstructor::SubtractError(float* error)
+{
+    if (mpi_part == 0)
+    {
+        realproj_d.CopyHostToDevice(error);
+        float runtime = subEKernel(proj_d, realproj_d, dist_d);
+    }
+}
 
 
 template<class TVol>
@@ -1932,40 +1943,46 @@ float2 Reconstructor::GetDisplacement(bool MultiPeakDetection, float* CCValue)
 		emwrite("testCTF2.em", test, proj.GetWidth(), proj.GetHeight());
 		delete[] test;*/
 
-		//proj_d contains the original Projection minus the proj(reconstructionWithoutSubVols)
+		// proj_d contains the original Projection minus the proj(reconstructionWithoutSubVols)
+		// make square
 		cts(proj_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, false);
 #ifdef WRITEDEBUG
 		projSquare_d.CopyDeviceToHost(test);
 		emwrite("projection3F.em", test, proj.GetMaxDimension(), proj.GetMaxDimension());/**/
 #endif
-
+        // Make mean free
 		nppSafeCall(nppiMean_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare,
 			(Npp8u*)meanbuffer.GetDevicePtr(), (Npp64f*)meanval.GetDevicePtr()));
 		double MeanA = 0;
 		meanval.CopyDeviceToHost(&MeanA, sizeof(double));
 		nppSafeCall(nppiSubC_32f_C1IR((float)(MeanA), (Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare));
 
+		// Square, and compute the sum of the squared projection
 		nppSafeCall(nppiSqr_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), (Npp32f*)projSquare2_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare));
 
 		nppSafeCall(nppiSum_32f_C1R((Npp32f*)projSquare2_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare,
 			(Npp8u*)meanbuffer.GetDevicePtr(), (Npp64f*)meanval.GetDevicePtr()));
 
 		double SumA = 0;
-		meanval.CopyDeviceToHost(&SumA, sizeof(double));
+		meanval.CopyDeviceToHost(&SumA, sizeof(double)); // this now contains the square counter-intuitively
 
-
+        // Real-to-Complex FFT of background subtracted REAL projection
 		cufftSafeCall(cufftExecR2C(handleR2C, (cufftReal*)projSquare_d.GetDevicePtr(), (cufftComplex*)fft_d.GetDevicePtr()));
 		//fourFilterKernel(fft_d, (proj.GetMaxDimension() / 2 + 1) * sizeof(cuComplex), proj.GetMaxDimension(), config.fourFilterLP, 12, config.fourFilterLPS, 4);
 
 		//missuse ctf_d as second fft variable
 		//projSubVols_d contains the projection of the model
+		// Make square
 		cts(projSubVols_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, false);
 
+		// Make mean free
 		nppSafeCall(nppiMean_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare,
 			(Npp8u*)meanbuffer.GetDevicePtr(), (Npp64f*)meanval.GetDevicePtr()));
 		double MeanB = 0;
 		meanval.CopyDeviceToHost(&MeanB, sizeof(double));
 		nppSafeCall(nppiSubC_32f_C1IR((float)(MeanB), (Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare));
+
+		// Square, and compute the sum of the squared projection
 		nppSafeCall(nppiSqr_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), (Npp32f*)projSquare2_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare));
 
 		nppSafeCall(nppiSum_32f_C1R((Npp32f*)projSquare2_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare,
@@ -1978,11 +1995,14 @@ float2 Reconstructor::GetDisplacement(bool MultiPeakDetection, float* CCValue)
 		projSquare_d.CopyDeviceToHost(test);
 		emwrite("realprojection3F.em", test, proj.GetMaxDimension(), proj.GetMaxDimension());/**/
 #endif
+        // Real-to-Complex FFT of FAKE projection
 		cufftSafeCall(cufftExecR2C(handleR2C, (cufftReal*)projSquare_d.GetDevicePtr(), (cufftComplex*)ctf_d.GetDevicePtr()));
 		//fourFilterKernel(ctf_d, (proj.GetMaxDimension() / 2 + 1) * sizeof(cuComplex), proj.GetMaxDimension(), 150, 2, 20, 1);
 
+		// Cross-correlation
 		conjKernel(fft_d, ctf_d, (proj.GetMaxDimension() / 2 + 1) * sizeof(cuComplex), proj.GetMaxDimension());
-		
+
+		// Get CC map
 		cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
 #ifdef WRITEDEBUG
 		projSquare_d.CopyDeviceToHost(test);
@@ -1993,6 +2013,7 @@ float2 Reconstructor::GetDisplacement(bool MultiPeakDetection, float* CCValue)
 #ifdef REFINE_MODE
 		maxShift = config.MaxShift;
 #endif
+		// Normalize cross correlation result
 		nppSafeCall(nppiDivC_32f_C1IR((float)(proj.GetMaxDimension() * proj.GetMaxDimension() * sqrt(SumA * SumB)), (Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare));
 
 		//printf("Divs: %f %f\n", (float)SumA, (float)SumB);
