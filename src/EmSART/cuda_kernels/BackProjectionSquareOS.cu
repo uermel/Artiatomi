@@ -252,6 +252,14 @@ void MatrixVector3Mul(float4x4 M, float3* v)
 	*v = erg;
 }
 
+// transform vector by matrix
+__device__
+void MatrixVector3Mul(float4x4 M, float3& v, float2& erg)
+{
+	erg.x = M.m[0].x * v.x + M.m[0].y * v.y + M.m[0].z * v.z + 1.f * M.m[0].w;
+	erg.y = M.m[1].x * v.x + M.m[1].y * v.y + M.m[1].z * v.z + 1.f * M.m[1].w;
+}
+
 extern volatile __shared__ unsigned char sBuffer[];
 
 
@@ -260,12 +268,13 @@ __global__
 void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, float maxOverSampleInv, CUtexObject img, CUsurfObject surfref, float distMin, float distMax)
 {
 	float3 ray;
-	float3 borderMin;
-	float3 borderMax;
+	float2 pixel;
+	float2 borderMin;
+	float2 borderMax;
 	float3 hitPoint;
 	float3 c_source;
 
-	int4 pixelBorders; //--> x = x.min; y = x.max; z = y.min; v = y.max   	
+	int4 pixelBorders; //--> x = x.min; y = x.max; z = y.min; w = y.max   	
 	
 	// index to access shared memory, e.g. thread linear address in a block
 	const unsigned int index2 = (threadIdx.z * blockDim.x * blockDim.y) + (threadIdx.y * blockDim.x) + threadIdx.x;
@@ -308,14 +317,14 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 	MC_bBoxMin.x = c_bBoxMin.x + (x) * c_voxelSize.x;
 	MC_bBoxMin.y = c_bBoxMin.y + (y) * c_voxelSize.y;
 	MC_bBoxMin.z = c_bBoxMin.z + (z) * c_voxelSize.z;
-	MC_bBoxMax.x = c_bBoxMin.x + ( x + 5) * c_voxelSize.x;
+	MC_bBoxMax.x = c_bBoxMin.x + ( x + 4) * c_voxelSize.x;
 	MC_bBoxMax.y = c_bBoxMin.y + ( y + 1) * c_voxelSize.y;
 	MC_bBoxMax.z = c_bBoxMin.z + ( z + 1) * c_voxelSize.z;
 
 	
 	//find maximal projection on detector:
-	borderMin = make_float3(FLT_MAX, FLT_MAX, FLT_MAX);
-	borderMax = make_float3(-200000.f, -200000.f, -200000.f);
+	borderMin = make_float2(FLT_MAX, FLT_MAX);
+	borderMax = make_float2(-FLT_MAX, -FLT_MAX);
 
 
 	//The loop has been manually unrolled: nvcc cannot handle inner loops
@@ -330,8 +339,9 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 	hitPoint.y = t * (-c_projNorm.y) + MC_bBoxMin.y;
 	hitPoint.z = t * (-c_projNorm.z) + MC_bBoxMin.z;
 
-	borderMin = fminf(hitPoint, borderMin);
-	borderMax = fmaxf(hitPoint, borderMax);
+	MatrixVector3Mul(c_DetectorMatrix, hitPoint, pixel);
+	borderMin = fminf(pixel, borderMin);
+	borderMax = fmaxf(pixel, borderMax);
 
 	//second corner
 	t = (c_projNorm.x * MC_bBoxMin.x + c_projNorm.y * MC_bBoxMin.y + c_projNorm.z * (MC_bBoxMin.z + (MC_bBoxMax.z - MC_bBoxMin.z)));
@@ -341,8 +351,9 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 	hitPoint.y = t * (-c_projNorm.y) + MC_bBoxMin.y;
 	hitPoint.z = t * (-c_projNorm.z) + (MC_bBoxMin.z + (MC_bBoxMax.z - MC_bBoxMin.z));
 
-	borderMin = fminf(hitPoint, borderMin);
-	borderMax = fmaxf(hitPoint, borderMax);
+	MatrixVector3Mul(c_DetectorMatrix, hitPoint, pixel);
+	borderMin = fminf(pixel, borderMin);
+	borderMax = fmaxf(pixel, borderMax);
 
 	//third corner
 	t = (c_projNorm.x * MC_bBoxMin.x + c_projNorm.y * (MC_bBoxMin.y + (MC_bBoxMax.y - MC_bBoxMin.y)) + c_projNorm.z * MC_bBoxMin.z);
@@ -352,8 +363,9 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 	hitPoint.y = t * (-c_projNorm.y) + (MC_bBoxMin.y + (MC_bBoxMax.y - MC_bBoxMin.y));
 	hitPoint.z = t * (-c_projNorm.z) + MC_bBoxMin.z;
 
-	borderMin = fminf(hitPoint, borderMin);
-	borderMax = fmaxf(hitPoint, borderMax);
+	MatrixVector3Mul(c_DetectorMatrix, hitPoint, pixel);
+	borderMin = fminf(pixel, borderMin);
+	borderMax = fmaxf(pixel, borderMax);
 
 	//fourth corner
 	t = (c_projNorm.x * MC_bBoxMin.x + c_projNorm.y * (MC_bBoxMin.y + (MC_bBoxMax.y - MC_bBoxMin.y)) + c_projNorm.z * (MC_bBoxMin.z + (MC_bBoxMax.z - MC_bBoxMin.z)));
@@ -363,8 +375,9 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 	hitPoint.y = t * (-c_projNorm.y) + (MC_bBoxMin.y + (MC_bBoxMax.y - MC_bBoxMin.y));
 	hitPoint.z = t * (-c_projNorm.z) + (MC_bBoxMin.z + (MC_bBoxMax.z - MC_bBoxMin.z));
 
-	borderMin = fminf(hitPoint, borderMin);
-	borderMax = fmaxf(hitPoint, borderMax);
+	MatrixVector3Mul(c_DetectorMatrix, hitPoint, pixel);
+	borderMin = fminf(pixel, borderMin);
+	borderMax = fmaxf(pixel, borderMax);
 
 	//fifth corner
 	t = (c_projNorm.x * (MC_bBoxMin.x + (MC_bBoxMax.x - MC_bBoxMin.x)) + c_projNorm.y * MC_bBoxMin.y + c_projNorm.z * MC_bBoxMin.z);
@@ -374,8 +387,9 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 	hitPoint.y = t * (-c_projNorm.y) + MC_bBoxMin.y;
 	hitPoint.z = t * (-c_projNorm.z) + MC_bBoxMin.z;
 
-	borderMin = fminf(hitPoint, borderMin);
-	borderMax = fmaxf(hitPoint, borderMax);
+	MatrixVector3Mul(c_DetectorMatrix, hitPoint, pixel);
+	borderMin = fminf(pixel, borderMin);
+	borderMax = fmaxf(pixel, borderMax);
 
 	//sixth corner
 	t = (c_projNorm.x * (MC_bBoxMin.x + (MC_bBoxMax.x - MC_bBoxMin.x)) + c_projNorm.y * MC_bBoxMin.y + c_projNorm.z * (MC_bBoxMin.z + (MC_bBoxMax.z - MC_bBoxMin.z)));
@@ -385,8 +399,9 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 	hitPoint.y = t * (-c_projNorm.y) + MC_bBoxMin.y;
 	hitPoint.z = t * (-c_projNorm.z) + (MC_bBoxMin.z + (MC_bBoxMax.z - MC_bBoxMin.z));
 
-	borderMin = fminf(hitPoint, borderMin);
-	borderMax = fmaxf(hitPoint, borderMax);
+	MatrixVector3Mul(c_DetectorMatrix, hitPoint, pixel);
+	borderMin = fminf(pixel, borderMin);
+	borderMax = fmaxf(pixel, borderMax);
 
 	//seventh corner
 	t = (c_projNorm.x * (MC_bBoxMin.x + (MC_bBoxMax.x - MC_bBoxMin.x)) + c_projNorm.y * (MC_bBoxMin.y + (MC_bBoxMax.y - MC_bBoxMin.y)) + c_projNorm.z * MC_bBoxMin.z);
@@ -396,8 +411,9 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 	hitPoint.y = t * (-c_projNorm.y) + (MC_bBoxMin.y + (MC_bBoxMax.y - MC_bBoxMin.y));
 	hitPoint.z = t * (-c_projNorm.z) + MC_bBoxMin.z;
 
-	borderMin = fminf(hitPoint, borderMin);
-	borderMax = fmaxf(hitPoint, borderMax);
+	MatrixVector3Mul(c_DetectorMatrix, hitPoint, pixel);
+	borderMin = fminf(pixel, borderMin);
+	borderMax = fmaxf(pixel, borderMax);
 
 	//eighth corner
 	t = (c_projNorm.x * (MC_bBoxMin.x + (MC_bBoxMax.x - MC_bBoxMin.x)) + c_projNorm.y * (MC_bBoxMin.y + (MC_bBoxMax.y - MC_bBoxMin.y)) + c_projNorm.z * (MC_bBoxMin.z + (MC_bBoxMax.z - MC_bBoxMin.z)));
@@ -407,50 +423,25 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 	hitPoint.y = t * (-c_projNorm.y) + (MC_bBoxMin.y + (MC_bBoxMax.y - MC_bBoxMin.y));
 	hitPoint.z = t * (-c_projNorm.z) + (MC_bBoxMin.z + (MC_bBoxMax.z - MC_bBoxMin.z));
 
-	borderMin = fminf(hitPoint, borderMin);
-	borderMax = fmaxf(hitPoint, borderMax);
+	MatrixVector3Mul(c_DetectorMatrix, hitPoint, pixel);
+	borderMin = fminf(pixel, borderMin);
+	borderMax = fmaxf(pixel, borderMax);
 
-	//get largest area
-	MC_bBoxMin = fminf(borderMin, borderMax);
-	MC_bBoxMax = fmaxf(borderMin, borderMax);
-
-	//swap x values if opposite projection direction
-//	if (c_projNorm.y * c_projNorm.z >= 0)
-	{
-//		float ttemp = MC_bBoxMin.x;
-//		MC_bBoxMin.x = MC_bBoxMax.x;
-//		MC_bBoxMax.x = ttemp;
-	}
-//	else
-	if (c_projNorm.x <= 0)
-	{
-		float temp = MC_bBoxMin.x;
-		MC_bBoxMin.x = MC_bBoxMax.x;
-		MC_bBoxMax.x = temp;
-		//temp = MC_bBoxMin.y;
-		//MC_bBoxMin.y = MC_bBoxMax.y;
-		//MC_bBoxMax.y = temp;
-	}
-
-	//Convert global coordinated to projection pixel indices
-	MatrixVector3Mul(c_DetectorMatrix, &MC_bBoxMin);    
-	MatrixVector3Mul(c_DetectorMatrix, &MC_bBoxMax);
-
-	hitPoint = fminf(MC_bBoxMin, MC_bBoxMax);
+	
 	//--> pixelBorders.x = x.min; pixelBorders.z = y.min;
-	pixelBorders.x = floor(hitPoint.x); 
-	pixelBorders.z = floor(hitPoint.y);
+	pixelBorders.x = floor(borderMin.x);
+	pixelBorders.z = floor(borderMin.y);
 	
 	//--> pixelBorders.y = x.max; pixelBorders.v = y.max
 	hitPoint = fmaxf(MC_bBoxMin, MC_bBoxMax);
-	pixelBorders.y = ceil(hitPoint.x);
-	pixelBorders.w = ceil(hitPoint.y);
+	pixelBorders.y = ceil(borderMax.x);
+	pixelBorders.w = ceil(borderMax.y);
 
 	//clamp values
-	pixelBorders.x = fminf(fmaxf(pixelBorders.x, 0), proj_x - 1);
-	pixelBorders.y = fminf(fmaxf(pixelBorders.y, 0), proj_x - 1);
-	pixelBorders.z = fminf(fmaxf(pixelBorders.z, 0), proj_y - 1);
-	pixelBorders.w = fminf(fmaxf(pixelBorders.w, 0), proj_y - 1);
+	pixelBorders.x = fminf(fmaxf(pixelBorders.x, 0), proj_x);
+	pixelBorders.y = fminf(fmaxf(pixelBorders.y, 0), proj_x);
+	pixelBorders.z = fminf(fmaxf(pixelBorders.z, 0), proj_y);
+	pixelBorders.w = fminf(fmaxf(pixelBorders.w, 0), proj_y);
 	
 
 
@@ -672,12 +663,13 @@ __global__
 void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample, float maxOverSampleInv, CUtexObject img, CUsurfObject surfref, float distMin, float distMax)
 {
 	float3 ray;
-	float3 borderMin;
-	float3 borderMax;
+	float2 pixel;
+	float2 borderMin;
+	float2 borderMax;
 	float3 hitPoint;
 	float3 c_source;
 
-	int4 pixelBorders; //--> x = x.min; y = x.max; z = y.min; v = y.max   	
+	int4 pixelBorders; //--> x = x.min; y = x.max; z = y.min; w = y.max   	
 	
 	// index to access shared memory, e.g. thread linear address in a block
 	const unsigned int index2 = (threadIdx.z * blockDim.x * blockDim.y) + (threadIdx.y * blockDim.x) + threadIdx.x;	
@@ -725,14 +717,14 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 	MC_bBoxMin.x = c_bBoxMin.x + (x) * c_voxelSize.x;
 	MC_bBoxMin.y = c_bBoxMin.y + (y) * c_voxelSize.y;
 	MC_bBoxMin.z = c_bBoxMin.z + (z) * c_voxelSize.z;
-	MC_bBoxMax.x = c_bBoxMin.x + ( x + 5) * c_voxelSize.x;
+	MC_bBoxMax.x = c_bBoxMin.x + ( x + 4) * c_voxelSize.x;
 	MC_bBoxMax.y = c_bBoxMin.y + ( y + 1) * c_voxelSize.y;
 	MC_bBoxMax.z = c_bBoxMin.z + ( z + 1) * c_voxelSize.z;
 
 	
 	//find maximal projection on detector:
-	borderMin = make_float3(FLT_MAX, FLT_MAX, FLT_MAX);
-	borderMax = make_float3(-200000.f, -200000.f, -200000.f);
+	borderMin = make_float2(FLT_MAX, FLT_MAX);
+	borderMax = make_float2(-FLT_MAX, -FLT_MAX);
 
 
 	//The loop has been manually unrolled: nvcc cannot handle inner loops
@@ -747,8 +739,9 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 	hitPoint.y = t * (-c_projNorm.y) + MC_bBoxMin.y;
 	hitPoint.z = t * (-c_projNorm.z) + MC_bBoxMin.z;
 
-	borderMin = fminf(hitPoint, borderMin);
-	borderMax = fmaxf(hitPoint, borderMax);
+	MatrixVector3Mul(c_DetectorMatrix, hitPoint, pixel);
+	borderMin = fminf(pixel, borderMin);
+	borderMax = fmaxf(pixel, borderMax);
 
 	//second corner
 	t = (c_projNorm.x * MC_bBoxMin.x + c_projNorm.y * MC_bBoxMin.y + c_projNorm.z * (MC_bBoxMin.z + (MC_bBoxMax.z - MC_bBoxMin.z)));
@@ -758,8 +751,9 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 	hitPoint.y = t * (-c_projNorm.y) + MC_bBoxMin.y;
 	hitPoint.z = t * (-c_projNorm.z) + (MC_bBoxMin.z + (MC_bBoxMax.z - MC_bBoxMin.z));
 
-	borderMin = fminf(hitPoint, borderMin);
-	borderMax = fmaxf(hitPoint, borderMax);
+	MatrixVector3Mul(c_DetectorMatrix, hitPoint, pixel);
+	borderMin = fminf(pixel, borderMin);
+	borderMax = fmaxf(pixel, borderMax);
 
 	//third corner
 	t = (c_projNorm.x * MC_bBoxMin.x + c_projNorm.y * (MC_bBoxMin.y + (MC_bBoxMax.y - MC_bBoxMin.y)) + c_projNorm.z * MC_bBoxMin.z);
@@ -769,8 +763,9 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 	hitPoint.y = t * (-c_projNorm.y) + (MC_bBoxMin.y + (MC_bBoxMax.y - MC_bBoxMin.y));
 	hitPoint.z = t * (-c_projNorm.z) + MC_bBoxMin.z;
 
-	borderMin = fminf(hitPoint, borderMin);
-	borderMax = fmaxf(hitPoint, borderMax);
+	MatrixVector3Mul(c_DetectorMatrix, hitPoint, pixel);
+	borderMin = fminf(pixel, borderMin);
+	borderMax = fmaxf(pixel, borderMax);
 
 	//fourth corner
 	t = (c_projNorm.x * MC_bBoxMin.x + c_projNorm.y * (MC_bBoxMin.y + (MC_bBoxMax.y - MC_bBoxMin.y)) + c_projNorm.z * (MC_bBoxMin.z + (MC_bBoxMax.z - MC_bBoxMin.z)));
@@ -780,8 +775,9 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 	hitPoint.y = t * (-c_projNorm.y) + (MC_bBoxMin.y + (MC_bBoxMax.y - MC_bBoxMin.y));
 	hitPoint.z = t * (-c_projNorm.z) + (MC_bBoxMin.z + (MC_bBoxMax.z - MC_bBoxMin.z));
 
-	borderMin = fminf(hitPoint, borderMin);
-	borderMax = fmaxf(hitPoint, borderMax);
+	MatrixVector3Mul(c_DetectorMatrix, hitPoint, pixel);
+	borderMin = fminf(pixel, borderMin);
+	borderMax = fmaxf(pixel, borderMax);
 
 	//fifth corner
 	t = (c_projNorm.x * (MC_bBoxMin.x + (MC_bBoxMax.x - MC_bBoxMin.x)) + c_projNorm.y * MC_bBoxMin.y + c_projNorm.z * MC_bBoxMin.z);
@@ -791,8 +787,9 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 	hitPoint.y = t * (-c_projNorm.y) + MC_bBoxMin.y;
 	hitPoint.z = t * (-c_projNorm.z) + MC_bBoxMin.z;
 
-	borderMin = fminf(hitPoint, borderMin);
-	borderMax = fmaxf(hitPoint, borderMax);
+	MatrixVector3Mul(c_DetectorMatrix, hitPoint, pixel);
+	borderMin = fminf(pixel, borderMin);
+	borderMax = fmaxf(pixel, borderMax);
 
 	//sixth corner
 	t = (c_projNorm.x * (MC_bBoxMin.x + (MC_bBoxMax.x - MC_bBoxMin.x)) + c_projNorm.y * MC_bBoxMin.y + c_projNorm.z * (MC_bBoxMin.z + (MC_bBoxMax.z - MC_bBoxMin.z)));
@@ -802,8 +799,9 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 	hitPoint.y = t * (-c_projNorm.y) + MC_bBoxMin.y;
 	hitPoint.z = t * (-c_projNorm.z) + (MC_bBoxMin.z + (MC_bBoxMax.z - MC_bBoxMin.z));
 
-	borderMin = fminf(hitPoint, borderMin);
-	borderMax = fmaxf(hitPoint, borderMax);
+	MatrixVector3Mul(c_DetectorMatrix, hitPoint, pixel);
+	borderMin = fminf(pixel, borderMin);
+	borderMax = fmaxf(pixel, borderMax);
 
 	//seventh corner
 	t = (c_projNorm.x * (MC_bBoxMin.x + (MC_bBoxMax.x - MC_bBoxMin.x)) + c_projNorm.y * (MC_bBoxMin.y + (MC_bBoxMax.y - MC_bBoxMin.y)) + c_projNorm.z * MC_bBoxMin.z);
@@ -813,8 +811,9 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 	hitPoint.y = t * (-c_projNorm.y) + (MC_bBoxMin.y + (MC_bBoxMax.y - MC_bBoxMin.y));
 	hitPoint.z = t * (-c_projNorm.z) + MC_bBoxMin.z;
 
-	borderMin = fminf(hitPoint, borderMin);
-	borderMax = fmaxf(hitPoint, borderMax);
+	MatrixVector3Mul(c_DetectorMatrix, hitPoint, pixel);
+	borderMin = fminf(pixel, borderMin);
+	borderMax = fmaxf(pixel, borderMax);
 
 	//eighth corner
 	t = (c_projNorm.x * (MC_bBoxMin.x + (MC_bBoxMax.x - MC_bBoxMin.x)) + c_projNorm.y * (MC_bBoxMin.y + (MC_bBoxMax.y - MC_bBoxMin.y)) + c_projNorm.z * (MC_bBoxMin.z + (MC_bBoxMax.z - MC_bBoxMin.z)));
@@ -824,50 +823,25 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 	hitPoint.y = t * (-c_projNorm.y) + (MC_bBoxMin.y + (MC_bBoxMax.y - MC_bBoxMin.y));
 	hitPoint.z = t * (-c_projNorm.z) + (MC_bBoxMin.z + (MC_bBoxMax.z - MC_bBoxMin.z));
 
-	borderMin = fminf(hitPoint, borderMin);
-	borderMax = fmaxf(hitPoint, borderMax);
+	MatrixVector3Mul(c_DetectorMatrix, hitPoint, pixel);
+	borderMin = fminf(pixel, borderMin);
+	borderMax = fmaxf(pixel, borderMax);
 
-	//get largest area
-	MC_bBoxMin = fminf(borderMin, borderMax);
-	MC_bBoxMax = fmaxf(borderMin, borderMax);
-
-	//swap x values if opposite projection direction
-//	if (c_projNorm.y * c_projNorm.z >= 0)
-	{
-//		float ttemp = MC_bBoxMin.x;
-//		MC_bBoxMin.x = MC_bBoxMax.x;
-//		MC_bBoxMax.x = ttemp;
-	}
-//	else
-	if (c_projNorm.x <= 0)
-	{
-		float temp = MC_bBoxMin.x;
-		MC_bBoxMin.x = MC_bBoxMax.x;
-		MC_bBoxMax.x = temp;
-		//temp = MC_bBoxMin.y;
-		//MC_bBoxMin.y = MC_bBoxMax.y;
-		//MC_bBoxMax.y = temp;
-	}
-
-	//Convert global coordinated to projection pixel indices
-	MatrixVector3Mul(c_DetectorMatrix, &MC_bBoxMin);    
-	MatrixVector3Mul(c_DetectorMatrix, &MC_bBoxMax);
-
-	hitPoint = fminf(MC_bBoxMin, MC_bBoxMax);
+	
 	//--> pixelBorders.x = x.min; pixelBorders.z = y.min;
-	pixelBorders.x = floor(hitPoint.x); 
-	pixelBorders.z = floor(hitPoint.y);
+	pixelBorders.x = floor(borderMin.x);
+	pixelBorders.z = floor(borderMin.y);
 	
 	//--> pixelBorders.y = x.max; pixelBorders.v = y.max
 	hitPoint = fmaxf(MC_bBoxMin, MC_bBoxMax);
-	pixelBorders.y = ceil(hitPoint.x);
-	pixelBorders.w = ceil(hitPoint.y);
+	pixelBorders.y = ceil(borderMax.x);
+	pixelBorders.w = ceil(borderMax.y);
 
 	//clamp values
-	pixelBorders.x = fminf(fmaxf(pixelBorders.x, 0), proj_x - 1);
-	pixelBorders.y = fminf(fmaxf(pixelBorders.y, 0), proj_x - 1);
-	pixelBorders.z = fminf(fmaxf(pixelBorders.z, 0), proj_y - 1);
-	pixelBorders.w = fminf(fmaxf(pixelBorders.w, 0), proj_y - 1);
+	pixelBorders.x = fminf(fmaxf(pixelBorders.x, 0), proj_x);
+	pixelBorders.y = fminf(fmaxf(pixelBorders.y, 0), proj_x);
+	pixelBorders.z = fminf(fmaxf(pixelBorders.z, 0), proj_y);
+	pixelBorders.w = fminf(fmaxf(pixelBorders.w, 0), proj_y);
 	
 
 
