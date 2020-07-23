@@ -405,6 +405,8 @@ int main(int argc, char* argv[])
         {
             sizeDataType = sizeof(float);
         }
+
+        printf("subVolDim.z: %f\n", subVolDim.z);
         if (mpi_part == 0) printf("Memory space required by volume data: %i MB\n", aConfig.RecDimensions.x * aConfig.RecDimensions.y * aConfig.RecDimensions.z * sizeDataType / 1024 / 1024);
         if (mpi_part == 0) printf("Memory space required by partial volume: %i MB\n", aConfig.RecDimensions.x * aConfig.RecDimensions.y * (size_t)subVolDim.z * sizeDataType / 1024 / 1024);
 
@@ -424,6 +426,11 @@ int main(int argc, char* argv[])
             volSize = volWithoutSubVols->GetSubVolumeDimension(mpi_part);
             arrayFormat = CU_AD_FORMAT_FLOAT;
         }
+
+        size_t free = 0;
+        size_t total = 0;
+        cudaMemGetInfo(&free, &total);
+        printf("before array: free: %zu total: %zu", free, total);
 
         // Tomogram's array on the device (needed for texture interpolation)
         CudaArray3D vol_Array(arrayFormat, volSize.x, volSize.y, volSize.z, 1, 2);
@@ -476,6 +483,11 @@ int main(int argc, char* argv[])
             log << endl;
             printf("\b \n\n");
         }
+
+        free = 0;
+        total = 0;
+        cudaMemGetInfo(&free, &total);
+        printf("before reconstructor: free: %zu total: %zu", free, total);
 
         Reconstructor reconstructor(aConfig, proj, projSource, markers, *defocus, modules, mpi_part, mpi_size);
         /////////////////////////////////////

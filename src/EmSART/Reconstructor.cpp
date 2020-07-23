@@ -380,6 +380,11 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 	meanval.Alloc(sizeof(double));
 	stdval.Alloc(sizeof(double));
 
+	size_t free = 0;
+	size_t total = 0;
+	cudaMemGetInfo(&free, &total);
+    printf("before crash: free: %zu total: %zu", free, total);
+
 	cufftSafeCall(cufftPlan2d(&handleR2C, proj.GetMaxDimension(), proj.GetMaxDimension(), CUFFT_R2C));
 	cufftSafeCall(cufftPlan2d(&handleC2R, proj.GetMaxDimension(), proj.GetMaxDimension(), CUFFT_C2R));
 
@@ -1528,8 +1533,9 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 		{
 			std_hf = 1;
 			//meanValue = 0;
+			//printf("I DID NAAAHHT.\n");
 		}
-		
+        //mean_hf = 0.f;
 
 		nppSafeCall(nppiSubC_32f_C1R((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), mean_hf,
 			(Npp32f*)realproj_d.GetDevicePtr(), (int)realproj_d.GetPitch(), roiAll));

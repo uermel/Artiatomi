@@ -39,6 +39,9 @@
 #include <cuda.h>  
 #include "cutil.h"
 #include "cutil_math.h"
+#include "curand.h"
+#include "curand_kernel.h"
+#include <ctime>
 #include <device_launch_parameters.h>
 #include <texture_fetch_functions.h>
 #include "float.h"
@@ -74,14 +77,26 @@ void march(int proj_x, int proj_y, size_t stride, float* projection, float* volu
 	g.z = 0;
 	g.x = 0;
 
-	for (float  osx = 0.25f; osx < 0.9f; osx+=0.5f)
+	//TODO:changed
+	for (float  osx = 0.25f; osx < 0.9f; osx+=0.5f)//(float  osx = 0.0625f; osx < 0.9375f; osx+=0.125f)//(float  osx = 0.5f; osx < 0.9f; osx+=1.f)//(float  osx = 0.25f; osx < 0.9f; osx+=0.5f)//(float  osx = 0.125f; osx < 0.9f; osx+=0.25f)//(float  osx = 0.25f; osx < 0.9f; osx+=0.5f)
 	{
-		for (float osy = 0.25f; osy < 0.9f; osy+=0.5f)
+		for (float osy = 0.25f; osy < 0.9f; osy+=0.5f)//(float osy = 0.125f; osy < 0.9375f; osy+=0.125f)//(float osy = 0.5f; osy < 0.9f; osy+=1.f)//(float osy = 0.25f; osy < 0.9f; osy+=0.5f)//(float osy = 0.125f; osy < 0.9f; osy+=0.25f)//(float osy = 0.25f; osy < 0.9f; osy+=0.5f)
 		{
 			float xAniso;
 			float yAniso;
 
-			MatrixVector3Mul(c_magAniso, (float)x + osx, (float)y + osy, xAniso, yAniso);
+			//TODO: jitter
+            //curandState stateX;
+            //curand_init((unsigned long long)clock() + x, 0, 0, &stateX);
+            //float jitx = curand_uniform(&stateX)-0.5f;
+
+
+            //curandState stateY;
+            //curand_init((unsigned long long)clock() + y, 0, 0, &stateY);
+            //float jity = curand_uniform(&stateY)-0.5f;
+
+			//MatrixVector3Mul(c_magAniso, (float)x + osx + jitx, (float)y + osy + jity, xAniso, yAniso);
+            MatrixVector3Mul(c_magAniso, (float)x + osx, (float)y + osy, xAniso, yAniso);
 			c_source = c_detektor;
 			c_source = c_source + (xAniso) * c_uPitch;
 			c_source = c_source + (yAniso) * c_vPitch;
@@ -131,8 +146,10 @@ void march(int proj_x, int proj_y, size_t stride, float* projection, float* volu
 					f.z = (f.z - c_bBoxMin.z) * c_volumeBBoxRcp.z * c_volumeDim.z - c_zShiftForPartialVolume;
 			
 					float test = tex3D<float>(tex, f.x, f.y, f.z);
-					
-					temp += test * c_voxelSize.x * 0.15f;
+
+					//TODO:add gaussian
+					//float d = sqrtf((osx-0.5f)*(osx-0.5f) + (osy-0.5f)*(osy-0.5f));
+					temp += test * c_voxelSize.x * 0.15f; //* expf(- (d/0.25f) * (d/0.25f));
 
 
 					t_in += c_voxelSize.x * 0.15f;
@@ -146,12 +163,11 @@ void march(int proj_x, int proj_y, size_t stride, float* projection, float* volu
 					f.y += f.w * c_projNorm.y;
 					f.z += f.w * c_projNorm.z;
 				}
-
 			}
 		}
 	}
-
-	*(((float*)((char*)projection + stride * y)) + x) += temp * 0.25f; //  With Oversampling use * 0.25f
+    //TODO:changed
+	*(((float*)((char*)projection + stride * y)) + x) += temp / 4.f;//1.f;//0.25f;//0.125f;//0.25f; //  With Oversampling use * 0.25f
 	*(((float*)((char*)volume_traversal_length + stride * y)) + x) = fmaxf(0,g.z/g.x);
 }
 

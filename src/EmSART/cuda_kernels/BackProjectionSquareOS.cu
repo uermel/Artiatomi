@@ -274,7 +274,7 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 	float3 hitPoint;
 	float3 c_source;
 
-	int4 pixelBorders; //--> x = x.min; y = x.max; z = y.min; w = y.max   	
+	int4 pixelBorders; //--> x = x.min; y = x.max; z = y.min; w = y.max
 	
 	// index to access shared memory, e.g. thread linear address in a block
 	const unsigned int index2 = (threadIdx.z * blockDim.x * blockDim.y) + (threadIdx.y * blockDim.x) + threadIdx.x;
@@ -427,7 +427,7 @@ void backProjection(int proj_x, int proj_y, float lambda, int maxOverSample, flo
 	borderMin = fminf(pixel, borderMin);
 	borderMax = fmaxf(pixel, borderMax);
 
-	
+
 	//--> pixelBorders.x = x.min; pixelBorders.z = y.min;
 	pixelBorders.x = floor(borderMin.x);
 	pixelBorders.z = floor(borderMin.y);
@@ -669,7 +669,7 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 	float3 hitPoint;
 	float3 c_source;
 
-	int4 pixelBorders; //--> x = x.min; y = x.max; z = y.min; w = y.max   	
+	int4 pixelBorders; //--> x = x.min; y = x.max; z = y.min; w = y.max
 	
 	// index to access shared memory, e.g. thread linear address in a block
 	const unsigned int index2 = (threadIdx.z * blockDim.x * blockDim.y) + (threadIdx.y * blockDim.x) + threadIdx.x;	
@@ -827,7 +827,7 @@ void backProjectionFP16(int proj_x, int proj_y, float lambda, int maxOverSample,
 	borderMin = fminf(pixel, borderMin);
 	borderMax = fmaxf(pixel, borderMax);
 
-	
+
 	//--> pixelBorders.x = x.min; pixelBorders.z = y.min;
 	pixelBorders.x = floor(borderMin.x);
 	pixelBorders.z = floor(borderMin.y);
