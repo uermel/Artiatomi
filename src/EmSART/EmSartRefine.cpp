@@ -509,8 +509,8 @@ int main(int argc, char* argv[])
 		ml.getRefIndeces(unique_ref_ids, ref_ids, unique_ref_count);
 
 		// Init processed list
-        auto processedParticle = new bool[ml.GetParticleCount()];
-		memset(processedParticle, 0, ml.GetParticleCount() * sizeof(bool));
+        //auto processedParticle = new bool[ml.GetParticleCount()];
+		//memset(processedParticle, 0, ml.GetParticleCount() * sizeof(bool));
 
 		// Init distance list
 		auto minDistOfProcessedParticles = new float[ml.GetParticleCount()];
@@ -934,507 +934,419 @@ int main(int argc, char* argv[])
         /////////////////////////////////////
         /// Main refine loop START
         /////////////////////////////////////
+
+        //int projNum = markers.GetProjectionCount();
         cudaProfilerStart();
-		for (int group = 0; group < ml.GetGroupCount(aConfig.GroupMode); group++)
-		{
-			//Get the motive list entries for this group:
-			vector<motive> motives = ml.GetNeighbours(group, aConfig.GroupMode, aConfig.MaxDistance, aConfig.GroupSize);
+        ///  START Loop over projections START///
+        for(int projInd = 0; projInd < projCount; projInd++)
+        {
+            // Index of projection in stack
+            int stackIndex = projIndexList[projInd];
 
-			// Skip if particle shifts were assigned using SpeedUpDistance
-			if (aConfig.GroupMode == MotiveList::GroupMode_enum::GM_MAXCOUNT ||
-				aConfig.GroupMode == MotiveList::GroupMode_enum::GM_MAXDIST)
-			{
-				if (processedParticle[ml.GetGlobalIdx(motives[0])])
-				{
-					continue;
-				}
-			}
-
-            Matrix<float> magAnisotropyInv(reconstructor.GetMagAnistropyMatrix(1.0f / aConfig.MagAnisotropyAmount, aConfig.MagAnisotropyAngleInDeg, proj.GetWidth(), proj.GetHeight()));
-
-            //Reset volume only after checking for skip.
-            //{
-            //    volWithoutSubVols->LoadFromVolume(*volWithSubVols, mpi_part);
-            //}
-
-            volumeIsEmpty = false;
-
-#ifdef USE_MPI
-			MPI_Barrier(MPI_COMM_WORLD);
-#endif
-
-			// Vector for restoration of masked regions
-			vector<CudaDeviceVariable*> vd_temp_store;
-
-			//Remove the subVolumes from the reconstruction and fill the space with zeros (on the GPU):
-			for (int motlIdx = 0; motlIdx < motives.size(); motlIdx++)
-			{
-			    // Get particle and associated ref_id
-				motive m = motives[motlIdx];
-                int globalIdx = ml.GetGlobalIdx(m);
-                int ref_id_idx = ref_ids[globalIdx];
-
-				// Mask dimensions and positions
-				dim3 maskDims = vh_volmask_dims[ref_id_idx];
-                int3 dimMask = make_int3(maskDims.x, maskDims.y, maskDims.z);
-                int3 radiusMask = make_int3(maskDims.x/2, maskDims.y/2, maskDims.z/2);
-				int3 centerInVol = make_int3(roundf(m.x_Coord + m.x_Shift), roundf(m.y_Coord + m.y_Shift), roundf(m.z_Coord + m.z_Shift));
-
-                // Get rotated mask and create temporary storage
-                CudaDeviceVariable d_volmask(maskDims.x * maskDims.x * maskDims.x * sizeof(float));
-                d_volmask.CopyHostToDevice(vh_rot_volmask[globalIdx]->GetPtrToSubVolume(0));
-                auto temp = new CudaDeviceVariable(maskDims.x * maskDims.x * maskDims.x * sizeof(float));
-                temp->Memset(0);
-                vd_temp_store.push_back(temp);
-
-                // Apply the mask
-                (*vd_apply_mask_kernels[ref_id_idx])(surfObj, d_volmask, *vd_temp_store[motlIdx], volmin, volmax, dimMask, radiusMask, centerInVol);
-			}
-
-			//Copy the holey volume to GPU
-			//vol_Array.CopyFromArrayToHost(volWithoutSubVols->GetPtrToSubVolume(mpi_part));
-
-            //stringstream ss10;
-            //ss10 << "holey_volume" << ".em";
-            //emwrite(ss10.str(), volWithoutSubVols->GetPtrToSubVolume(mpi_part), volWithoutSubVols->GetDimension().x, volWithoutSubVols->GetDimension().y, volWithoutSubVols->GetDimension().z);//proj.GetWidth(), proj.GetHeight());
-
-			if (mpi_part == 0)
-				switch (aConfig.GroupMode)
-				{
-				case MotiveList::GroupMode_enum::GM_BYGROUP:
-					printf("Group nr: %d/%d, group size: %d\n", group, (int)ml.GetGroupCount(aConfig.GroupMode), (int)motives.size());
-					log << "Group nr: " << group << "/" << (int)ml.GetGroupCount(aConfig.GroupMode) << ", group size: " << (int)motives.size() << endl;
-					break;
-				case MotiveList::GroupMode_enum::GM_MAXDIST:
-					printf("Group nr: %d/%d, group size: %d\n", group, (int)ml.GetGroupCount(aConfig.GroupMode), (int)motives.size());
-					log << "Group nr: " << group << "/" << (int)ml.GetGroupCount(aConfig.GroupMode) << ", group size: " << (int)motives.size() << endl;
-					break;
-				case MotiveList::GroupMode_enum::GM_MAXCOUNT:
-					{
-						float dist = ml.GetDistance(motives[0], motives[motives.size() - 1]);
-						printf("Group nr: %d/%d, max distance : %f [voxel]\n", group, (int)ml.GetGroupCount(aConfig.GroupMode), dist);
-						log << "Group nr: " << group << "/" << (int)ml.GetGroupCount(aConfig.GroupMode) << ", max distance: " << dist << " [voxel]" << endl;
-					}
-					break;
-				}
-
-			// Load all particles onto the GPU first!
-            // Rotated particle's cuda array on the device (needed for texture interpolation), (size: unique_ref_count)
-            vector<CudaArray3D*> vd_arr_rot_particle;
-            // Texture object of the rotated particle for SART, (size: unique_ref_count)
-            vector<CudaTextureObject3D*> vd_tex_rot_particle;
-            // Rotated mask's device array
-            //vector<CudaDeviceVariable*> vd_rot_volmask;
-
-			for (size_t groupIdx = 0; groupIdx < motives.size(); groupIdx++)
-            {
-                motive m = motives[groupIdx];
-                int globalIdx = ml.GetGlobalIdx(m);
-                int ref_id_idx = ref_ids[globalIdx];
-
-                // Create the cuda array for the rotated particle (source data for interpolation during SART-FP)
-                auto arr = new CudaArray3D(arrayFormat, (int)vh_ori_particle[ref_id_idx]->GetDimension().x, (int)vh_ori_particle[ref_id_idx]->GetDimension().x, (int)vh_ori_particle[ref_id_idx]->GetDimension().x, 1, 2);
-                // Populate the array with the rotated particle
-                arr->CopyFromHostToArray(vh_rot_particle[globalIdx]->GetPtrToSubVolume(0));
-                // Add to group vector
-                vd_arr_rot_particle.push_back(arr); // pirate vector
-                // Create the texture object for the rotated particle (for interpolation during SART-FP)
-                vd_tex_rot_particle.push_back(new CudaTextureObject3D(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, arr));
+            // Display progress
+            if (mpi_part == 0) {
+                printf("Projection nr: %d/%d\n", stackIndex + 1, projCount);
+                printf("\tUpdating volume ...\n");
             }
 
-			// Project the single sub-Volumes:
-			for (int i = 0; i < projCount; i++)
-			{
-				if (mpi_part == 0)
-				{
-					printf("Projection nr: %d/%d\n", i+1, projCount);
-				}
+            if (mpi_part == 0)
+                if (aConfig.DebugImages)//for debugging save images
+                {
+                    stringstream ss;
+                    ss << "realProj_" << stackIndex << ".em";
+                    emwrite(ss.str(), (float *) projSource->GetProjection(stackIndex), proj.GetWidth(),
+                            proj.GetHeight());
+                }
 
-				//Reset the minDist Values for each projection.
-				for (size_t i = 0; i < ml.GetParticleCount(); i++)
-				{
-					minDistOfProcessedParticles[i] = 100000000.0f; //some large value...
-				}
+            /// Update volume to fit current projection ///
+            reconstructor.ResetProjectionsDevice();
+            // Project full volume, result in proj_d
+            reconstructor.ForwardProjection(volWithoutSubVols, texObj, stackIndex, false);
+            // Distance weighted error, result in proj_d
+            reconstructor.Compare(volWithoutSubVols, projSource->GetProjection(stackIndex), stackIndex);
+            // Correct volume for this projection
+            reconstructor.BackProjection(volWithoutSubVols, surfObj, stackIndex, (float)SIRTcount);
+            // The volume is now corrected for the reprojection error of this projection.
 
-				int projIndex = projIndexList[i];
-				//projIndex = 20;
-				reconstructor.ResetProjectionsDevice();
-				int2 roiMin = make_int2(proj.GetWidth(), proj.GetHeight());
-				int2 roiMax = make_int2(0, 0);
+            //auto updatedVolume = new float[1024*1700*200];
+            //vol_Array.CopyFromArrayToHost(updatedVolume);
 
-				if (mpi_part == 0)
-				{
-					for (size_t groupIdx = 0; groupIdx < motives.size(); groupIdx++)
-					{
-						motive m = motives[groupIdx];
-						int globalIdx = ml.GetGlobalIdx(m);
-						int ref_id_idx = ref_ids[globalIdx];
-						
-						//reconstructor.rotVol(volRot, m.phi, m.psi, m.theta);
-						//volRot.CopyDeviceToHost(volSubVolRot->GetPtrToSubVolume(0));
+            //stringstream ss;
+            //ss << "updatedVolume.em";
+            //emwrite(ss.str(), updatedVolume, 1024, 1700, 200);
+            //delete[] updatedVolume;
 
-						//vol_ArraySubVol.CopyFromDeviceToArray(volRot);
-                        //vd_arr_rot_particle[ref_id_idx]->CopyFromHostToArray(vh_rot_particle[globalIdx]->GetPtrToSubVolume(0));
+            //Reset the minDist Values for each projection.
+            for (size_t i = 0; i < ml.GetParticleCount(); i++)
+            {
+                minDistOfProcessedParticles[i] = 100000000.0f; //some large value...
+            }
 
-						float3 posSubVol = make_float3(m.x_Coord, m.y_Coord, m.z_Coord);
-						float3 shift = make_float3(m.x_Shift, m.y_Shift, m.z_Shift);
-						//printf("posSubVol: (%f, %f, %f) * %f\n", posSubVol.x, posSubVol.y, posSubVol.z, aConfig.ScaleMotivelistPosition);
-						//printf("shift: (%f, %f, %f)\n", shift.x, shift.y, shift.z);
+            // Init processed list
+            auto processedParticle = new bool[ml.GetParticleCount()];
+            memset(processedParticle, 0, ml.GetParticleCount() * sizeof(bool));
 
-						int2 hitPoint;
-						float3 bbMin = volWithoutSubVols->GetVolumeBBoxMin();
-						proj.ComputeHitPoint(bbMin.x + (posSubVol.x + shift.x - 1) * aConfig.VoxelSize.x + 0.5f * aConfig.VoxelSize.x,
-							bbMin.y + (posSubVol.y + shift.y - 1) * aConfig.VoxelSize.y + 0.5f * aConfig.VoxelSize.y,
-							bbMin.z + (posSubVol.z + shift.z - 1) * aConfig.VoxelSize.z + 0.5f * aConfig.VoxelSize.z,
-							projIndex, hitPoint);
-						//printf("HitPoint: (%d, %d)\n", hitPoint.x, hitPoint.y);
+            // Display progress
+            if (mpi_part == 0) {
+                printf("\tRefining ...\n");
+            }
 
-						float hitX, hitY;
-						MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), hitPoint.x, hitPoint.y, hitX, hitY);
+            ///  START Loop over groups of particles and project each group together START///
+            for(int group = 0; group < ml.GetGroupCount(aConfig.GroupMode); group++)
+            {
 
-						int safeDist = 100 + aConfig.VoxelSizeSubVol * aConfig.SizeSubVol * 2 + aConfig.MaxShift * 2;
-						int hitXMin = floor(hitX) - safeDist;
-						int hitXMax = ceil(hitX) + safeDist;
-						int hitYMin = floor(hitY) - safeDist;
-						int hitYMax = ceil(hitY) + safeDist;
+                // Display progress
+                if (mpi_part == 0) {
+                    printf("\t\tGroup: %i/%i\n", group+1, ml.GetGroupCount(aConfig.GroupMode));
+                }
 
-						if (hitXMin < 0) hitXMin = 0;
-						if (hitYMin < 0) hitYMin = 0;
+                //Get the motive list entries for this group:
+                vector<motive> motives = ml.GetNeighbours(group, aConfig.GroupMode, aConfig.MaxDistance, aConfig.GroupSize);
 
-						if (hitXMin < roiMin.x)
-							roiMin.x = hitXMin;
-						if (hitXMax > roiMax.x)
-							roiMax.x = hitXMax;
-
-						if (hitYMin < roiMin.y)
-							roiMin.y = hitYMin;
-						if (hitYMax > roiMax.y)
-							roiMax.y = hitYMax;
-
-                        vh_rot_particle[globalIdx]->PositionInSpace(aConfig.VoxelSize, aConfig.VoxelSizeSubVol, *volWithoutSubVols, posSubVol, shift);
-
-						int2 roiMinLocal = make_int2(hitXMin, hitYMin);
-						int2 roiMaxLocal = make_int2(hitXMax, hitYMax);
-						//printf("ROILocal: xMin: %d, yMin: %d, xMax: %d, yMax: %d\n", roiMinLocal.x, roiMinLocal.y, roiMaxLocal.x, roiMaxLocal.y);
-
-						//Project actual index:						
-						/*printf("Do projection...\n");
-						fflush(stdout);*/
-						reconstructor.ForwardProjectionROI(vh_rot_particle[globalIdx], *vd_tex_rot_particle[groupIdx], projIndex, volumeIsEmpty, roiMinLocal, roiMaxLocal, true);
-						//reconstructor.ForwardProjection(volSubVolRot, texObjSubVol, index, volumeIsEmpty, true);
-					}
-				}
-
-				//This is the final projection of the model:
-				reconstructor.CopyProjectionToSubVolumeProjection();
-				if (mpi_part == 0)
-				if (aConfig.DebugImages)//for debugging save images
-				{
-					printf("Save bgsub...\n");
-					fflush(stdout);
-					reconstructor.CopyProjectionToHost(SIRTBuffer[0]);
-
-					stringstream ss;
-					ss << "projSubVols_" << group << "_" << projIndex << ".em";
-					emwrite(ss.str(), SIRTBuffer[0], proj.GetWidth(), proj.GetHeight());
-				}
-
-#ifdef USE_MPI
-				//MPI_Barrier(MPI_COMM_WORLD);
-				MPI_Bcast(&roiMin, 2, MPI_INT, 0, MPI_COMM_WORLD);
-				MPI_Bcast(&roiMax, 2, MPI_INT, 0, MPI_COMM_WORLD);
-#endif
-
-				//printf("ROIAfter: xMin: %d, yMin: %d, xMax: %d, yMax: %d\n", roiMin.x, roiMin.y, roiMax.x, roiMax.y);
-
-                int2 roiMin2 = make_int2(proj.GetWidth(), proj.GetHeight());
-                int2 roiMax2 = make_int2(0, 0);
-
-                int sz = 512;
-                auto bgsub = new float[sz * sz];
-                auto real = new float[sz * sz];
-
-				reconstructor.ResetProjectionsDevice();
-				//project Reconstruction without sub-Volumes:
-				{
-					reconstructor.ForwardProjectionROI(volWithoutSubVols, texObj, projIndex, false, roiMin, roiMax);
-					//reconstructor.ForwardProjection(volWithoutSubVols, texObj, projIndex, false);
-
-
-
-					reconstructor.CopyProjectionToHost(SIRTBuffer[0]);
-
-
-
-					stringstream ss;
-					ss << "projVorComp_" << projIndex << ".em";
-					emwrite(ss.str(), SIRTBuffer[0], proj.GetWidth(), proj.GetHeight());
-
-					reconstructor.CopyDistanceImageToHost(SIRTBuffer[0]);
-					stringstream ss2;
-					ss2 << "distVorComp_" << projIndex << ".em";
-					emwrite(ss2.str(), SIRTBuffer[0], proj.GetWidth(), proj.GetHeight());
-
-                    //reconstructor.CopyDistanceImageToHost(SIRTBuffer[0]);
-                    stringstream ss3;
-                    ss3 << "realProj_" << projIndex << ".em";
-                    emwrite(ss3.str(), (float *)projSource->GetProjection(projIndex), proj.GetWidth(), proj.GetHeight());
-                    printf("Reach here...\n");
-					reconstructor.Compare(volWithoutSubVols, projSource->GetProjection(projIndex), projIndex);
-					//We now have in proj_d the distance weighted 'noise free' approximation of the original projection, containing error.
-
-					if(aConfig.SubtractError) {
-                        reconstructor.SubtractError(errorStack[i]);
+                // Skip if particle shifts were assigned using SpeedUpDistance
+                if (aConfig.GroupMode == MotiveList::GroupMode_enum::GM_MAXCOUNT ||
+                    aConfig.GroupMode == MotiveList::GroupMode_enum::GM_MAXDIST)
+                {
+                    if (processedParticle[ml.GetGlobalIdx(motives[0])])
+                    {
+                        // Display progress
+                        if (mpi_part == 0) {
+                            printf("\t\t\tAlready assigned, skipping.\n");
+                        }
+                        continue;
                     }
-					//We now have in proj_d the error and noise free approximation of the original projection.
+                }
+
+                // Compute mag anisotropy
+                Matrix<float> magAnisotropyInv(reconstructor.GetMagAnistropyMatrix(1.0f / aConfig.MagAnisotropyAmount, aConfig.MagAnisotropyAngleInDeg, proj.GetWidth(), proj.GetHeight()));
+
+                // Volume is full
+                volumeIsEmpty = false;
+
+                // Vector for restoration of masked regions
+                vector<CudaDeviceVariable*> vd_temp_store;
+
+                // Rotated particle's cuda array on the device (needed for texture interpolation), (size: unique_ref_count)
+                vector<CudaArray3D*> vd_arr_rot_particle;
+                // Texture object of the rotated particle for SART, (size: unique_ref_count)
+                vector<CudaTextureObject3D*> vd_tex_rot_particle;
+
+                // Initialize reconstructor and ROI for the group
+                reconstructor.ResetProjectionsDevice();
+                int2 roiMin = make_int2(proj.GetWidth(), proj.GetHeight());
+                int2 roiMax = make_int2(0, 0);
+
+                // Display progress
+                if (mpi_part == 0) {
+                    printf("\t\t\tRemoving particles and projecting references ...\n");
+                }
+
+                int2 roiMinCrop, roiMaxCrop;
+
+                /// START Loop over each particle in one group START ///
+                for (int groupIdx = 0; groupIdx < motives.size(); groupIdx++)
+                {
+                    // Get particle and associated ref_id
+                    motive m = motives[groupIdx];
+                    int globalIdx = ml.GetGlobalIdx(m);
+                    int ref_id_idx = ref_ids[globalIdx];
+
+                    /// 1. Remove particle from reconstructed Volume
+                    // Mask dimensions and positions
+                    dim3 maskDims = vh_volmask_dims[ref_id_idx];
+                    int3 dimMask = make_int3(maskDims.x, maskDims.y, maskDims.z);
+                    int3 radiusMask = make_int3(maskDims.x/2, maskDims.y/2, maskDims.z/2);
+                    int3 centerInVol = make_int3(roundf(m.x_Coord + m.x_Shift), roundf(m.y_Coord + m.y_Shift), roundf(m.z_Coord + m.z_Shift));
+
+                    // Get rotated mask and create temporary storage
+                    CudaDeviceVariable d_volmask(maskDims.x * maskDims.x * maskDims.x * sizeof(float));
+                    d_volmask.CopyHostToDevice(vh_rot_volmask[globalIdx]->GetPtrToSubVolume(0));
+                    auto temp = new CudaDeviceVariable(maskDims.x * maskDims.x * maskDims.x * sizeof(float));
+                    temp->Memset(0);
+                    vd_temp_store.push_back(temp);
+
+                    // Apply the volume mask for this particle
+                    (*vd_apply_mask_kernels[ref_id_idx])(surfObj, d_volmask, *vd_temp_store[groupIdx], volmin, volmax, dimMask, radiusMask, centerInVol);
+
+                    /// 2. Project the reference volumes
+                    // Create the cuda array for the rotated particle (source data for interpolation during SART-FP)
+                    auto arr = new CudaArray3D(arrayFormat, (int)vh_ori_particle[ref_id_idx]->GetDimension().x, (int)vh_ori_particle[ref_id_idx]->GetDimension().x, (int)vh_ori_particle[ref_id_idx]->GetDimension().x, 1, 2);
+                    // Populate the array with the rotated particle
+                    arr->CopyFromHostToArray(vh_rot_particle[globalIdx]->GetPtrToSubVolume(0));
+                    // Add to group vector
+                    vd_arr_rot_particle.push_back(arr); // pirate vector :)
+                    // Create the texture object for the rotated particle (for interpolation during FP)
+                    vd_tex_rot_particle.push_back(new CudaTextureObject3D(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, arr));
+
+                    // Position info from motive list
+                    float3 posSubVol = make_float3(m.x_Coord, m.y_Coord, m.z_Coord);
+                    float3 shift = make_float3(m.x_Shift, m.y_Shift, m.z_Shift);
+
+                    // Figure out the 2D-ROI
+                    int2 hitPoint;
+                    float3 bbMin = volWithoutSubVols->GetVolumeBBoxMin();
+                    proj.ComputeHitPoint(bbMin.x + (posSubVol.x + shift.x - 1) * aConfig.VoxelSize.x +
+                                         0.5f * aConfig.VoxelSize.x,
+                                         bbMin.y + (posSubVol.y + shift.y - 1) * aConfig.VoxelSize.y +
+                                         0.5f * aConfig.VoxelSize.y,
+                                         bbMin.z + (posSubVol.z + shift.z - 1) * aConfig.VoxelSize.z +
+                                         0.5f * aConfig.VoxelSize.z,
+                                         stackIndex, hitPoint);
+
+                    float hitX, hitY;
+                    MatrixVector3Mul(*(float3x3 *) magAnisotropyInv.GetData(), hitPoint.x, hitPoint.y, hitX,
+                                     hitY);
+
+                    int safeDist =
+                            100 + aConfig.VoxelSizeSubVol * aConfig.SizeSubVol * 2 + aConfig.MaxShift * 2;
+                    int hitXMin = floor(hitX) - safeDist;
+                    int hitXMax = ceil(hitX) + safeDist;
+                    int hitYMin = floor(hitY) - safeDist;
+                    int hitYMax = ceil(hitY) + safeDist;
+
+                    if (hitXMin < 0) hitXMin = 0;
+                    if (hitYMin < 0) hitYMin = 0;
+
+                    if (hitXMin < roiMin.x)
+                        roiMin.x = hitXMin;
+                    if (hitXMax > roiMax.x)
+                        roiMax.x = hitXMax;
+
+                    if (hitYMin < roiMin.y)
+                        roiMin.y = hitYMin;
+                    if (hitYMax > roiMax.y)
+                        roiMax.y = hitYMax;
+
+                    int2 roiMinLocal = make_int2(hitXMin, hitYMin);
+                    int2 roiMaxLocal = make_int2(hitXMax, hitYMax);
+
+                    roiMinCrop = make_int2(floor(hitX) - 128, floor(hitY) - 128);
+                    roiMaxCrop = make_int2(floor(hitX) + 127, floor(hitY) + 127);
+
+                    // Set the 3D position
+                    vh_rot_particle[globalIdx]->PositionInSpace(aConfig.VoxelSize, aConfig.VoxelSizeSubVol,
+                                                                *volWithoutSubVols, posSubVol, shift);
 
 
 
-//					reconstructor.CopyProjectionToHost(SIRTBuffer[0]);
+                    //Project the particle:
+                    reconstructor.ForwardProjectionROI(vh_rot_particle[globalIdx],
+                                                       *vd_tex_rot_particle[groupIdx], stackIndex, volumeIsEmpty,
+                                                       roiMinLocal, roiMaxLocal, true);
+                }
+                /// END Loop over each particle in one group END///
+
+                /// This is the final projection of the reference volumes of this group:
+                reconstructor.CopyProjectionToSubVolumeProjection();
+
+                if (mpi_part == 0)
+                    if (aConfig.DebugImages)//for debugging save images
+                    {
+                        reconstructor.CopyProjectionToHost(SIRTBuffer[0]);
+
+                        stringstream ss;
+                        ss << "projSubVols_" << group << "_" << stackIndex << ".em";
+                        emwrite(ss.str(), SIRTBuffer[0], proj.GetWidth(), proj.GetHeight());
+                    }
+
+                /// Now, project the holey volume and subtract the FP from the real projection
+                // Display progress
+                if (mpi_part == 0) {
+                    printf("\t\t\tProjecting holey volume ...\n");
+                }
+                reconstructor.ResetProjectionsDevice();
+                reconstructor.ForwardProjectionROI(volWithoutSubVols, texObj, stackIndex, false, roiMin, roiMax);
+
+                if (mpi_part == 0)
+                    if (aConfig.DebugImages)//for debugging save images
+                    {
+                        reconstructor.CopyProjectionToHost(SIRTBuffer[0]);
+                        stringstream ss;
+                        ss << "projVorComp_" << stackIndex << ".em";
+                        emwrite(ss.str(), SIRTBuffer[0], proj.GetWidth(), proj.GetHeight());
+
+                        reconstructor.CopyDistanceImageToHost(SIRTBuffer[0]);
+                        stringstream ss2;
+                        ss2 << "distVorComp_" << stackIndex << ".em";
+                        emwrite(ss2.str(), SIRTBuffer[0], proj.GetWidth(), proj.GetHeight());
+                    }
+
+                // Display progress
+                if (mpi_part == 0) {
+                    printf("\t\t\tFinding displacements ...\n");
+                }
+
+                reconstructor.Compare(volWithoutSubVols, projSource->GetProjection(stackIndex), stackIndex);
+                /// We now have in proj_d the distance weighted 'background noise free' approximation of the original projection.
+
+                // FOR CROPPING:
+//                auto cropped = new float[256*256];
+//                printf("roiMinCrop: %i, %i\n", roiMinCrop.x, roiMinCrop.y);
+//                printf("roiMaxCrop: %i, %i\n", roiMaxCrop.x, roiMaxCrop.y);
+//                // real crop version
+//                //reconstructor.GetCroppedProjection(cropped, (float*)projSource->GetProjection(stackIndex), roiMinCrop, roiMaxCrop);
+//                // old/new method
+//                reconstructor.GetCroppedProjection(cropped, roiMinCrop, roiMaxCrop);
 //
-//                    motive m = motives[0];
-//                    int globalIdx = ml.GetGlobalIdx(m);
-//                    int ref_id_idx = ref_ids[globalIdx];
-//
-//                    float3 posSubVol = make_float3(m.x_Coord, m.y_Coord, m.z_Coord);
-//                    float3 shift = make_float3(m.x_Shift, m.y_Shift, m.z_Shift);
-//
-//                    int2 hitPoint;
-//                    float3 bbMin = volWithoutSubVols->GetVolumeBBoxMin();
-//                    proj.ComputeHitPoint(bbMin.x + (posSubVol.x + shift.x - 1) * aConfig.VoxelSize.x + 0.5f * aConfig.VoxelSize.x,
-//                                         bbMin.y + (posSubVol.y + shift.y - 1) * aConfig.VoxelSize.y + 0.5f * aConfig.VoxelSize.y,
-//                                         bbMin.z + (posSubVol.z + shift.z - 1) * aConfig.VoxelSize.z + 0.5f * aConfig.VoxelSize.z,
-//                                         projIndex, hitPoint);
-//
-//                    float hitX, hitY;
-//                    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), hitPoint.x, hitPoint.y, hitX, hitY);
-//
-//                    int safeDist = sz/2;
-//                    int hitXMin = floor(hitX) - safeDist;
-//                    int hitXMax = ceil(hitX) + safeDist;
-//                    int hitYMin = floor(hitY) - safeDist;
-//                    int hitYMax = ceil(hitY) + safeDist;
-//
-//                    if (hitXMin < 0) hitXMin = 0;
-//                    if (hitYMin < 0) hitYMin = 0;
-//
-//                    if (hitXMin < roiMin2.x)
-//                        roiMin2.x = hitXMin;
-//                    if (hitXMax > roiMax2.x)
-//                        roiMax2.x = hitXMax;
-//
-//                    if (hitYMin < roiMin2.y)
-//                        roiMin2.y = hitYMin;
-//                    if (hitYMax > roiMax2.y)
-//                        roiMax2.y = hitYMax;
-//
-//                    int2 roiMinLocal = make_int2(hitXMin, hitYMin);
-//                    int2 roiMaxLocal = make_int2(hitXMax, hitYMax);
-//
-//                    //printf("ROILocal: xMin: %d, yMin: %d, xMax: %d, yMax: %d\n", roiMinLocal.x, roiMinLocal.y, roiMaxLocal.x, roiMaxLocal.y);
-//
-//                    for(int x = 0; x < sz; x++)
-//                        for(int y = 0; y < sz; y++){
-//                            //int ind = (y * 4096 / sizeof(float)) + x;
-//                            int xx = x+roiMinLocal.x;
-//                            int yy = y+roiMinLocal.y;
-//                            if((xx > proj.GetWidth()-1) || (yy>proj.GetHeight()-1)) {
-//                                bgsub[x + sz * y] = 0;
-//                                real[x + sz * y] = 0;
-//                            } else if((xx < 0) || (yy<0)) {
-//                                bgsub[x + sz * y] = 0;
-//                                real[x + sz * y] = 0;
-//                            } else {
-//                                bgsub[x + sz * y] = SIRTBuffer[0][xx + proj.GetWidth() * yy];
-//                                real[x + sz * y] = ((float*)projSource->GetProjection(projIndex))[xx + proj.GetWidth() * yy];
-//                            }
-//
-//                        }
-//
-//                    stringstream ss4;
-//                    ss4 << "bgsub_" << group << ".em";
-//                    emwrite(ss4.str(), bgsub, sz, sz);
-//
-//                    stringstream ss5;
-//                    ss5 << "real_" << group << ".em";
-//                    emwrite(ss5.str(), real, sz, sz);
+//                stringstream ss;
+//                ss << "part_" << group << "_" << stackIndex << ".em";
+//                emwrite(ss.str(), cropped, 256, 256);
+//                delete[] cropped;
 
+                if (mpi_part == 0)
+                    if (aConfig.DebugImages)
+                    {
+                        reconstructor.CopyProjectionToHost(SIRTBuffer[0]);
 
-				}
-				delete[] bgsub;
-			    delete[] real;
+                        stringstream ss;
+                        ss << "projComp_" << group << "_" << stackIndex << ".em";
+                        emwrite(ss.str(), SIRTBuffer[0], proj.GetWidth(), proj.GetHeight());
+                    }
 
+                /// Now compute the displacement
+                float2 shift;
+                float ccValue;
+                float* ccMap;
+                float* ccMapMulti;
+                if (mpi_part == 0)
+                {
+                    shift = reconstructor.GetDisplacement(aConfig.MultiPeakDetection, &ccValue);
+                    printf("\t\t\tX: %f, Y: %f, CC: %f\n", shift.x, shift.y, ccValue);
+                    ccMap = reconstructor.GetCCMap();
+                    if (aConfig.MultiPeakDetection)
+                    {
+                        ccMapMulti = reconstructor.GetCCMapMulti();
+                    }
+                }
+                bool dumpCCMap = aConfig.CCMapFileName.length() > 3;
+                if (mpi_part == 0)
+                    if (dumpCCMap)
+                    {
+                        stringstream ss;
+                        ss << aConfig.CCMapFileName << stackIndex << ".em";
+                        if (group == 0) //create a new file and overwrite the old one
+                        {
+                            emwrite(ss.str(), ccMap, aConfig.MaxShift * 4, aConfig.MaxShift * 4);
+                        }
+                        else //append to existing file
+                        {
+                            EmFile::AddSlice(ss.str(), ccMap, aConfig.MaxShift * 4, aConfig.MaxShift * 4);
+                        }
+                        if (aConfig.MultiPeakDetection)
+                        {
+                            stringstream ss2;
+                            ss2 << aConfig.CCMapFileName << "Multi_" << stackIndex << ".em";
+                            if (group == 0) //create a new file and overwrite the old one
+                            {
+                                emwrite(ss2.str(), ccMapMulti, aConfig.MaxShift * 4, aConfig.MaxShift * 4);
+                            }
+                            else //append to existing file
+                            {
+                                EmFile::AddSlice(ss2.str(), ccMapMulti, aConfig.MaxShift * 4, aConfig.MaxShift * 4);
+                            }
+                        }
+                    }
+                /// Got displacement
 
+                // Save shift for every entry in the group
+                if (aConfig.GroupMode == MotiveList::GroupMode_enum::GM_BYGROUP)
+                {
+                    for (int motlIdx = 0; motlIdx < motives.size(); motlIdx++)
+                    {
+                        motive m = motives[motlIdx];
 
-				if (mpi_part == 0)
-				if (aConfig.DebugImages)
-				{
-					printf("Save bgsub...\n");
-					fflush(stdout);
-					reconstructor.CopyProjectionToHost(SIRTBuffer[0]);
+                        int totalIdx = ml.GetGlobalIdx(m);
+                        //printf("Set values at: %d, %d\n", index, motlIdx); fflush(stdout);
 
-					stringstream ss;
-					ss << "projComp_" << group << "_" << projIndex << ".em";
-					emwrite(ss.str(), SIRTBuffer[0], proj.GetWidth(), proj.GetHeight());
-				}
+                        // Convert to my_float to avoid FileIO dependency on Cuda
+                        sf.SetValue(stackIndex, totalIdx, my_float2(shift.x, shift.y));
+                        //groupRelationList[totalIdx].particleNr = m.partNr;
+                        //groupRelationList[totalIdx].particleNrInTomo = m.partNrInTomo;
+                        //groupRelationList[totalIdx].tomoNr = m.tomoNr;
+                        //groupRelationList[totalIdx].obtainedShiftFromID = group;
+                        //groupRelationList[totalIdx].CCValue = ccValue;
+                    }
+                }
+                else //save shift only for the first entry in the group
+                {
+                    // Get first entry
+                    motive m = motives[0];
+                    int count = 0; // Number of particles within group that is below speedupdistance
+                    vector<pair<int, float> > closeIndx;
+                    int totalIdx = ml.GetGlobalIdx(m); // Global motivelist index
 
-				float2 shift;
-				float ccValue;
-				float* ccMap;
-				float* ccMapMulti;
-				if (mpi_part == 0)
-				{
-					shift = reconstructor.GetDisplacement(aConfig.MultiPeakDetection, &ccValue);
-					ccMap = reconstructor.GetCCMap();
-					if (aConfig.MultiPeakDetection)
-					{
-						ccMapMulti = reconstructor.GetCCMapMulti();
-					}
-				}
-				bool dumpCCMap = aConfig.CCMapFileName.length() > 3;
-				if (mpi_part == 0)
-				if (dumpCCMap)
-				{
-					stringstream ss;
-					ss << aConfig.CCMapFileName << projIndex << ".em";
-					if (group == 0) //create a new file and overwrite the old one
-					{
-						emwrite(ss.str(), ccMap, aConfig.MaxShift * 4, aConfig.MaxShift * 4);
-					}
-					else //append to existing file
-					{
-						EmFile::AddSlice(ss.str(), ccMap, aConfig.MaxShift * 4, aConfig.MaxShift * 4);
-					}
-					if (aConfig.MultiPeakDetection)
-					{
-						stringstream ss2;
-						ss2 << aConfig.CCMapFileName << "Multi_" << projIndex << ".em";
-						if (group == 0) //create a new file and overwrite the old one
-						{
-							emwrite(ss2.str(), ccMapMulti, aConfig.MaxShift * 4, aConfig.MaxShift * 4);
-						}
-						else //append to existing file
-						{
-							EmFile::AddSlice(ss2.str(), ccMapMulti, aConfig.MaxShift * 4, aConfig.MaxShift * 4);
-						}
-					}
-				}
-				
+                    // Save the shift of the first entry
+                    sf.SetValue(stackIndex, totalIdx, my_float2(shift.x, shift.y));
+                    processedParticle[totalIdx] = true;
 
-				if (mpi_part == 0)
-					printf("\nShift is: %f, %f\n", shift.x, shift.y);
+                    // For all entries in group except the first check if they are below speedup distance
+                    for (int groupIdx = 1; groupIdx < motives.size(); groupIdx++) {
+                        // Get entry
+                        motive m2 = motives[groupIdx];
 
-				//extraShifts[index] = shift;
-				
-#ifdef USE_MPI
-				MPI_Barrier(MPI_COMM_WORLD);
-#endif
-				//Do this on all nodes to stay in sync!
-				//if (mpi_part == 0)
-				{
-					//save shift for every entry in the group
-					if (aConfig.GroupMode == MotiveList::GroupMode_enum::GM_BYGROUP)
-					{
-						for (int motlIdx = 0; motlIdx < motives.size(); motlIdx++)
-						{
-							motive m = motives[motlIdx];
+                        // Get distance/global index
+                        float d = ml.GetDistance(m, m2);
+                        int totalIdx2 = ml.GetGlobalIdx(m2);
 
-							int totalIdx = ml.GetGlobalIdx(m);
-							//printf("Set values at: %d, %d\n", index, motlIdx); fflush(stdout);
+                        // If distance <= SpeedUpDistance, save the shift and mark as processed
+                        if (d <= aConfig.SpeedUpDistance && d < minDistOfProcessedParticles[totalIdx2]) {
+                            // Convert to my_float to avoid FileIO dependency on Cuda
+                            sf.SetValue(stackIndex, totalIdx2, my_float2(shift.x, shift.y));
+                            processedParticle[totalIdx2] = true;
+                            minDistOfProcessedParticles[totalIdx2] = d;
+                            closeIndx.push_back(pair<int, float>(totalIdx2, d));
+                            count++;
 
-							// Convert to my_float to avoid FileIO dependency on Cuda
-							sf.SetValue(projIndex, totalIdx, my_float2(shift.x, shift.y));
-							//groupRelationList[totalIdx].particleNr = m.partNr;
-							//groupRelationList[totalIdx].particleNrInTomo = m.partNrInTomo;
-							//groupRelationList[totalIdx].tomoNr = m.tomoNr;
-							//groupRelationList[totalIdx].obtainedShiftFromID = group;
-							//groupRelationList[totalIdx].CCValue = ccValue;
-						}
-					}
-					else //save shift only for the first entry in the group
-					{
-					    // Get first entry
-						motive m = motives[0];
-						int count = 0; // Number of particles within group that is below speedupdistance
-						vector<pair<int, float> > closeIndx;
-						int totalIdx = ml.GetGlobalIdx(m); // Global motivelist index
+                            //groupRelationList[totalIdx2].particleNr = m2.partNr;
+                            //groupRelationList[totalIdx2].particleNrInTomo = m2.partNrInTomo;
+                            //groupRelationList[totalIdx2].tomoNr = m2.tomoNr;
+                            //groupRelationList[totalIdx2].obtainedShiftFromID = totalIdx;
+                            //groupRelationList[totalIdx2].CCValue = ccValue;
+                        }
+                    }
+                }
 
-                        // Save the shift of the first entry
-                        sf.SetValue(projIndex, totalIdx, my_float2(shift.x, shift.y));
-                        processedParticle[totalIdx] = true;
-						
-						// For all entries in group except the first check if they are below speedup distance
-						for (int groupIdx = 1; groupIdx < motives.size(); groupIdx++)
-						{
-						    // Get entry
-							motive m2 = motives[groupIdx];
-							
-							// Get distance/global index
-							float d = ml.GetDistance(m, m2);
-							int totalIdx2 = ml.GetGlobalIdx(m2);
-							
-							// If distance <= SpeedUpDistance, save the shift and mark as processed
-							if (d <= aConfig.SpeedUpDistance && d < minDistOfProcessedParticles[totalIdx2])
-							{
-								// Convert to my_float to avoid FileIO dependency on Cuda
-								sf.SetValue(projIndex, totalIdx2, my_float2(shift.x, shift.y));
-								processedParticle[totalIdx2] = true;
-								minDistOfProcessedParticles[totalIdx2] = d;
-								closeIndx.push_back(pair<int, float>(totalIdx2, d));
-								count++;
+                // Display progress
+                if (mpi_part == 0) {
+                    printf("\t\t\tResetting volume ...\n");
+                }
 
-								//groupRelationList[totalIdx2].particleNr = m2.partNr;
-								//groupRelationList[totalIdx2].particleNrInTomo = m2.partNrInTomo;
-								//groupRelationList[totalIdx2].tomoNr = m2.tomoNr;
-								//groupRelationList[totalIdx2].obtainedShiftFromID = totalIdx;
-								//groupRelationList[totalIdx2].CCValue = ccValue;
-							}
-						}
+                /// START Loop over each particle in one group START ///
+                for (int groupIdx = 0; groupIdx < motives.size(); groupIdx++)
+                {
+                    // Get particle and associated ref_id
+                    motive m = motives[groupIdx];
+                    int globalIdx = ml.GetGlobalIdx(m);
+                    int ref_id_idx = ref_ids[globalIdx];
 
-						if (mpi_part == 0 && i == 0)
-						{
-							printf("Found %d close particles\n", count);
-							log << "Found " << count << " close particles:" << endl;
-							log << "Particle " << totalIdx << " --> " ;
-							for (size_t p = 0; p < count; p++)
-							{
-								log << closeIndx[p].first << " (" << closeIndx[p].second << ")  ";
-							}
-							log << endl;
-						}
-					}
-				}
+                    // Mask dimensions and positions
+                    dim3 maskDims = vh_volmask_dims[ref_id_idx];
+                    int3 dimMask = make_int3(maskDims.x, maskDims.y, maskDims.z);
+                    int3 radiusMask = make_int3(maskDims.x/2, maskDims.y/2, maskDims.z/2);
+                    int3 centerInVol = make_int3(roundf(m.x_Coord + m.x_Shift), roundf(m.y_Coord + m.y_Shift), roundf(m.z_Coord + m.z_Shift));
 
-				//Save measured local shifts to an EM-file after every projection in case we crash...
-				if (mpi_part == 0)
-				{
-					sf.OpenAndWrite();
-				}
-			}
+                    // Restore the volume
+                    (*vd_restore_vol_kernels[ref_id_idx])(surfObj, *vd_temp_store[groupIdx], volmin, volmax, dimMask, radiusMask, centerInVol);
+                }
+                /// END Loop over each particle in one group END ///
 
-            // Reset reconstruction without subvolumes to old state (on the GPU)
-            for (int motlIdx = 0; motlIdx < motives.size(); motlIdx++)
-            {
-                // Get particle and associated ref_id
-                motive m = motives[motlIdx];
-                int globalIdx = ml.GetGlobalIdx(m);
-                int ref_id_idx = ref_ids[globalIdx];
+                // Clear memory
+                for(int i = 0; i < vd_tex_rot_particle.size(); i++) {delete vd_tex_rot_particle[i];}
+                for(int i = 0; i < vd_arr_rot_particle.size(); i++) {delete vd_arr_rot_particle[i];}
+                for(int i = 0; i < vd_temp_store.size(); i++) {delete vd_temp_store[i];}
+                vd_tex_rot_particle.clear();
+                vd_arr_rot_particle.clear();
+                vd_temp_store.clear();
 
-                // Mask dimensions and positions
-                dim3 maskDims = vh_volmask_dims[ref_id_idx];
-                int3 dimMask = make_int3(maskDims.x, maskDims.y, maskDims.z);
-                int3 radiusMask = make_int3(maskDims.x/2, maskDims.y/2, maskDims.z/2);
-                int3 centerInVol = make_int3(roundf(m.x_Coord + m.x_Shift), roundf(m.y_Coord + m.y_Shift), roundf(m.z_Coord + m.z_Shift));
-
-                // Restore the volume
-                (*vd_restore_vol_kernels[ref_id_idx])(surfObj, *vd_temp_store[motlIdx], volmin, volmax, dimMask, radiusMask, centerInVol);
+                if (mpi_part == 0)
+                {
+                    printf("\n");
+                }
             }
+            /// END Loop over groups of particles and project each group together END ///
+        }
+        /// END Loop over projections END ///
 
-			if (mpi_part == 0)
-			{
-				printf("\n");
-			}
-		}
 		cudaProfilerStop();
         /////////////////////////////////////
         /// Main refine loop END

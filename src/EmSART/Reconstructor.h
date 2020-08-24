@@ -241,6 +241,8 @@ public:
 	void CopyRealProjectionToDevice(float* buffer);//For Debugging...
 	void MPIBroadcast(float** buffers, int bufferCount);
 #ifdef REFINE_MODE
+	void GetCroppedProjection(float *outImage, int2 roiMin, int2 roiMax);
+    void GetCroppedProjection(float *outImage, float *inImage, int2 roiMin, int2 roiMax);
 	void CopyProjectionToSubVolumeProjection();
 	float2 GetDisplacement(bool MultiPeakDetection, float* CCValue = NULL);
 	void rotVol(Cuda::CudaDeviceVariable& vol, float phi, float psi, float theta);

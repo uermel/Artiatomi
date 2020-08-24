@@ -23,6 +23,7 @@
 
 #include "Reconstructor.h"
 #include "CudaKernelBinarys.h"
+#include <typeinfo>
 
 using namespace std;
 using namespace Cuda;
@@ -1564,8 +1565,6 @@ void Reconstructor::Compare(Volume<TVol>* vol, char* originalImage, int index)
 
         realproj_d.CopyHostToDevice(originalImage);
 
-
-
 		//nppiSet_32f_C1R(1.0f, (float*)dist_d.GetDevicePtr(), dist_d.GetPitch(), roiAll);
 
 		float runtime = compKernel(realproj_d, proj_d, dist_d, volumeTraversalLength, config.Crop, config.CropDim, config.ProjectionScaleFactor);
@@ -2072,7 +2071,7 @@ float2 Reconstructor::GetDisplacement(bool MultiPeakDetection, float* CCValue)
 
 		float maxVal;
 		meanval.CopyDeviceToHost(&maxVal, sizeof(float));
-		printf("\nMaxVal: %f", maxVal);
+		//printf("\nMaxVal: %f", maxVal);
 		if (CCValue != NULL)
 		{
 			*CCValue = maxVal;
@@ -2168,6 +2167,72 @@ float * Reconstructor::GetCCMap()
 float * Reconstructor::GetCCMapMulti()
 {
 	return ccMapMulti;
+}
+
+void Reconstructor::GetCroppedProjection(float *outImage, int2 roiMin, int2 roiMax) {
+
+    int outW = roiMax.x-roiMin.x + 1;
+    int outH = roiMax.y-roiMin.y + 1;
+    //printf("outW: %i outH: %i \n", outW, outH);
+    memset(outImage, 0, outW*outH*sizeof(float));
+
+    auto buffer = new float[proj.GetHeight()*proj.GetWidth()];
+    proj_d.CopyDeviceToHost(buffer);
+
+    //stringstream ss;
+    //ss << "projjjjjj.em";
+    //emwrite(ss.str(), buffer, proj.GetWidth(), proj.GetHeight());
+
+    for (int x = roiMin.x; x < roiMax.x+1; x++){
+        for (int y = roiMin.y; y < roiMax.y+1; y++){
+            if(x > proj.GetWidth()-1) continue;
+            if(y > proj.GetHeight()-1) continue;
+
+            if(x < 0) continue;
+            if(y < 0) continue;
+
+            int xx = x-roiMin.x;
+            int yy = y-roiMin.y;
+
+            outImage[xx+outW*yy] = buffer[x+proj.GetWidth()*y];
+            //printf("%s", typeid(buffer).name());
+            //printf("xx: %i yy: %i x: %i y: %i buffer: %f out: %f\n", xx, yy, x, y, buffer[y+proj.GetHeight()*x], outImage[yy+outH*xx]);
+        }
+    }
+
+    delete[] buffer;
+}
+
+void Reconstructor::GetCroppedProjection(float *outImage, float *inImage, int2 roiMin, int2 roiMax) {
+
+    int outW = roiMax.x-roiMin.x + 1;
+    int outH = roiMax.y-roiMin.y + 1;
+    //printf("outW: %i outH: %i \n", outW, outH);
+    memset(outImage, 0, outW*outH*sizeof(float));
+
+    //auto buffer = new float[proj.GetHeight()*proj.GetWidth()];
+    //proj_d.CopyDeviceToHost(buffer);
+
+    //stringstream ss;
+    //ss << "projjjjjj.em";
+    //emwrite(ss.str(), buffer, proj.GetWidth(), proj.GetHeight());
+
+    for (int x = roiMin.x; x < roiMax.x+1; x++){
+        for (int y = roiMin.y; y < roiMax.y+1; y++){
+            if(x > proj.GetWidth()-1) continue;
+            if(y > proj.GetHeight()-1) continue;
+
+            if(x < 0) continue;
+            if(y < 0) continue;
+
+            int xx = x-roiMin.x;
+            int yy = y-roiMin.y;
+
+            outImage[xx+outW*yy] = inImage[x+proj.GetWidth()*y];
+            //printf("%s", typeid(buffer).name());
+            //printf("xx: %i yy: %i x: %i y: %i buffer: %f out: %f\n", xx, yy, x, y, buffer[y+proj.GetHeight()*x], outImage[yy+outH*xx]);
+        }
+    }
 }
 
 #endif

@@ -19,7 +19,7 @@ set(ISA_PATH "src/ImageStackAlignator" CACHE PATH "Path to ImageStackAlignator s
 set(STA_PATH "src/SubTomogramAverageMPI" CACHE PATH "Path to SubTomogramAverageMPI source.")
 
 if(UNIX)
-	set(CUDA_PATH "/usr/local/cuda-10.2" CACHE PATH "Path to CUDA root")
+	set(CUDA_PATH "/usr/local/cuda-10.1" CACHE PATH "Path to CUDA root")
 endif()
 
 if(WIN32)
@@ -796,75 +796,6 @@ target_compile_options(AddParticles PUBLIC -fpermissive)
 ######################### AddParticles ########################
 
 
-######################### MotlTest #####################################
-set(TEST_SRC
-		${MK_LOG_SRC}
-		${FILEIO_SRC}
-		${CC_SRC}
-		${MINIMIZATION_SRC}
-		${THREADING_SRC}
-		${FILTER_GRAPH_SRC}
-
-		${EMTOOLS_PATH}/FileIO/motl_test.cpp)
-
-set(TEST_INC
-		${CLICKER_PATH}
-		${MK_LOG_INC}
-		${FILEIO_INC}
-		${CC_INC}
-		${MINIMIZATION_INC}
-		${THREADING_INC}
-		${FILTER_GRAPH_INC}
-		)
-
-set(TEST_LIB
-		${CC_LIB}
-		${FILEIO_LIB}
-		${MK_LOG_LIB}
-		${MINIMIZATION_LIB}
-		${THREADING_LIB}
-		${FILTER_GRAPH_LIB}
-		)
-
-add_executable(test
-			${TEST_SRC})
-
-
-target_include_directories(test PUBLIC ${TEST_INC})
-target_link_libraries(test ${TEST_LIB})
-target_compile_definitions(test PUBLIC NO_CUDA)
-######################### MotlTest #####################################
 
 
 
-######################### VolTest #####################################
-set(VOLTEST_SRC
-		${EMSARTCOMMON_SRC}
-
-		${EMSART_PATH}/volume_test.cpp)
-
-set(VOLTEST_INC
-		${EMSARTCOMMON_INC}
-		)
-
-set(VOLTEST_LIB
-		${EMSARTCOMMON_LIB}
-		)
-
-add_executable(volTest
-		${VOLTEST_SRC})
-
-# Executable depends on ptx files
-add_dependencies(volTest bp_ptx_header)
-add_dependencies(volTest fprm_ptx_header)
-add_dependencies(volTest fpd_ptx_header)
-add_dependencies(volTest ctf_ptx_header)
-add_dependencies(volTest cts_ptx_header)
-add_dependencies(volTest compare_ptx_header)
-add_dependencies(volTest wbp_ptx_header)
-
-target_include_directories(volTest PUBLIC ${VOLTEST_INC})
-target_link_libraries(volTest ${VOLTEST_LIB})
-target_compile_definitions(volTest PUBLIC USE_MPI NO_OPENCL REFINE_MODE)
-target_compile_options(volTest PUBLIC -fpermissive)
-######################### VolTest #####################################

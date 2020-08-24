@@ -408,19 +408,19 @@ using namespace Cuda;
 		arglist[7] = &distMin;
 		arglist[8] = &distMax;
 
-        printf("==============================================================\n");
-        printf("START Back Projection Parameters START\n");
-        printf("==============================================================\n");
+        //printf("==============================================================\n");
+        //printf("START Back Projection Parameters START\n");
+        //printf("==============================================================\n");
 
-        printf("proj_x: %i\n", proj_x);
-        printf("proj_y: %i\n", proj_y);
-        printf("lambda: %f\n", lambda);
-        printf("maxOverSample: %i\n", maxOverSample);
-        printf("maxOverSampleInv: %f\n", maxOverSampleInv);
+        //printf("proj_x: %i\n", proj_x);
+        //printf("proj_y: %i\n", proj_y);
+        //printf("lambda: %f\n", lambda);
+        //printf("maxOverSample: %i\n", maxOverSample);
+        //printf("maxOverSampleInv: %f\n", maxOverSampleInv);
 
-        printf("==============================================================\n");
-        printf("END Back Projection Parameters END\n");
-        printf("==============================================================\n");
+        //printf("==============================================================\n");
+        //printf("END Back Projection Parameters END\n");
+        //printf("==============================================================\n");
 
 		float ms;
 
@@ -1052,67 +1052,67 @@ void SetConstantValues(CudaKernel& kernel, Volume<unsigned short>& vol, Projecti
 }
 void SetConstantValues(CudaKernel& kernel, Volume<float>& vol, Projection& proj, int index, int subVol, Matrix<float>& m, Matrix<float>& mInv)
 {
-    printf("==============================================================\n");
-    printf("START Forward Projection Constants FLOAT START\n");
-    printf("==============================================================\n");
+    //printf("==============================================================\n");
+    //printf("START Forward Projection Constants FLOAT START\n");
+    //printf("==============================================================\n");
     //Set constant values
     float3 temp = proj.GetNormalVector(index);
     kernel.SetConstantValue("c_projNorm", &temp);
-    printf("c_projNorm: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_projNorm: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = proj.GetPosition(index);
     kernel.SetConstantValue("c_detektor", &temp);
-    printf("c_detektor: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_detektor: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = proj.GetPixelUPitch(index);
     kernel.SetConstantValue("c_uPitch", &temp);
-    printf("c_uPitch: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_uPitch: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = proj.GetPixelVPitch(index);
     kernel.SetConstantValue("c_vPitch", &temp);
-    printf("c_vPitch: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_vPitch: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = vol.GetSubVolumeBBoxRcp(subVol);
     kernel.SetConstantValue("c_volumeBBoxRcp", &temp);
-    printf("c_volumeBBoxRcp: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_volumeBBoxRcp: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = vol.GetVolumeBBoxMin();
     kernel.SetConstantValue("c_bBoxMinComplete", &temp);
-    printf("c_bBoxMinComplete: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_bBoxMinComplete: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = vol.GetVolumeBBoxMax();
     kernel.SetConstantValue("c_bBoxMaxComplete", &temp);
-    printf("c_bBoxMaxComplete: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_bBoxMaxComplete: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = vol.GetSubVolumeBBoxMin(subVol);
     kernel.SetConstantValue("c_bBoxMin", &temp);
-    printf("c_bBoxMin: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_bBoxMin: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = vol.GetSubVolumeBBoxMax(subVol);
     kernel.SetConstantValue("c_bBoxMax", &temp);
-    printf("c_bBoxMax: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_bBoxMax: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = vol.GetDimension();
     kernel.SetConstantValue("c_volumeDimComplete", &temp);
-    printf("c_volumeDimComplete: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_volumeDimComplete: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = vol.GetSubVolumeDimension(subVol);
     kernel.SetConstantValue("c_volumeDim", &temp);
-    printf("c_volumeDim: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_volumeDim: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = vol.GetVoxelSize();
     kernel.SetConstantValue("c_voxelSize", &temp);
-    printf("c_voxelSize: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_voxelSize: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     float t = 0;//vol.GetSubVolumeZShift(subVol);
-	//printf("zShift: %f\n", t);
+	////printf("zShift: %f\n", t);
     kernel.SetConstantValue("c_zShiftForPartialVolume", &t);
 
 	kernel.SetConstantValue("c_magAniso", m.GetData());
 	kernel.SetConstantValue("c_magAnisoInv", mInv.GetData());
-    printf("==============================================================\n");
-    printf("END Forward Projection Constants END\n");
-    printf("==============================================================\n");
+    //printf("==============================================================\n");
+    //printf("END Forward Projection Constants END\n");
+    //printf("==============================================================\n");
 }
 
 void SetConstantValues(BPKernel& kernel, Volume<unsigned short>& vol, Projection& proj, int index, int subVol, Matrix<float>& m, Matrix<float>& mInv)
@@ -1165,82 +1165,82 @@ void SetConstantValues(BPKernel& kernel, Volume<unsigned short>& vol, Projection
 
 void SetConstantValues(BPKernel& kernel, Volume<float>& vol, Projection& proj, int index, int subVol, Matrix<float>& m, Matrix<float>& mInv)
 {
-    printf("==============================================================\n");
-    printf("START Back Projection Constants FLOAT START\n");
-    printf("==============================================================\n");
+    //printf("==============================================================\n");
+    //printf("START Back Projection Constants FLOAT START\n");
+    //printf("==============================================================\n");
     //Set constant values
     float3 temp = proj.GetNormalVector(index);
 //    temp.x = -temp.x;
 //    temp.y = -temp.y;
 //    temp.z = -temp.z;
     kernel.SetConstantValue("c_projNorm", &temp);
-    printf("c_projNorm: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_projNorm: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = proj.GetPosition(index);
     kernel.SetConstantValue("c_detektor", &temp);
-    printf("c_detektor: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_detektor: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = proj.GetPixelUPitch(index);
     kernel.SetConstantValue("c_uPitch", &temp);
-    printf("c_uPitch: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_uPitch: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = proj.GetPixelVPitch(index);
     kernel.SetConstantValue("c_vPitch", &temp);
-    printf("c_vPitch: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_vPitch: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = vol.GetSubVolumeBBoxRcp(subVol);
     kernel.SetConstantValue("c_volumeBBoxRcp", &temp);
-    printf("c_volumeBBoxRcp: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_volumeBBoxRcp: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = vol.GetVolumeBBoxMin();
     kernel.SetConstantValue("c_bBoxMinComplete", &temp);
-    printf("c_bBoxMinComplete: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_bBoxMinComplete: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = vol.GetVolumeBBoxMax();
     kernel.SetConstantValue("c_bBoxMaxComplete", &temp);
-    printf("c_bBoxMaxComplete: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_bBoxMaxComplete: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = vol.GetDimension();
     kernel.SetConstantValue("c_volumeDimComplete", &temp);
-    printf("c_volumeDimComplete: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_volumeDimComplete: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = vol.GetSubVolumeDimension(subVol);
     kernel.SetConstantValue("c_volumeDim", &temp);
-    printf("c_volumeDim: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_volumeDim: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     temp = vol.GetVoxelSize();
     kernel.SetConstantValue("c_voxelSize", &temp);
-    printf("c_voxelSize: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_voxelSize: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     float t = vol.GetSubVolumeZShift(subVol);
     kernel.SetConstantValue("c_zShiftForPartialVolume", &t);
-    printf("c_zShiftForPartialVolume: %f\n", t);
+    //printf("c_zShiftForPartialVolume: %f\n", t);
 
     int volquat = (int)vol.GetDimension().x / 4;
     kernel.SetConstantValue("c_volumeDim_x_quarter", &volquat);
-    printf("c_volumeDim_x_quarter: %i\n", volquat);
+    //printf("c_volumeDim_x_quarter: %i\n", volquat);
 
     temp = vol.GetSubVolumeBBoxMin(subVol);
     kernel.SetConstantValue("c_bBoxMin", &temp);
-    printf("c_bBoxMin: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_bBoxMin: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     float matrix[16];
     proj.GetDetectorMatrix(index, matrix, 1);
     kernel.SetConstantValue("c_DetectorMatrix", matrix);
-    printf("c_DetectorMatrix:\n %f, %f, %f, %f,\n %f, %f, %f, %f,\n %f, %f, %f, %f,\n %f, %f, %f, %f,\n",
-           matrix[0],matrix[1],matrix[2],matrix[3],
-           matrix[4],matrix[5],matrix[6],matrix[7],
-           matrix[8],matrix[9],matrix[10],matrix[11],
-           matrix[12],matrix[13],matrix[14],matrix[15]);
+    //printf("c_DetectorMatrix:\n %f, %f, %f, %f,\n %f, %f, %f, %f,\n %f, %f, %f, %f,\n %f, %f, %f, %f,\n",
+    //       matrix[0],matrix[1],matrix[2],matrix[3],
+    //       matrix[4],matrix[5],matrix[6],matrix[7],
+    //       matrix[8],matrix[9],matrix[10],matrix[11],
+    //       matrix[12],matrix[13],matrix[14],matrix[15]);
 
 	kernel.SetConstantValue("c_magAniso", m.GetData());
-    printf("c_projNorm: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_projNorm: %f, %f, %f\n", temp.x, temp.y, temp.z);
 	kernel.SetConstantValue("c_magAnisoInv", mInv.GetData());
-    printf("c_projNorm: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    //printf("c_projNorm: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
-    printf("==============================================================\n");
-    printf("END Back Projection Constants FLOAT END\n");
-    printf("==============================================================\n");
+    //printf("==============================================================\n");
+    //printf("END Back Projection Constants FLOAT END\n");
+    //printf("==============================================================\n");
 }
 
 void SetConstantValues(CTFKernel& kernel, Projection& proj, int index, float cs, float voltage)
