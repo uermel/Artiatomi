@@ -349,7 +349,9 @@ int main(int argc, char* argv[])
 		Projection proj(projSource, &markers, aConfig.WBP_NoSART);
 
 		MotiveList ml(aConfig.MotiveList, aConfig.ScaleMotivelistPosition, aConfig.ScaleMotivelistShift);
-		
+		ml.selectTomo(aConfig.TomogramIndex);
+		printf("%i\n", aConfig.TomogramIndex);
+
 		EmFile reconstructedVol(aConfig.OutVolumeFile);
 		reconstructedVol.OpenAndReadHeader();
 		//reconstructedVol.ReadHeaderInfo();

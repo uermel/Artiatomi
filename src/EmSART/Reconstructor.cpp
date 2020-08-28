@@ -1547,9 +1547,9 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 	{
 		realprojUS_d.CopyDeviceToHost(img_h);
 
-		stringstream ss;
-		ss << "test_" << proj_index << ".em";
-		emwrite(ss.str(), (float*)img_h, proj.GetWidth(), proj.GetHeight());
+		//stringstream ss;
+		//ss << "test_" << proj_index << ".em";
+		//emwrite(ss.str(), (float*)img_h, proj.GetWidth(), proj.GetHeight());
 	}
 }
 

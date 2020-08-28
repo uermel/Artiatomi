@@ -113,7 +113,8 @@ namespace Configuration
 			BatchSize(0),
 			NamingConv(MotiveList::NamingConvention_enum::NC_ParticleOnly),
 			ScaleMotivelistShift(1),
-			ScaleMotivelistPosition(1)
+			ScaleMotivelistPosition(1),
+            TomogramIndex(0)
 #endif
 	{
 		while (appEnvp && *appEnvp) {
@@ -500,6 +501,7 @@ namespace Configuration
 		}
 		ScaleMotivelistShift = GetFloat("ScaleMotivelistShift");
 		ScaleMotivelistPosition = GetFloat("ScaleMotivelistPosition");
+        TomogramIndex = GetInt("TomogramIndex");
 #endif
 	}
     Config* Config::config = NULL;

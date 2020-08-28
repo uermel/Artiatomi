@@ -899,36 +899,36 @@ int main(int argc, char* argv[])
         int3 volmin = make_int3(0, 0, zMin);
         int3 volmax = make_int3(xMax, yMax, zMax);
 
-        auto errorStack = new float*[projCount];
-        if(aConfig.SubtractError){
-            //project Reconstruction without sub-Volumes:
-            if (mpi_part == 0) {
-                for (int i = 0; i < projCount; i++) {
-                    errorStack[i] = new float[proj.GetWidth() * proj.GetHeight()];
-                    int projIndex = projIndexList[i];
-
-                    reconstructor.ResetProjectionsDevice();
-                    // Project full volume, result in proj_d
-                    reconstructor.ForwardProjection(volWithoutSubVols, texObj, projIndex, false);
-                    // Distance weighted error, result in proj_d
-                    reconstructor.Compare(volWithoutSubVols, projSource->GetProjection(projIndex), projIndex);
-
-                    reconstructor.CopyProjectionToHost(errorStack[i]);
-                    stringstream ss2;
-                    ss2 << "error_" << projIndex << ".em";
-                    emwrite(ss2.str(), errorStack[i], proj.GetWidth(), proj.GetHeight());
-
-                    // Subtract error from image, result in realproj_d
-                    //reconstructor.SubtractError();
-                    // Get realproj_d from device and save now.
-                    //reconstructor.CopyRealProjectionToHost(SIRTBuffer[0]);
-
-                    //stringstream ss;
-                    //ss << "projWithoutError_" << projIndex << ".em";
-                    //emwrite(ss.str(), SIRTBuffer[0], proj.GetWidth(), proj.GetHeight());
-                }
-            }
-        }
+//        auto errorStack = new float*[projCount];
+//        if(aConfig.SubtractError){
+//            //project Reconstruction without sub-Volumes:
+//            if (mpi_part == 0) {
+//                for (int i = 0; i < projCount; i++) {
+//                    errorStack[i] = new float[proj.GetWidth() * proj.GetHeight()];
+//                    int projIndex = projIndexList[i];
+//
+//                    reconstructor.ResetProjectionsDevice();
+//                    // Project full volume, result in proj_d
+//                    reconstructor.ForwardProjection(volWithoutSubVols, texObj, projIndex, false);
+//                    // Distance weighted error, result in proj_d
+//                    reconstructor.Compare(volWithoutSubVols, projSource->GetProjection(projIndex), projIndex);
+//
+//                    reconstructor.CopyProjectionToHost(errorStack[i]);
+//                    stringstream ss2;
+//                    ss2 << "error_" << projIndex << ".em";
+//                    emwrite(ss2.str(), errorStack[i], proj.GetWidth(), proj.GetHeight());
+//
+//                    // Subtract error from image, result in realproj_d
+//                    //reconstructor.SubtractError();
+//                    // Get realproj_d from device and save now.
+//                    //reconstructor.CopyRealProjectionToHost(SIRTBuffer[0]);
+//
+//                    //stringstream ss;
+//                    //ss << "projWithoutError_" << projIndex << ".em";
+//                    //emwrite(ss.str(), SIRTBuffer[0], proj.GetWidth(), proj.GetHeight());
+//                }
+//            }
+//        }
 
 
         /////////////////////////////////////
@@ -1374,11 +1374,11 @@ int main(int argc, char* argv[])
 
 		if (mpi_part == 0) printf("\n\nTotal time for local shift measurements: %.2i:%.2i min.\n\n", (int)floor(runtime / 60.0), (int)floor(((runtime / 60.0) - floor(runtime / 60.0))*60.0));
 
-        for (int projIndex = 0; projIndex < projCount; projIndex++){
-            delete[] errorStack[projIndex];
-        }
+        //for (int projIndex = 0; projIndex < projCount; projIndex++){
+        //    delete[] errorStack[projIndex];
+       // }
 
-        delete[] errorStack;
+        //delete[] errorStack;
 
 	}
 	catch (exception& e)

@@ -180,6 +180,7 @@ namespace Configuration
 			int BatchSize;
 			int MaxShift;
 			MotiveList::NamingConvention_enum NamingConv;
+			int TomogramIndex;
 #endif
 
             static Config& GetConfig();
