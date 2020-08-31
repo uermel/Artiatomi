@@ -1385,7 +1385,18 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 			(Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), roi, affineMatrix, NppiInterpolationMode::NPPI_INTER_CUBIC));
 
 		float t = cts(realprojUS_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, false);
+
+//        float* test = new float[proj.GetMaxDimension()*proj.GetMaxDimension()];
+//        projSquare_d.CopyDeviceToHost(test);
+//
+//        stringstream ss;
+//        ss << "test_" << proj_index << ".em";
+//        emwrite(ss.str(), (float*)test, proj.GetMaxDimension(), proj.GetMaxDimension());
+//
+//        delete[] test;
 	}
+
+	// good until here
 
 	if (!skipFilter || config.WBP_NoSART)
 	{
@@ -1423,8 +1434,8 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 		{
 			if (config.WBPFilter == FM_EXACT)
 			{
-				float* tiltAngles = new float[markers.GetProjectionCount()];
-				for (int i = 0; i < markers.GetProjectionCount(); i++)
+				float* tiltAngles = new float[projSource->GetProjectionCount()];
+				for (int i = 0; i < projSource->GetProjectionCount(); i++)
 				{
 					tiltAngles[i] = markers(MFI_TiltAngle, i, 0) * M_PI / 180.0f;
 					if (!markers.CheckIfProjIndexIsGood(i))
@@ -1432,7 +1443,8 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 						tiltAngles[i] = -999.0f;
 					}
 				}
-				meanbuffer.CopyHostToDevice(tiltAngles, markers.GetProjectionCount() * sizeof(float));
+
+				meanbuffer.CopyHostToDevice(tiltAngles, projSource->GetProjectionCount() * sizeof(float));
 				delete[] tiltAngles;
 			}
 
@@ -1459,7 +1471,9 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
                 flipAngle = 0.;
             }
 
-			wbp(fft_d, roiFFT.width * sizeof(Npp32fc), proj.GetMaxDimension(), flipAngle, config.WBPFilter, proj_index, markers.GetProjectionCount(), D, meanbuffer);
+            printf("PSI ANGLE: %f \n", flipAngle);
+
+            wbp(fft_d, roiFFT.width * sizeof(Npp32fc), proj.GetMaxDimension(), flipAngle, config.WBPFilter, proj_index, projSource->GetProjectionCount(), D, meanbuffer);
 
 
 			/*float2* test = new float2[fft_d.GetSize() / 4 / 2];
@@ -1482,6 +1496,15 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 		cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
 
 		normVal = (float)(proj.GetMaxDimension() * proj.GetMaxDimension());
+
+//        float* test = new float[proj.GetMaxDimension()*proj.GetMaxDimension()];
+//        projSquare_d.CopyDeviceToHost(test);
+//
+//        stringstream ss;
+//        ss << "test_" << proj_index << ".em";
+//        emwrite(ss.str(), (float*)test, proj.GetMaxDimension(), proj.GetMaxDimension());
+//
+//        delete[] test;
 	}
 
 	//Normalize from FFT
@@ -1542,14 +1565,16 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 			(Npp32f*)realproj_d.GetDevicePtr(), (int)realproj_d.GetPitch(), roiAll));
 		nppSafeCall(nppiDivC_32f_C1IR(-std_hf, (Npp32f*)realproj_d.GetDevicePtr(), (int)realproj_d.GetPitch(), roiAll));
 		realproj_d.CopyDeviceToHost(img_h);
+
+
 	}
 	else
 	{
 		realprojUS_d.CopyDeviceToHost(img_h);
 
-		//stringstream ss;
-		//ss << "test_" << proj_index << ".em";
-		//emwrite(ss.str(), (float*)img_h, proj.GetWidth(), proj.GetHeight());
+//		stringstream ss;
+//		ss << "test_" << proj_index << ".em";
+//		emwrite(ss.str(), (float*)img_h, proj.GetWidth(), proj.GetHeight());
 	}
 }
 
