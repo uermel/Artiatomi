@@ -454,23 +454,24 @@ int main(int argc, char* argv[])
 		//proj.CreateProjectionIndexList(PLT_NORMAL, &projCount, &indexList);
 
 
-		if (mpi_part == 0)
-		{
-			printf("Projection index list:\n");
-			log << "Projection index list:" << endl;
-			for (int i = 0; i < projCount; i++)
-			{
-				printf("%3d,", indexList[i]);
-				log << indexList[i];
-				if (i < projCount - 1)
-					log << ", ";
-			}
-			log << endl;
-			printf("\b \n\n");
+		if (mpi_part == 0) {
+            printf("Projection index list:\n");
+            log << "Projection index list:" << endl;
+            for (int i = 0; i < projCount; i++) {
+                printf("%3d,", indexList[i]);
+                log << indexList[i];
+                if (i < projCount - 1)
+                    log << ", ";
+            }
+            log << endl;
+            printf("\b \n\n");
 
-		}
+        }
+
 
 		Reconstructor reconstructor(aConfig, proj, projSource, markers, *defocus, modules, mpi_part, mpi_size);
+
+
 
 
 		if (mpi_part == 0) printf("Free Memory on device after allocations: %llu MB\n", cuCtx->GetFreeMemorySize() / 1024 / 1024);
@@ -608,6 +609,36 @@ int main(int argc, char* argv[])
 		//	//printf("Old shifts: %f, %f\n", s[i].x, s[i].y);
 		//	//proj.SetExtraShift(i, s[i]);
 		//}
+
+        // Compute mask for normalization and setup
+        int nLength = (int)aConfig.SizeSubVol * (int)aConfig.SizeSubVol * (int)aConfig.SizeSubVol;
+        int sumBufferSize;
+        float maskSum, maskedSum, maskedMean, maskedError, maskedStd;
+
+        CudaDeviceVariable *d_particle, *d_normBuffer, *d_normMask, *d_sumBuffer, *d_sum;
+        if (aConfig.NormalizeMRCParticle && (aConfig.FileFormat == Configuration::Config::FILE_SAVE_MODE::FSM_MRC || aConfig.FileFormat == Configuration::Config::FILE_SAVE_MODE::FSM_BOTH)){
+
+            nppSafeCall(nppsSumGetBufferSize_32f(nLength, &sumBufferSize));
+
+            d_sumBuffer = new CudaDeviceVariable(sumBufferSize);
+            float radius = aConfig.NormalizationRadius * aConfig.SizeSubVol * 0.5f;
+            d_normMask = new CudaDeviceVariable(nLength * sizeof(float));
+            d_normBuffer = new CudaDeviceVariable(nLength * sizeof(float));
+            d_particle = new CudaDeviceVariable(nLength * sizeof(float));
+            d_sum = new CudaDeviceVariable(sizeof(float));
+
+            SphericalMaskKernel sp(modules.modWBP, (int)aConfig.SizeSubVol);
+            sp(*d_normMask, radius);
+
+            maskSum = 0;
+            nppSafeCall(nppsSum_32f((Npp32f*)d_normMask->GetDevicePtr(), nLength, (Npp32f*)d_sum->GetDevicePtr(), (Npp8u*)d_sumBuffer->GetDevicePtr()));
+            d_sum->CopyDeviceToHost(&maskSum, sizeof(float));
+            printf("\nMASK SUM: %f\n", maskSum);
+
+            string filename = "testmask.em";
+            d_normMask->CopyDeviceToHost(volSubVolReconstructed->GetPtrToSubVolume(0), nLength*sizeof(float));
+            emwrite(filename, volSubVolReconstructed->GetPtrToSubVolume(0), aConfig.SizeSubVol, aConfig.SizeSubVol, aConfig.SizeSubVol);
+        }
 		
 		//Process particles in batches:
 		for (int batch = 0; batch < ml.GetParticleCount(); batch += aConfig.BatchSize)
@@ -696,16 +727,114 @@ int main(int argc, char* argv[])
 
 				motive m = ml.GetAt(motlIdx);
 
-				vol_ArraySubVols[pInBatch + mpi_part]->CopyFromArrayToHost(volSubVolReconstructed->GetPtrToSubVolume(0));
+                vol_ArraySubVols[pInBatch + mpi_part]->CopyFromArrayToHost(volSubVolReconstructed->GetPtrToSubVolume(0));
+                string filename;
 
-				string filename = aConfig.SubVolPath;
+				if (aConfig.FileFormat == Configuration::Config::FILE_SAVE_MODE::FSM_EM || aConfig.FileFormat == Configuration::Config::FILE_SAVE_MODE::FSM_BOTH)
+				{
+                    filename = aConfig.SubVolPath;
+                    filename += m.GetIndexCoding(aConfig.NamingConv) + ".em";
+                    volSubVolReconstructed->Invert();
+                    emwrite(filename, volSubVolReconstructed->GetPtrToSubVolume(0), aConfig.SizeSubVol, aConfig.SizeSubVol, aConfig.SizeSubVol);
+				}
 
-				filename += m.GetIndexCoding(aConfig.NamingConv) + ".em";
-				volSubVolReconstructed->Invert();
-				emwrite(filename, volSubVolReconstructed->GetPtrToSubVolume(0), aConfig.SizeSubVol, aConfig.SizeSubVol, aConfig.SizeSubVol);
+				if (aConfig.FileFormat == Configuration::Config::FILE_SAVE_MODE::FSM_MRC || aConfig.FileFormat == Configuration::Config::FILE_SAVE_MODE::FSM_BOTH)
+                {
+				    if (aConfig.NormalizeMRCParticle){
+				        // Get reconstructed volumes
+				        d_particle->CopyHostToDevice(volSubVolReconstructed->GetPtrToSubVolume(0), nLength*sizeof(float));
+                        d_normBuffer->CopyHostToDevice(volSubVolReconstructed->GetPtrToSubVolume(0), nLength*sizeof(float));
 
+                        // Init
+                        maskedSum = 0;
+                        maskedMean = 0;
+                        maskedError = 0;
+                        maskedStd = 0;
+
+                        // Multiply with mask
+                        nppSafeCall(nppsMul_32f_I((Npp32f*)d_normMask->GetDevicePtr(), (Npp32f*)d_normBuffer->GetDevicePtr(), nLength));
+                        // Sum
+                        nppSafeCall(nppsSum_32f((Npp32f*)d_normBuffer->GetDevicePtr(), nLength, (Npp32f*)d_sum->GetDevicePtr() , (Npp8u*)d_sumBuffer->GetDevicePtr()));
+                        d_sum->CopyDeviceToHost(&maskedSum, sizeof(float));
+                        // Compute Mean in mask
+                        maskedMean = maskedSum / maskSum;
+
+                        // Subtract mean
+                        nppSafeCall(nppsSubC_32f_I(maskedMean, (Npp32f*)d_normBuffer->GetDevicePtr(), nLength));
+                        // Square
+                        nppSafeCall(nppsSqr_32f_I((Npp32f*)d_normBuffer->GetDevicePtr(), nLength));
+                        // Multiply mask
+                        nppSafeCall(nppsMul_32f_I((Npp32f*)d_normMask->GetDevicePtr(), (Npp32f*)d_normBuffer->GetDevicePtr(), nLength));
+                        // Sum
+                        nppSafeCall(nppsSum_32f((Npp32f*)d_normBuffer->GetDevicePtr(), nLength, (Npp32f*)d_sum->GetDevicePtr(), (Npp8u*)d_sumBuffer->GetDevicePtr()));
+                        d_sum->CopyDeviceToHost(&maskedError, sizeof(float));
+                        // Standard deviation
+                        maskedStd = sqrtf((1/(maskSum-1)) * maskedError);
+
+                        // Apply
+                        nppSafeCall(nppsSubC_32f_I(maskedMean, (Npp32f*)d_particle->GetDevicePtr(), nLength));
+                        nppSafeCall(nppsDivC_32f_I(maskedStd, (Npp32f*)d_particle->GetDevicePtr(), nLength));
+
+                        // Copy to host
+                        d_particle->CopyDeviceToHost(volSubVolReconstructed->GetPtrToSubVolume(0), nLength*sizeof(float));
+				    } else {
+				        // Copy to host
+                        vol_ArraySubVols[pInBatch + mpi_part]->CopyFromArrayToHost(volSubVolReconstructed->GetPtrToSubVolume(0));
+				    }
+
+				    // Invert MRC-Particle
+                    if (aConfig.InvertMRCParticle){
+                        volSubVolReconstructed->Invert();
+                    }
+
+                    filename = aConfig.SubVolPath;
+                    filename += m.GetIndexCoding(aConfig.NamingConv) + ".mrc";
+                    printf("Saving as %s\n", filename.c_str());
+
+                    std::ofstream* mVol = new std::ofstream();
+                    mVol->open(filename.c_str(), ios_base::out | ios_base::binary);
+                    if (!(mVol->is_open() && mVol->good()))
+                        printf("Cannot open File!\n");
+
+                    sizeDataType = sizeof(float);
+                    MrcHeader header;
+                    memset(&header, 0, sizeof(MrcHeader));
+                    int dimx = volSubVolReconstructed->GetDimension().x;
+                    int dimy = volSubVolReconstructed->GetDimension().x;
+                    int dimz = volSubVolReconstructed->GetDimension().x;
+
+                    header.NX = (int)dimx;
+                    header.NY = (int)dimy;
+                    header.NZ = (int)dimz;
+                    header.MODE = MRCMODE_F;
+                    //if (aConfig.FP16Volume && aConfig.WriteVolumeAsFP16)
+                    //    header.MODE = MRCMODE_HALF;
+
+                    header.NXSTART = 0;
+                    header.NYSTART = 0;
+                    header.NZSTART = 0;
+                    header.MX = (int)dimx;
+                    header.MY = (int)dimy;
+                    header.MZ = (int)dimz;
+
+                    header.Xlen = proj.GetPixelSize() * dimx * aConfig.VoxelSize.x * 10.0f;
+                    header.Ylen = proj.GetPixelSize() * dimy * aConfig.VoxelSize.y * 10.0f;
+                    header.Zlen = proj.GetPixelSize() * dimz * aConfig.VoxelSize.z * 10.0f;
+
+                    header.MAPC = MRCAXIS_X;
+                    header.MAPR = MRCAXIS_Y;
+                    header.MAPS = MRCAXIS_Z;
+                    mVol->write((char*)&header, sizeof(MrcHeader));
+                    mVol->flush();
+
+                    size_t dimI = dimx * dimy * dimz * sizeDataType;
+                    mVol->write((char*)volSubVolReconstructed->GetPtrToSubVolume(0), dimI);
+                    mVol->flush();
+
+                    mVol->close();
+                    delete mVol;
+				}
 			}
-			
 		}
 
 
@@ -717,6 +846,13 @@ int main(int argc, char* argv[])
 
 			if (mpi_part == 0) printf("Done\n");
 		}*/
+
+		if (aConfig.NormalizeMRCParticle){
+            delete d_particle;
+            delete d_normBuffer;
+            delete d_normMask;
+            delete d_sumBuffer;
+		}
 
 		stop = clock();
 		runtime = (double)(stop - start) / CLOCKS_PER_SEC;

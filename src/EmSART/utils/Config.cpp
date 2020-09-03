@@ -114,7 +114,10 @@ namespace Configuration
 			NamingConv(MotiveList::NamingConvention_enum::NC_ParticleOnly),
 			ScaleMotivelistShift(1),
 			ScaleMotivelistPosition(1),
-            TomogramIndex(0)
+            TomogramIndex(0),
+            NormalizeMRCParticle(false),
+            NormalizationRadius(0.8),
+            InvertMRCParticle(false)
 #endif
 	{
 		while (appEnvp && *appEnvp) {
@@ -493,6 +496,7 @@ namespace Configuration
 		BatchSize = GetInt("BatchSize");
 		MaxShift = GetInt("MaxShift");
 
+
 		string nc = GetStringOptional("NamingConvention");
 		NamingConv = MotiveList::NamingConvention_enum::NC_ParticleOnly;
 		if (nc == "TomoParticle" || nc == "Tomo_Particle")
@@ -502,6 +506,19 @@ namespace Configuration
 		ScaleMotivelistShift = GetFloat("ScaleMotivelistShift");
 		ScaleMotivelistPosition = GetFloat("ScaleMotivelistPosition");
         TomogramIndex = GetInt("TomogramIndex");
+
+        FileFormat = FSM_EM;
+        string format = GetStringOptional("FileFormat");
+        if (format == "EM" || format == "em")
+            FileFormat = FSM_EM;
+        if (format == "MRC" || format == "mrc")
+            FileFormat = FSM_MRC;
+        if (format == "Both" || format == "BOTH" || format == "both")
+            FileFormat = FSM_BOTH;
+
+        NormalizeMRCParticle = GetBool("NormalizeMRCParticle");
+        NormalizationRadius = GetFloat("NormalizationRadius");
+        InvertMRCParticle = GetBool("InvertMRCParticle");
 #endif
 	}
     Config* Config::config = NULL;

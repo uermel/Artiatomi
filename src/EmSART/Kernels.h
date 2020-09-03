@@ -227,6 +227,17 @@ public:
 	void SetData(float* data);
 };
 
+class SphericalMaskKernel : public Cuda::CudaKernel
+{
+private:
+    int size;
+
+public:
+    SphericalMaskKernel(CUmodule aModule, int aSize);
+
+    float operator()(Cuda::CudaDeviceVariable& aVolOut, float radius);
+};
+
 class ApplyMaskKernel : public Cuda::CudaKernel
 {
 private:

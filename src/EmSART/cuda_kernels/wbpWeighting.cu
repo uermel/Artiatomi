@@ -457,6 +457,26 @@ __global__ void rot3d(int size, float3 rotMat0, float3 rotMat1, float3 rotMat2, 
 
 	outVol[z * size * size + y * size + x] = tex3D(texVol, rotVox.x + 0.5f, rotVox.y + 0.5f, rotVox.z + 0.5f);
 }
+
+extern "C"
+__global__ void sphericalMask3D(int size, float radius, float* outVol)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    float center = size / 2;
+
+    float3 vox = make_float3(x - center, y - center, z - center);
+
+    float rad = sqrtf(vox.x*vox.x + vox.y*vox.y + vox.z*vox.z);
+    if (rad > radius) {
+        outVol[z * size * size + y * size + x] = 1;
+    }
+    else {
+        outVol[z * size * size + y * size + x] = 0;
+    }
+}
 #endif
 
 

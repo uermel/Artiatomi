@@ -61,7 +61,8 @@ namespace Configuration
 		{
 			FSM_RAW,
 			FSM_EM,
-			FSM_MRC
+			FSM_MRC,
+			FSM_BOTH
 		};
 		enum CTF_MODE
 		{
@@ -181,6 +182,10 @@ namespace Configuration
 			int MaxShift;
 			MotiveList::NamingConvention_enum NamingConv;
 			int TomogramIndex;
+			FILE_SAVE_MODE FileFormat;
+			bool NormalizeMRCParticle;
+			float NormalizationRadius;
+			bool InvertMRCParticle;
 #endif
 
             static Config& GetConfig();
