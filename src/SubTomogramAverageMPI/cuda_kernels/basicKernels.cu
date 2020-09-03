@@ -279,6 +279,33 @@ __global__ void correl(int size, float2* inVol, float2* outVol)
 }
 
 
+
+extern "C"
+__global__ void phaseCorrel(int size, float2 * inVol, float2 * outVol)
+{
+	const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+	const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+	const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+	float2 o = outVol[z * size * size + y * size + x];
+	float2 i = inVol[z * size * size + y * size + x];
+	float2 erg;
+	erg.x = (o.x * i.x) + (o.y * i.y);
+	erg.y = (o.x * i.y) - (o.y * i.x);
+	float amplitude = sqrtf(erg.x * erg.x + erg.y * erg.y);
+	if (amplitude != 0)
+	{
+		erg.x /= amplitude;
+		erg.y /= amplitude;
+	}
+	else
+	{
+		erg.x = erg.y = 0;
+	}
+	outVol[z * size * size + y * size + x] = erg;
+}
+
+
 extern "C"
 __global__ void bandpass(int size, float2* vol, float rDown, float rUp, float smooth)
 {
@@ -400,6 +427,36 @@ __global__ void fftshift2(int size, float2* volIn, float2* volOut)
 }
 
 
+extern "C"
+__global__ void splitDataset(int size, float2 * dataIn, float2 * dataOutA, float2 * dataOutB)
+{
+	const int x = blockIdx.x * blockDim.x + threadIdx.x;
+	const int y = blockIdx.y * blockDim.y + threadIdx.y;
+	const int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+	float2 in = dataIn[z * size * size + y * size + x];
+
+
+	int pattern = x + y + z;
+	int isCenter = (!pattern) & 1; //voxel (0,0,0) is center in fft-shifted image
+	int patternA = pattern % 2;
+	int patternB = 1 - patternA;
+
+	patternA = patternA | isCenter;
+	patternB = patternB | isCenter;
+
+	float2 a = in;
+	float2 b = in;
+	a.x *= patternA;
+	a.y *= patternA;
+	b.x *= patternB;
+	b.y *= patternB;
+
+	dataOutA[z * size * size + y * size + x] = a;
+	dataOutB[z * size * size + y * size + x] = b;
+}
+
+
 
 extern "C"
 __global__ void fftshiftReal(int size, float* volIn, float* volOut)
@@ -456,6 +513,65 @@ __global__ void findmax(float* maxVals, float* index, float* val, float rphi, fl
 	{
 		maxVals[0] = val[0];
 		maxVals[1] = index[0];
+		maxVals[2] = rphi;
+		maxVals[3] = rpsi;
+		maxVals[4] = rthe;
+	}
+}
+
+
+extern "C"
+__global__ void findmaxWithCertainty(float* maxVals, int* index, float* val, int* indexA, int* indexB, float rphi, float rpsi, float rthe, int volSize, int limit)
+{
+	int index0 = index[0];
+	int zBoth = index0 / volSize / volSize;
+	int yBoth = (index0 - zBoth * volSize * volSize) / volSize;
+	int xBoth = index0 - zBoth * volSize * volSize - yBoth * volSize;
+	xBoth -= volSize / 2;
+	yBoth -= volSize / 2;
+	zBoth -= volSize / 2;
+
+	int indexA0 = indexA[0];
+	int zA = indexA0 / volSize / volSize;
+	int yA = (indexA0 - zA * volSize * volSize) / volSize;
+	int xA = indexA0 - zA * volSize * volSize - yA * volSize;
+	xA -= volSize / 2;
+	yA -= volSize / 2;
+	zA -= volSize / 2;
+
+
+	int indexB0 = indexB[0];
+	int zB = indexB0 / volSize / volSize;
+	int yB = (indexB0 - zB * volSize * volSize) / volSize;
+	int xB = indexB0 - zB * volSize * volSize - yB * volSize;
+	xB -= volSize / 2;
+	yB -= volSize / 2;
+	zB -= volSize / 2;
+
+	xA -= xBoth;
+	yA -= yBoth;
+	zA -= zBoth;
+	xB -= xBoth;
+	yB -= yBoth;
+	zB -= zBoth;
+
+	float dA = xA * xA + yA * yA + zA * zA;
+	float dB = xB * xB + yB * yB + zB * zB;
+
+	dA = sqrt(dA);
+	dB = sqrt(dB);
+
+	float dist = min(dA, dB);
+	float currentCC = val[0];
+	if (dist > limit)
+		currentCC = abs(currentCC) * -1; //in case that currentCC is already negative...
+
+	float oldmax = maxVals[0];
+	if (currentCC > oldmax)
+	{
+		float* ll = (float*)&index0;
+		maxVals[0] = currentCC;
+		maxVals[1] = *ll;
 		maxVals[2] = rphi;
 		maxVals[3] = rpsi;
 		maxVals[4] = rthe;

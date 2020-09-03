@@ -345,11 +345,13 @@ CudaFFT::CudaFFT(int aVolSize, CUstream aStream, CudaContext* context)
 	
 	conv = new CudaKernel("conv", cuMod);
 	correl = new CudaKernel("correl", cuMod);
+	phaseCorrel = new CudaKernel("phaseCorrel", cuMod);
 	bandpass = new CudaKernel("bandpass", cuMod);
 	bandpassFFTShift = new CudaKernel("bandpassFFTShift", cuMod);
 	fftshiftReal = new CudaKernel("fftshiftReal", cuMod);
 	fftshift = new CudaKernel("fftshift", cuMod);
 	fftshift2 = new CudaKernel("fftshift2", cuMod);
+    splitDataset = new CudaKernel("splitDataset", cuMod);
 	energynorm = new CudaKernel("energynorm", cuMod);
 }
 
@@ -393,6 +395,27 @@ void CudaFFT::runCorrelKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d
 void CudaFFT::Correl(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata)
 {
 	runCorrelKernel(d_idata, d_odata);
+}
+
+void CudaFFT::runPhaseCorrelKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata)
+{
+    CUdeviceptr in_dptr = d_idata.GetDevicePtr();
+    CUdeviceptr out_dptr = d_odata.GetDevicePtr();
+
+    void** arglist = (void**)new void* [3];
+
+    arglist[0] = &volSize;
+    arglist[1] = &in_dptr;
+    arglist[2] = &out_dptr;
+
+    cudaSafeCall(cuLaunchKernel(phaseCorrel->GetCUfunction(), gridSize.x, gridSize.y,
+        gridSize.z, blockSize.x, blockSize.y, blockSize.z, 0, stream, arglist, NULL));
+
+    delete[] arglist;
+}
+void CudaFFT::PhaseCorrel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata)
+{
+    runPhaseCorrelKernel(d_idata, d_odata);
 }
 
 void CudaFFT::runBandpassFFTShiftKernel(CudaDeviceVariable& d_vol, float rDown, float rUp, float smooth)
@@ -527,6 +550,29 @@ void CudaFFT::EnergyNorm(CudaDeviceVariable& d_particle, CudaDeviceVariable& d_p
 	runEnergyNormKernel(d_particle, d_partSqr, d_cccMap, energyRef, nVox);
 }
 
+void CudaFFT::runSplitDataset(CudaDeviceVariable& d_volIn, CudaDeviceVariable& d_volOutA, CudaDeviceVariable& d_volOutB)
+{
+	CUdeviceptr volIn_dptr = d_volIn.GetDevicePtr();
+	CUdeviceptr volOutA_dptr = d_volOutA.GetDevicePtr();
+	CUdeviceptr volOutB_dptr = d_volOutB.GetDevicePtr();
+    //splitDataset(int size, float2 * dataIn, float2 * dataOutA, float2 * dataOutB)
+    void** arglist = (void**)new void*[4];
+
+    arglist[0] = &volSize;
+    arglist[1] = &volIn_dptr;
+    arglist[2] = &volOutA_dptr;
+    arglist[3] = &volOutB_dptr;
+
+    cudaSafeCall(cuLaunchKernel(splitDataset->GetCUfunction(), gridSize.x, gridSize.y,
+		gridSize.z, blockSize.x, blockSize.y, blockSize.z, 0, stream, arglist,NULL));
+
+    delete[] arglist;
+}
+void CudaFFT::SplitDataset(CudaDeviceVariable& d_volIn, CudaDeviceVariable& d_volOutA, CudaDeviceVariable& d_volOutB)
+{
+    runSplitDataset(d_volIn, d_volOutA, d_volOutB);
+}
+
 
 
 CudaMax::CudaMax(CUstream aStream, CudaContext* context)
@@ -537,7 +583,36 @@ CudaMax::CudaMax(CUstream aStream, CudaContext* context)
     CUmodule cuMod = ctx->LoadModulePTX(SubTomogramAverageBasicKernel, 0, false, false);
 	
 	max = new CudaKernel("findmax", cuMod);
+	maxWithCertainty = new CudaKernel("findmaxWithCertainty", cuMod);
 }
+void CudaMax::runMaxWithCertainty(CudaDeviceVariable& maxVals, CudaDeviceVariable& index, CudaDeviceVariable& val, CudaDeviceVariable& indexA, CudaDeviceVariable& indexB,
+    float rphi, float rpsi, float rthe, int volSize, int limit)
+{
+    CUdeviceptr maxVals_dptr = maxVals.GetDevicePtr();
+    CUdeviceptr index_dptr = index.GetDevicePtr();
+    CUdeviceptr val_dptr = val.GetDevicePtr();
+    CUdeviceptr indexA_dptr = indexA.GetDevicePtr();
+    CUdeviceptr indexB_dptr = indexB.GetDevicePtr();
+
+    void** arglist = (void**)new void* [10];
+
+    arglist[0] = &maxVals_dptr;
+    arglist[1] = &index_dptr;
+    arglist[2] = &val_dptr;
+    arglist[3] = &indexA_dptr;
+    arglist[4] = &indexB_dptr;
+    arglist[5] = &rphi;
+    arglist[6] = &rpsi;
+    arglist[7] = &rthe;
+    arglist[8] = &volSize;
+    arglist[9] = &limit;
+
+    cudaSafeCall(cuLaunchKernel(maxWithCertainty->GetCUfunction(), gridSize.x, gridSize.y,
+        gridSize.z, blockSize.x, blockSize.y, blockSize.z, 0, stream, arglist, NULL));
+
+    delete[] arglist;
+}
+
 
 void CudaMax::runMaxKernel(CudaDeviceVariable& maxVals, CudaDeviceVariable& index, CudaDeviceVariable& val, float rphi, float rpsi, float rthe)
 {
@@ -559,9 +634,15 @@ void CudaMax::runMaxKernel(CudaDeviceVariable& maxVals, CudaDeviceVariable& inde
 
     delete[] arglist;
 }
+
 void CudaMax::Max(CudaDeviceVariable& maxVals, CudaDeviceVariable& index, CudaDeviceVariable& val, float rphi, float rpsi, float rthe)
 {
 	runMaxKernel(maxVals, index, val, rphi, rpsi, rthe);
+}
+
+void CudaMax::MaxWithCertainty(CudaDeviceVariable& maxVals, CudaDeviceVariable& index, CudaDeviceVariable& val, CudaDeviceVariable& indexA, CudaDeviceVariable& indexB, float rphi, float rpsi, float rthe, int volSize, int limit)
+{
+    runMaxWithCertainty(maxVals, index, val, indexA, indexB, rphi, rpsi, rthe, volSize, limit);
 }
 
 

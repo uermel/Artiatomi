@@ -48,6 +48,12 @@ namespace Configuration
 		NC_TomogramParticle //Tomogram nr from line 5 and particle nr from line 6
 	};
 
+	enum CorrelationMethod
+	{
+		CM_CrossCorrelation,
+		CM_PhaseCorrelation
+	};
+
 	//! Parse structured config files
 	/*!
 		Config files contains lines with name-value assignements in the form "<name> = <value>".
@@ -122,7 +128,8 @@ namespace Configuration
 			float BFactor;
 			float PixelSize;
 			bool ComputeCCValOnly;
-
+			CorrelationMethod Correlation;
+			int CertaintyMaxDistance;
 
 
             static Config& GetConfig();
@@ -169,6 +176,10 @@ namespace Configuration
 			//! get int config entry; value is parsed using stringstream
 			// get int config entry; value is parsed using stringstream
 			int GetInt(string aName);
+
+			//! get int config entry; value is parsed using stringstream
+			// get int config entry; value is parsed using stringstream
+			int GetInt(string aName, int defaultVal);
 
 			//! get dim3 config entry; value is parsed using stringstream
 			// get dim3 config entry; value is parsed using stringstream

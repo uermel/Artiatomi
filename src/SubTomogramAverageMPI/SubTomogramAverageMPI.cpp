@@ -651,7 +651,16 @@ int main(int argc, char* argv[])
 
 					int oldIndex = maxVals_t::getIndex(size, (int)mot.x_Shift, (int)mot.y_Shift, (int)mot.z_Shift);
 
-					maxVals_t temp = aps[ref]->execute((float*)part.GetData(), (float*)wedges[wedgeIdx]->GetData(), filterData, mot.phi, mot.psi, mot.theta, (float)aConfig.HighPass, (float)aConfig.LowPass, (float)aConfig.Sigma, make_float3(mot.x_Shift, mot.y_Shift, mot.z_Shift), aConfig.CouplePhiToPsi, aConfig.ComputeCCValOnly, oldIndex);
+					maxVals_t temp;
+					if (aConfig.Correlation == Configuration::CM_CrossCorrelation)
+					{
+						temp = aps[ref]->execute((float*)part.GetData(), (float*)wedges[wedgeIdx]->GetData(), filterData, mot.phi, mot.psi, mot.theta, (float)aConfig.HighPass, (float)aConfig.LowPass, (float)aConfig.Sigma, make_float3(mot.x_Shift, mot.y_Shift, mot.z_Shift), aConfig.CouplePhiToPsi, aConfig.ComputeCCValOnly, oldIndex);
+					}
+					else if (aConfig.Correlation == Configuration::CM_PhaseCorrelation)
+					{
+						temp = aps[ref]->executePhaseCorrelation((float*)part.GetData(), (float*)wedges[wedgeIdx]->GetData(), filterData, mot.phi, mot.psi, mot.theta, (float)aConfig.HighPass, (float)aConfig.LowPass, (float)aConfig.Sigma, make_float3(mot.x_Shift, mot.y_Shift, mot.z_Shift), aConfig.CouplePhiToPsi, aConfig.ComputeCCValOnly, oldIndex, aConfig.CertaintyMaxDistance);
+					}
+
 					//cout << temp.ccVal << endl;
 					if (temp.ccVal > v.ccVal)
 					{
@@ -747,7 +756,17 @@ int main(int argc, char* argv[])
 
 				int oldIndex = maxVals_t::getIndex(size, (int)mot.x_Shift, (int)mot.y_Shift, (int)mot.z_Shift);
 
-				maxVals_t v = p.execute((float*)part.GetData(), (float*)wedges[wedgeIdx]->GetData(), filterData, mot.phi, mot.psi, mot.theta, (float)aConfig.HighPass, (float)aConfig.LowPass, (float)aConfig.Sigma, make_float3(mot.x_Shift, mot.y_Shift, mot.z_Shift), aConfig.CouplePhiToPsi, aConfig.ComputeCCValOnly, oldIndex);
+				maxVals_t v;
+
+				if (aConfig.Correlation == Configuration::CM_CrossCorrelation)
+				{
+					v = p.execute((float*)part.GetData(), (float*)wedges[wedgeIdx]->GetData(), filterData, mot.phi, mot.psi, mot.theta, (float)aConfig.HighPass, (float)aConfig.LowPass, (float)aConfig.Sigma, make_float3(mot.x_Shift, mot.y_Shift, mot.z_Shift), aConfig.CouplePhiToPsi, aConfig.ComputeCCValOnly, oldIndex);
+				}
+				else if (aConfig.Correlation == Configuration::CM_PhaseCorrelation)
+				{
+					v = p.executePhaseCorrelation((float*)part.GetData(), (float*)wedges[wedgeIdx]->GetData(), filterData, mot.phi, mot.psi, mot.theta, (float)aConfig.HighPass, (float)aConfig.LowPass, (float)aConfig.Sigma, make_float3(mot.x_Shift, mot.y_Shift, mot.z_Shift), aConfig.CouplePhiToPsi, aConfig.ComputeCCValOnly, oldIndex, aConfig.CertaintyMaxDistance);
+				}
+
 				int sx, sy, sz;
 				v.getXYZ(size, sx, sy, sz);
 
@@ -875,6 +894,11 @@ int main(int argc, char* argv[])
 				{
 					motlMot[i].classNo *= -1;
 				}
+				////if ccCoeff is negative (either no good CC match or bad phase correlation coherence check, then discard the particle
+				//if (motlMot[i].ccCoeff < 0)
+				//{
+				//	motlMot[i].classNo = -999;
+				//}
 			}
 
 			if (!onlySumUp)
@@ -997,6 +1021,11 @@ int main(int argc, char* argv[])
 						continue;
 					}
 					if (mot.ccCoeff < limit)
+					{
+						skipped++;
+						continue;
+					}
+					if (mot.ccCoeff < 0)
 					{
 						skipped++;
 						continue;
