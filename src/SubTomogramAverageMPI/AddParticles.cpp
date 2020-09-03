@@ -755,11 +755,11 @@ int main(int argc, char* argv[])
 					shift.y = -mot.y_Shift;
 					shift.z = -mot.z_Shift;
 
-					rot.SetTextureShift(partReal);
-					rot.Shift(partRot, shift);
+					//rot.SetTextureShift(partReal);
+					//rot.Shift(partRot, shift);
 
-					rot.SetTexture(partRot);
-					rot.Rot(partReal, -mot.psi, -mot.phi, -mot.theta);
+					rot.SetTexture(partReal);
+					rot.ShiftRot(partReal, shift, -mot.psi, -mot.phi, -mot.theta);
 
 					rotWedge.Rot(wedge_d, -mot.psi, -mot.phi, -mot.theta);
 					sub.Add(wedge_d, wedgeSum);
@@ -998,11 +998,11 @@ int main(int argc, char* argv[])
 						shift.y = -sy;
 						shift.z = -sz;
 
-						rot.SetTextureShift(temp);
-						rot.Shift(partRot, shift);
+						//rot.SetTextureShift(temp);
+						//rot.Shift(partRot, shift);
 
-						rot.SetTexture(partRot);
-						rot.Rot(partReal, 0, -v.rphi, 0);
+						rot.SetTexture(temp);
+						rot.ShiftRot(partReal, shift,0, -v.rphi, 0);
 
 						sub.Add(partReal, partSum);
 						delete[] nowedge;
@@ -1107,7 +1107,7 @@ int main(int argc, char* argv[])
                         emwrite(ss1.str(), sum, size, size, size);
 
                         //partSum is now the averaged Particle without symmetry
-                        rot.SetTexture(partSum);
+                        //rot.SetTexture(partSum);
 
 						typedef std::vector< std::tuple<float, float, float, float, float, float> > transforms;
 						transforms tl;
@@ -1122,9 +1122,10 @@ int main(int argc, char* argv[])
 
 						for (transforms::const_iterator i = tl.begin(); i != tl.end(); ++i) {
 							std::cout << "Transform => x: " << std::get<0>(*i) << " y: " << std::get<1>(*i) << " z: " << std::get<2>(*i) << " phi: " << std::get<3>(*i) << " psi: " << std::get<4>(*i) << " theta: " << std::get<5>(*i) << std::endl;
-                            rot.SetTextureShift(partReal);
-                            rot.Shift(partReal, make_float3(std::get<0>(*i), std::get<1>(*i), std::get<2>(*i)));
-                            rot.Rot(partReal, std::get<3>(*i), std::get<4>(*i), std::get<5>(*i));
+                            //rot.SetTextureShift(partReal);
+                            //rot.Shift(partReal, make_float3(std::get<0>(*i), std::get<1>(*i), std::get<2>(*i)));
+                            rot.SetTexture(partSum);
+                            rot.ShiftRot(partReal, make_float3(std::get<0>(*i), std::get<1>(*i), std::get<2>(*i)), std::get<3>(*i), std::get<4>(*i), std::get<5>(*i));
 							sub.Add(partReal, partSum);
 						}
 					}

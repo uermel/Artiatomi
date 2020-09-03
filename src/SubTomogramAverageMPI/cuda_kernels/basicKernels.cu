@@ -41,6 +41,31 @@ __global__ void rot3d(int size, float3 rotMat0, float3 rotMat1, float3 rotMat2, 
 }
 
 extern "C"
+__global__ void shiftRot3d(int size, float3 shift, float3 rotMat0, float3 rotMat1, float3 rotMat2, float* outVol)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    float center = size/2.f;
+    //float3 rotCenter = make_float3(center+shift.x, center+shift.y, center+shift.z);
+
+    float3 rotShift;
+    rotShift.x = rotMat0.x * shift.x + rotMat1.x * shift.y + rotMat2.x * shift.z;
+    rotShift.y = rotMat0.y * shift.x + rotMat1.y * shift.y + rotMat2.y * shift.z;
+    rotShift.z = rotMat0.z * shift.x + rotMat1.z * shift.y + rotMat2.z * shift.z;
+
+    float3 vox = make_float3(x - (center + shift.x), y - (center + shift.y), z - (center + shift.z));
+
+    float3 rotVox;
+    rotVox.x = center + rotMat0.x * vox.x + rotMat1.x * vox.y + rotMat2.x * vox.z - (shift.x - rotShift.x);
+    rotVox.y = center + rotMat0.y * vox.x + rotMat1.y * vox.y + rotMat2.y * vox.z - (shift.y - rotShift.y);
+    rotVox.z = center + rotMat0.z * vox.x + rotMat1.z * vox.y + rotMat2.z * vox.z - (shift.z - rotShift.z);
+
+    outVol[z * size * size + y * size + x] = tex3D(texVol, rotVox.x + 0.5f, rotVox.y + 0.5f, rotVox.z + 0.5f);
+}
+
+extern "C"
 __global__ void rot3dCplx(int size, float3 rotMat0, float3 rotMat1, float3 rotMat2, float2* outVol)
 {
 	const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;

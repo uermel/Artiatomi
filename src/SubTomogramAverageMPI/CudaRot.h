@@ -39,6 +39,7 @@ class CudaRot
 {
 private:
 	CudaKernel* rotVol;
+	CudaKernel* shiftRotVol;
 	CudaKernel* shift;
 	CudaKernel* rotVolCplx;
 
@@ -57,6 +58,7 @@ private:
 
 	void runShiftKernel(CudaDeviceVariable& d_odata, float3 shiftVal);
 	void runRotKernel(CudaDeviceVariable& d_odata, float rotMat[3][3]);
+    void runShiftRotKernel(CudaDeviceVariable& d_odata, float3 shiftVal, float rotMat[3][3]);
 	void runRotCplxKernel(CudaDeviceVariable& d_odata, float rotMat[3][3]);
 
 	void computeRotMat(float phi, float psi, float theta, float rotMat[3][3]);
@@ -71,6 +73,7 @@ public:
 
 	void Shift(CudaDeviceVariable& d_odata, float3 shiftVal);
 	void Rot(CudaDeviceVariable& d_odata, float phi, float psi, float theta);
+	void ShiftRot(CudaDeviceVariable& d_odata, float3 shiftVal, float phi, float psi, float theta);
 	void RotCplx(CudaDeviceVariable& d_odata, float phi, float psi, float theta);
 
 	void SetOldAngles(float aPhi, float aPsi, float aTheta);

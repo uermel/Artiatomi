@@ -37,6 +37,7 @@ CudaRot::CudaRot(int aVolSize, CUstream aStream, CudaContext* context, bool line
 
 	shift = new CudaKernel("shift", cuMod);
 	rotVol = new CudaKernel("rot3d", cuMod);
+	shiftRotVol = new CudaKernel("shiftRot3d", cuMod);
 	rotVolCplx = new CudaKernel("rot3dCplx", cuMod);
 
 	CUfilter_mode filter = linearInterpolation ? CU_TR_FILTER_MODE_LINEAR : CU_TR_FILTER_MODE_POINT;
@@ -76,6 +77,18 @@ void CudaRot::Rot(CudaDeviceVariable& d_odata, float phi, float psi, float theta
 	multiplyRotMatrix(rotMat2, rotMat1, rotMat);
 
 	runRotKernel(d_odata, rotMat);
+}
+
+void CudaRot::ShiftRot(CudaDeviceVariable& d_odata, float3 shiftVal, float phi, float psi, float theta)
+{
+    float rotMat1[3][3];
+    float rotMat2[3][3];
+    float rotMat[3][3];
+    computeRotMat(oldphi, oldpsi, oldtheta, rotMat1);
+    computeRotMat(phi, psi, theta, rotMat2);
+    multiplyRotMatrix(rotMat2, rotMat1, rotMat);
+
+    runShiftRotKernel(d_odata, shiftVal, rotMat);
 }
 
 void CudaRot::Shift(CudaDeviceVariable& d_odata, float3 shiftVal)
@@ -229,6 +242,29 @@ void CudaRot::runRotKernel(CudaDeviceVariable& d_odata, float rotMat[3][3])
 
     cudaSafeCall(cuLaunchKernel(rotVol->GetCUfunction(), gridSize.x, gridSize.y,
 		gridSize.z, blockSize.x, blockSize.y, blockSize.z, 0, stream, arglist,NULL));
+
+    delete[] arglist;
+}
+
+void CudaRot::runShiftRotKernel(CudaDeviceVariable& d_odata, float3 shiftVal, float rotMat[3][3])
+{
+    CUdeviceptr out_dptr = d_odata.GetDevicePtr();
+
+    float3 rotMat0 = make_float3(rotMat[0][0], rotMat[0][1], rotMat[0][2]);
+    float3 rotMat1 = make_float3(rotMat[1][0], rotMat[1][1], rotMat[1][2]);
+    float3 rotMat2 = make_float3(rotMat[2][0], rotMat[2][1], rotMat[2][2]);
+
+    void** arglist = (void**)new void*[6];
+
+    arglist[0] = &volSize;
+    arglist[1] = &shiftVal;
+    arglist[2] = &rotMat0;
+    arglist[3] = &rotMat1;
+    arglist[4] = &rotMat2;
+    arglist[5] = &out_dptr;
+
+    cudaSafeCall(cuLaunchKernel(shiftRotVol->GetCUfunction(), gridSize.x, gridSize.y,
+                                gridSize.z, blockSize.x, blockSize.y, blockSize.z, 0, stream, arglist,NULL));
 
     delete[] arglist;
 }
