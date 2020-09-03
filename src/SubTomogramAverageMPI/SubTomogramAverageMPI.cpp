@@ -40,6 +40,11 @@
 #include <iomanip>
 #include <algorithm>
 #include <map>
+#include <fstream>
+#include <tuple>
+#include <vector>
+
+#include <cuda_profiler_api.h>
 
 using namespace std;
 using namespace Cuda;
@@ -1423,6 +1428,37 @@ int main(int argc, char* argv[])
 							float angPhi = angle * i;
 
 							rot.Rot(partReal, angPhi, 0, 0);
+							sub.Add(partReal, partSum);
+						}
+					}
+
+					if (aConfig.ApplySymmetry == Configuration::Symmetry_Transform){
+						cout << "We Symmetry Transform Now" << endl;
+                        partSum.CopyDeviceToHost(sum);
+                        stringstream ss1;
+                        string outName = aConfig.Path + aConfig.Reference[ref] + "noSymm_";
+                        ss1 << outName << iter + 1 << ".em";
+                        emwrite(ss1.str(), sum, size, size, size);
+
+                        //partSum is now the averaged Particle without symmetry
+                        rot.SetTexture(partSum);
+
+						typedef std::vector< std::tuple<float, float, float, float, float, float> > transforms;
+						transforms tl;
+
+						float x,y,z,psi,phi,theta;
+						std::ifstream transform_file(aConfig.SymmetryFile);
+
+						while(transform_file >> x >> y >> z >> psi >> phi >> theta)
+						{
+							tl.push_back( std::tuple<float, float, float, float, float, float>(x,y,z,psi,phi,theta) );
+						}
+
+						for (transforms::const_iterator i = tl.begin(); i != tl.end(); ++i) {
+							std::cout << "Transform => x: " << std::get<0>(*i) << " y: " << std::get<1>(*i) << " z: " << std::get<2>(*i) << " phi: " << std::get<3>(*i) << " psi: " << std::get<4>(*i) << " theta: " << std::get<5>(*i) << std::endl;
+                            rot.SetTextureShift(partReal);
+                            rot.Shift(partReal, make_float3(std::get<0>(*i), std::get<1>(*i), std::get<2>(*i)));
+                            rot.Rot(partReal, std::get<3>(*i), std::get<4>(*i), std::get<5>(*i));
 							sub.Add(partReal, partSum);
 						}
 					}

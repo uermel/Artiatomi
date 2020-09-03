@@ -52,6 +52,7 @@ namespace Configuration
 		Sigma(0),
 		ClearAngles(false),
 		ApplySymmetry(Symmetry_None),
+		SymmetryFile(),
 		logAllowed(mpiPart == 0),
 		BestParticleRatio(1.0f),
 		ClearAnglesIteration(-1),
@@ -198,6 +199,10 @@ namespace Configuration
 		{
 			ApplySymmetry = Symmetry_Rotate180;
 		}
+		else if (sym == "transform" || sym == "TRANSFORM" || sym == "Transform")
+        {
+            ApplySymmetry = Symmetry_Transform;
+        }
 		else if (sym == "Shift" || sym == "SHIFT")
 		{
 			ApplySymmetry = Symmetry_Shift;
@@ -224,6 +229,11 @@ namespace Configuration
 			ShiftSymmetryVector[1] = GetFloat3("ShiftSymmetryVector2");
 			ShiftSymmetryVector[2] = GetFloat3("ShiftSymmetryVector3");
 		}
+
+		if (ApplySymmetry == Symmetry_Transform)
+        {
+		    SymmetryFile = GetStringOptional("SymmetryFile");
+        }
 
 		string nc = GetStringOptional("NamingConvention");
 		NamingConv = NamingConvention::NC_ParticleOnly;

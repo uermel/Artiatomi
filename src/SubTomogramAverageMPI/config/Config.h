@@ -39,7 +39,8 @@ namespace Configuration
 		Symmetry_Rotate180,
 		Symmetry_Shift,
 		Symmetry_Helical,
-		Symmetry_Rotational
+		Symmetry_Rotational,
+        Symmetry_Transform
 	};
 
 	enum NamingConvention
@@ -110,6 +111,7 @@ namespace Configuration
 			int		ClearAnglesIteration;
 			float	BestParticleRatio;
 			Symmetry ApplySymmetry;
+			string SymmetryFile;
 			float3	ShiftSymmetryVector[3];
 			bool    MultiReference;
 			NamingConvention NamingConv;
