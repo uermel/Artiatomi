@@ -633,11 +633,6 @@ int main(int argc, char* argv[])
             maskSum = 0;
             nppSafeCall(nppsSum_32f((Npp32f*)d_normMask->GetDevicePtr(), nLength, (Npp32f*)d_sum->GetDevicePtr(), (Npp8u*)d_sumBuffer->GetDevicePtr()));
             d_sum->CopyDeviceToHost(&maskSum, sizeof(float));
-            printf("\nMASK SUM: %f\n", maskSum);
-
-            string filename = "testmask.em";
-            d_normMask->CopyDeviceToHost(volSubVolReconstructed->GetPtrToSubVolume(0), nLength*sizeof(float));
-            emwrite(filename, volSubVolReconstructed->GetPtrToSubVolume(0), aConfig.SizeSubVol, aConfig.SizeSubVol, aConfig.SizeSubVol);
         }
 		
 		//Process particles in batches:

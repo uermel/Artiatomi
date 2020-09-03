@@ -90,6 +90,7 @@ namespace Configuration
 			vector<int> CudaDeviceIDs;
 			string	MotiveList;
 			string	WedgeFile;
+			bool SingleWedge;
 			vector<int> WedgeIndices;
 			string	Particles;
 			string	Path;

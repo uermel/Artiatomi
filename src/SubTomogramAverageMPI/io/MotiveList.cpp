@@ -68,6 +68,45 @@ void MotiveList::SetAt(int index, motive& m)
 	memcpy(_data + index * sizeof(m), &m, sizeof(m));
 }
 
+void MotiveList::getWedgeIndeces(std::vector<int> &unique, int* &correspond, int &count)
+{
+    // The unique IDs
+    unique.clear();
+    // The number of unique indeces
+    count = 0;
+
+    for (int i = 0; i < _fileHeader.DimY; i++)
+    {
+        // Get the current item
+        motive m = GetAt(i);
+        bool found = false;
+
+        // Search if this ID is already present
+        for (int j = 0; j < count; j++)
+        {
+            if (unique[j] == (int)m.wedgeIdx)
+            {
+                found = true;
+                correspond[i] = j;
+            }
+        }
+
+        // If not present append to the end
+        if (!found)
+        {
+            unique.push_back((int)m.wedgeIdx);
+            correspond[i] = count;
+            count++;
+        }
+    }
+}
+
+int MotiveList::GetParticleCount()
+{
+    return _fileHeader.DimY;
+}
+
+
 string motive::GetIndexCoding(Configuration::NamingConvention nc)
 {
 	stringstream ss;

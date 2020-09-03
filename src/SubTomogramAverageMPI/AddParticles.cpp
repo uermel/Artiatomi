@@ -428,8 +428,14 @@ int main(int argc, char* argv[])
 		/*stringstream ssref;
 		ssref << aConfig.Path << aConfig.Reference[0] << iter << ".em";
 		EMFile ref(ssref.str());*/
+
+        vector<int> unique_wedge_ids; // Unique wedge IDs
+        int unique_wedge_count = 0; // Number of unique wedge IDs
+        auto wedge_ids = new int[motl.GetParticleCount()]; // For each particle, the corresponding wedge index within unique_ref_ids
+        motl.getWedgeIndeces(unique_wedge_ids, wedge_ids, unique_wedge_count);
+
 		map<int, EMFile*> wedges;
-		if (aConfig.WedgeIndices.size() < 1)
+		if (aConfig.SingleWedge)
 		{
 			wedges.insert(pair<int, EMFile*>(0, new EMFile(aConfig.WedgeFile)));
 			wedges[0]->OpenAndRead();
@@ -437,13 +443,13 @@ int main(int argc, char* argv[])
 		}
 		else
 		{
-			for (size_t i = 0; i < aConfig.WedgeIndices.size(); i++)
+			for (size_t i = 0; i < unique_wedge_count; i++)
 			{
 				stringstream sswedge;
-				sswedge << aConfig.WedgeFile << aConfig.WedgeIndices[i] << ".em";
-				wedges.insert(pair<int, EMFile*>(aConfig.WedgeIndices[i], new EMFile(sswedge.str())));
-				wedges[aConfig.WedgeIndices[i]]->OpenAndRead();
-				wedges[aConfig.WedgeIndices[i]]->ReadHeaderInfo();
+				sswedge << aConfig.WedgeFile << unique_wedge_ids[i] << ".em";
+				wedges.insert(pair<int, EMFile*>(unique_wedge_ids[i], new EMFile(sswedge.str())));
+				wedges[unique_wedge_ids[i]]->OpenAndRead();
+				wedges[unique_wedge_ids[i]]->ReadHeaderInfo();
 			}
 		}
 		//EMFile wedge(aConfig.WedgeList);
@@ -717,7 +723,7 @@ int main(int argc, char* argv[])
 					if (oldWedgeIdx != mot.wedgeIdx)
 					{
 						oldWedgeIdx = 0;
-						if (aConfig.WedgeIndices.size() > 0)
+						if (unique_wedge_ids.size() > 0)
 						{
 							oldWedgeIdx = mot.wedgeIdx;
 						}

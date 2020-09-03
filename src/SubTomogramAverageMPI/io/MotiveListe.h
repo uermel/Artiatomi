@@ -63,5 +63,10 @@ public:
 	motive GetAt(int index);
 
 	void SetAt(int index, motive& m);
+
+    void getWedgeIndeces(std::vector<int> &unique, int* &correspond, int &count);
+
+    int GetParticleCount();
+
 };
 #endif //MOTIVELIST_H
