@@ -149,7 +149,7 @@ namespace Configuration
 		MotiveList = GetString("MotiveList");
 		WedgeFile = GetString("WedgeFile");
         SingleWedge = GetBool("SingleWedge");
-		WedgeIndices = GetVectorInt("WedgeIndices", true);
+		//WedgeIndices = GetVectorInt("WedgeIndices", true);
 		Particles = GetString("Particles");
 #ifdef WIN32
 		//Path = GetString("PathWin");

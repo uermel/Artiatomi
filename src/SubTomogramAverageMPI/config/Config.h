@@ -92,7 +92,7 @@ namespace Configuration
 			string	MotiveList;
 			string	WedgeFile;
 			bool SingleWedge;
-			vector<int> WedgeIndices;
+			//vector<int> WedgeIndices;
 			string	Particles;
 			string	Path;
 			vector<string>	Reference;
