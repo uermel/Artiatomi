@@ -939,6 +939,7 @@ int main(int argc, char* argv[])
         cudaProfilerStart();
         ///  START Loop over projections START///
         for(int projInd = 0; projInd < projCount; projInd++)
+        //for(int projInd = 0; projInd < 1; projInd++)
         {
             // Index of projection in stack
             int stackIndex = projIndexList[projInd];
@@ -968,13 +969,13 @@ int main(int argc, char* argv[])
             reconstructor.BackProjection(volWithoutSubVols, surfObj, stackIndex, (float)SIRTcount);
             // The volume is now corrected for the reprojection error of this projection.
 
-            //auto updatedVolume = new float[1024*1700*200];
-            //vol_Array.CopyFromArrayToHost(updatedVolume);
+            auto updatedVolume = new float[volWithoutSubVols->GetSubVolumeSizeInVoxels(0)];
+            vol_Array.CopyFromArrayToHost(updatedVolume);
 
-            //stringstream ss;
-            //ss << "updatedVolume.em";
-            //emwrite(ss.str(), updatedVolume, 1024, 1700, 200);
-            //delete[] updatedVolume;
+//            stringstream ss;
+//            ss << "updatedVolume1.em";
+//            emwrite(ss.str(), updatedVolume, volWithoutSubVols->GetDimension().x, volWithoutSubVols->GetDimension().y, volWithoutSubVols->GetDimension().z);
+//            delete[] updatedVolume;
 
             //Reset the minDist Values for each projection.
             for (size_t i = 0; i < ml.GetParticleCount(); i++)
@@ -993,6 +994,7 @@ int main(int argc, char* argv[])
 
             ///  START Loop over groups of particles and project each group together START///
             for(int group = 0; group < ml.GetGroupCount(aConfig.GroupMode); group++)
+            //for(int group = 0; group < 1; group++)
             {
 
                 // Display progress
@@ -1054,9 +1056,16 @@ int main(int argc, char* argv[])
                     /// 1. Remove particle from reconstructed Volume
                     // Mask dimensions and positions
                     dim3 maskDims = vh_volmask_dims[ref_id_idx];
+
                     int3 dimMask = make_int3(maskDims.x, maskDims.y, maskDims.z);
+                    //printf("dimMask: x: %i y:%i z: %i\n", dimMask.x, dimMask.y, dimMask.z);
                     int3 radiusMask = make_int3(maskDims.x/2, maskDims.y/2, maskDims.z/2);
+                    //printf("radiusMask: x: %i y:%i z: %i\n", radiusMask.x, radiusMask.y, radiusMask.z);
                     int3 centerInVol = make_int3(roundf(m.x_Coord + m.x_Shift), roundf(m.y_Coord + m.y_Shift), roundf(m.z_Coord + m.z_Shift));
+                    //printf("centerInVol: x: %i y:%i z: %i\n", centerInVol.x, centerInVol.y, centerInVol.z);
+
+                    //printf("volmin: x: %i y:%i z: %i\n", volmin.x, volmin.y, volmin.z);
+                    //printf("volmax: x: %i y:%i z: %i\n", volmax.x, volmax.y, volmax.z);
 
                     // Get rotated mask and create temporary storage
                     CudaDeviceVariable d_volmask(maskDims.x * maskDims.x * maskDims.x * sizeof(float));
@@ -1068,7 +1077,16 @@ int main(int argc, char* argv[])
                     // Apply the volume mask for this particle
                     (*vd_apply_mask_kernels[ref_id_idx])(surfObj, d_volmask, *vd_temp_store[groupIdx], volmin, volmax, dimMask, radiusMask, centerInVol);
 
-                    /// 2. Project the reference volumes
+//                    auto temppart = new float[dimMask.x*dimMask.y*dimMask.z];
+//                    vd_temp_store[groupIdx]->CopyDeviceToHost(temppart, dimMask.x*dimMask.y*dimMask.z* sizeof(float));
+//
+//                    stringstream ss;
+//                    ss << "cutout_" << stackIndex << "_" << m.tomoNr << "_" << m.partNrInTomo << ".em";
+//                    emwrite(ss.str(), temppart, dimMask.x, dimMask.y, dimMask.z);
+//                    delete[] temppart;
+
+
+                    /// 2. Project the reference volume
                     // Create the cuda array for the rotated particle (source data for interpolation during SART-FP)
                     auto arr = new CudaArray3D(arrayFormat, (int)vh_ori_particle[ref_id_idx]->GetDimension().x, (int)vh_ori_particle[ref_id_idx]->GetDimension().x, (int)vh_ori_particle[ref_id_idx]->GetDimension().x, 1, 2);
                     // Populate the array with the rotated particle
@@ -1135,6 +1153,14 @@ int main(int argc, char* argv[])
                                                        roiMinLocal, roiMaxLocal, true);
                 }
                 /// END Loop over each particle in one group END///
+
+//                auto updatedVolume2 = new float[volWithoutSubVols->GetSubVolumeSizeInVoxels(0)];
+//                vol_Array.CopyFromArrayToHost(updatedVolume2);
+//
+//                stringstream ss2;
+//                ss2 << "updatedVolume2.em";
+//                emwrite(ss2.str(), updatedVolume2, volWithoutSubVols->GetDimension().x, volWithoutSubVols->GetDimension().y, volWithoutSubVols->GetDimension().z);
+//                delete[] updatedVolume2;
 
                 /// This is the final projection of the reference volumes of this group:
                 reconstructor.CopyProjectionToSubVolumeProjection();
@@ -1312,7 +1338,8 @@ int main(int argc, char* argv[])
                 }
 
                 /// START Loop over each particle in one group START ///
-                for (int groupIdx = 0; groupIdx < motives.size(); groupIdx++)
+                // Need to do this in reverse order because some particles already contain marked regions.
+                for (int groupIdx = motives.size()-1; groupIdx > -1; groupIdx--)
                 {
                     // Get particle and associated ref_id
                     motive m = motives[groupIdx];
@@ -1329,6 +1356,14 @@ int main(int argc, char* argv[])
                     (*vd_restore_vol_kernels[ref_id_idx])(surfObj, *vd_temp_store[groupIdx], volmin, volmax, dimMask, radiusMask, centerInVol);
                 }
                 /// END Loop over each particle in one group END ///
+
+//                auto updatedVolume = new float[volWithoutSubVols->GetSubVolumeSizeInVoxels(0)];
+//                vol_Array.CopyFromArrayToHost(updatedVolume);
+//
+//                stringstream ss;
+//                ss << "updatedVolume3.em";
+//                emwrite(ss.str(), updatedVolume, volWithoutSubVols->GetDimension().x, volWithoutSubVols->GetDimension().y, volWithoutSubVols->GetDimension().z);
+//                delete[] updatedVolume;
 
                 // Clear memory
                 for(int i = 0; i < vd_tex_rot_particle.size(); i++) {delete vd_tex_rot_particle[i];}
