@@ -145,6 +145,7 @@ namespace Configuration
 			bool	SwitchCTFDirectionForIMOD;
 			bool	PhaseFlipOnly;
 			float	WienerFilterNoiseLevel;
+            bool LimitToNyquist;
 			
 #ifdef REFINE_MODE
 			int SizeSubVol;
@@ -168,7 +169,6 @@ namespace Configuration
 			bool MultiPeakDetection;
 			int TomogramIndex;
 			bool DoPhaseCorrelation;
-			bool LimitToNyquist;
 			float PhaseCorrSigma;
 #endif
 
