@@ -167,7 +167,9 @@ namespace Configuration
 			float MaxDistanceSupport;
 			bool MultiPeakDetection;
 			int TomogramIndex;
-			bool SubtractError;
+			bool DoPhaseCorrelation;
+			bool LimitToNyquist;
+			float PhaseCorrSigma;
 #endif
 
 #ifdef SUBVOLREC_MODE

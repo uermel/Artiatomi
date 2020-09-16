@@ -221,6 +221,7 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 	fourFilterKernel(modules.modWBP),
 	doseWeightingKernel(modules.modWBP),
 	conjKernel(modules.modWBP),
+    pcKernel(modules.modWBP),
 	maxShiftKernel(modules.modWBP),
 	compKernel(modules.modComp),
 	subEKernel(modules.modComp),
@@ -261,6 +262,7 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 	fourFilterKernel.SetComputeSize(proj.GetMaxDimension() / 2 + 1, proj.GetMaxDimension(), 1);
 	doseWeightingKernel.SetComputeSize(proj.GetMaxDimension() / 2 + 1, proj.GetMaxDimension(), 1);
 	conjKernel.SetComputeSize(proj.GetMaxDimension() / 2 + 1, proj.GetMaxDimension(), 1);
+    pcKernel.SetComputeSize(proj.GetMaxDimension() / 2 + 1, proj.GetMaxDimension(), 1);
 	cts.SetComputeSize(proj.GetMaxDimension(), proj.GetMaxDimension(), 1);
 	maxShiftKernel.SetComputeSize(proj.GetMaxDimension(), proj.GetMaxDimension(), 1);
 	convVolKernel.SetComputeSize(config.RecDimensions.x, config.RecDimensions.y, 1);
@@ -475,6 +477,53 @@ void Reconstructor::ForwardProjectionNoCTF(Volume<TVol>* vol, CudaTextureObject3
 					realprojUS_d.CopyHostToDevice(MPIBuffer);
 					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
 				}
+#endif
+
+				// To avoid aliasing artifacts low pass filter to Nyquist of tomogram or Projection fourier filter, whichever is lower.
+				if ((config.VoxelSize.x > 1) && (config.LimitToNyquist)) // assume cubic voxel sizes
+				{
+					int2 pA, pB, pC, pD;
+					pA.x = 0;
+					pA.y = proj.GetHeight() - 1;
+					pB.x = proj.GetWidth() - 1;
+					pB.y = proj.GetHeight() - 1;
+					pC.x = 0;
+					pC.y = 0;
+					pD.x = proj.GetWidth() - 1;
+					pD.y = 0;
+
+					cropKernel(proj_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
+
+					cts(proj_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, true);
+
+					fft_d.Memset(0);
+					cufftSafeCall(cufftExecR2C(handleR2C, (cufftReal*)projSquare_d.GetDevicePtr(), (cufftComplex*)fft_d.GetDevicePtr()));
+
+					// Set the low pass filter to nyquist of the Tomogram
+					float lp = (float)proj.GetMaxDimension() / config.VoxelSize.x - 20.f;
+					float lps = 20.f;
+					// Use the low pass from the config if it's lower and filter is not skipped
+					if (!config.SkipFilter) {
+                        if (lp > (float) config.fourFilterLP) {
+                            lp = (float) config.fourFilterLP;
+                            lps = (float) config.fourFilterLPS;
+                        }
+                    }
+
+					int size = proj.GetMaxDimension();
+
+					fourFilterKernel(fft_d, roiFFT.width * sizeof(Npp32fc), size, lp, 0, lps, 0);
+
+
+					cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
+
+					nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float), (float)(proj.GetMaxDimension() * proj.GetMaxDimension()),
+						(Npp32f*)proj_d.GetDevicePtr(), (int)proj_d.GetPitch(), roiAll));
+
+
+					cropKernel(proj_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
+				}
+#ifdef USE_MPI
 			}
 			else
 			{
@@ -598,6 +647,25 @@ void Reconstructor::ForwardProjectionCTF(Volume<TVol>* vol, CudaTextureObject3D&
 
 				ctf(fft_d, defocusMin, defocusMax, defocusAngle, true, config.PhaseFlipOnly, config.WienerFilterNoiseLevel, (proj.GetMaxDimension() / 2 + 1) * sizeof(float2), config.CTFBetaFac);
 
+                // To avoid aliasing artifacts low pass filter to Nyquist of Tomogram or Projection fourier filter, whichever is lower.
+				if ((config.VoxelSize.x > 1) && (config.LimitToNyquist)) // assume cubic voxel sizes
+				{
+                    // Set the low pass filter to nyquist of the Tomogram
+                    float lp = (float)proj.GetMaxDimension() / config.VoxelSize.x - 20.f;
+                    float lps = 20.f;
+                    // Use the low pass from the config if it's lower
+                    if (!config.SkipFilter) {
+                        if (lp > (float) config.fourFilterLP) {
+                            lp = (float) config.fourFilterLP;
+                            lps = (float) config.fourFilterLPS;
+                        }
+                    }
+
+					int size = proj.GetMaxDimension();
+
+					fourFilterKernel(fft_d, roiFFT.width * sizeof(Npp32fc), size, lp, 0, lps, 0);
+				}
+
 				cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
 
 				nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float), (float)(proj.GetMaxDimension() * proj.GetMaxDimension()),
@@ -698,6 +766,53 @@ void Reconstructor::ForwardProjectionNoCTFROI(Volume<TVol>* vol, CudaTextureObje
 					realprojUS_d.CopyHostToDevice(MPIBuffer);
 					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
 				}
+
+#endif
+                // To avoid aliasing artifacts low pass filter to Nyquist of Tomogram or Projection fourier filter, whichever is lower.
+				if ((config.VoxelSize.x > 1) && (config.LimitToNyquist)) // assume cubic voxel sizes
+				{
+					int2 pA, pB, pC, pD;
+					pA.x = 0;
+					pA.y = proj.GetHeight() - 1;
+					pB.x = proj.GetWidth() - 1;
+					pB.y = proj.GetHeight() - 1;
+					pC.x = 0;
+					pC.y = 0;
+					pD.x = proj.GetWidth() - 1;
+					pD.y = 0;
+
+					cropKernel(proj_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
+
+					cts(proj_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, true);
+
+					fft_d.Memset(0);
+					cufftSafeCall(cufftExecR2C(handleR2C, (cufftReal*)projSquare_d.GetDevicePtr(), (cufftComplex*)fft_d.GetDevicePtr()));
+
+                    // Set the low pass filter to nyquist of the Tomogram
+                    float lp = (float)proj.GetMaxDimension() / config.VoxelSize.x - 20.f;
+                    float lps = 20.f;
+                    // Use the low pass from the config if it's lower
+                    if (!config.SkipFilter) {
+                        if (lp > (float) config.fourFilterLP) {
+                            lp = (float) config.fourFilterLP;
+                            lps = (float) config.fourFilterLPS;
+                        }
+                    }
+
+					int size = proj.GetMaxDimension();
+
+					fourFilterKernel(fft_d, roiFFT.width * sizeof(Npp32fc), size, lp, 0, lps, 0);
+
+
+					cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
+
+					nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float), (float)(proj.GetMaxDimension() * proj.GetMaxDimension()),
+						(Npp32f*)proj_d.GetDevicePtr(), (int)proj_d.GetPitch(), roiAll));
+
+
+					cropKernel(proj_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
+				}
+#ifdef USE_MPI
 			}
 			else
 			{
@@ -823,6 +938,25 @@ void Reconstructor::ForwardProjectionCTFROI(Volume<TVol>* vol, CudaTextureObject
 				cufftSafeCall(cufftExecR2C(handleR2C, (cufftReal*)projSquare_d.GetDevicePtr(), (cufftComplex*)fft_d.GetDevicePtr()));
 
 				ctf(fft_d, defocusMin, defocusMax, defocusAngle, true, config.PhaseFlipOnly, config.WienerFilterNoiseLevel, (proj.GetMaxDimension() / 2 + 1) * sizeof(float2), config.CTFBetaFac);
+
+                // To avoid aliasing artifacts low pass filter to Nyquist of Tomogram or Projection fourier filter, whichever is lower.
+				if ((config.VoxelSize.x > 1) && (config.LimitToNyquist)) // assume cubic voxel sizes
+				{
+                    // Set the low pass filter to nyquist of the Tomogram
+                    float lp = (float)proj.GetMaxDimension() / config.VoxelSize.x - 20.f;
+                    float lps = 20.f;
+                    // Use the low pass from the config if it's lower
+                    if (!config.SkipFilter) {
+                        if (lp > (float) config.fourFilterLP) {
+                            lp = (float) config.fourFilterLP;
+                            lps = (float) config.fourFilterLPS;
+                        }
+                    }
+
+					int size = proj.GetMaxDimension();
+
+					fourFilterKernel(fft_d, roiFFT.width * sizeof(Npp32fc), size, lp, 0, lps, 0);
+				}
 
 				cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
 
@@ -2174,6 +2308,222 @@ float2 Reconstructor::GetDisplacement(bool MultiPeakDetection, float* CCValue)
 		}
 	}
 	return shift;
+}
+
+//TODO: The output correlation values are not normalized (not in range 0 < v < 1), but this isn't strictly necessary here, so it would add useless computation. Maybe fix this later
+float2 Reconstructor::GetDisplacementPC(bool MultiPeakDetection, float* CCValue)
+{
+    float2 shift;
+    shift.x = 0;
+    shift.y = 0;
+
+    if (mpi_part == 0)
+    {
+#ifdef WRITEDEBUG
+        float* test = new float[proj.GetMaxDimension() * proj.GetMaxDimension()];
+#endif
+
+        // proj_d contains the original Projection minus the proj(reconstructionWithoutSubVols)
+        // make square
+        cts(proj_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, false);
+#ifdef WRITEDEBUG
+        projSquare_d.CopyDeviceToHost(test);
+		emwrite("projection3F.em", test, proj.GetMaxDimension(), proj.GetMaxDimension());/**/
+#endif
+        // Make mean free
+        nppSafeCall(nppiMean_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare,
+                                     (Npp8u*)meanbuffer.GetDevicePtr(), (Npp64f*)meanval.GetDevicePtr()));
+        double MeanA = 0;
+        meanval.CopyDeviceToHost(&MeanA, sizeof(double));
+        nppSafeCall(nppiSubC_32f_C1IR((float)(MeanA), (Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare));
+
+        // Square, and compute the sum of the squared projection
+        //nppSafeCall(nppiSqr_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), (Npp32f*)projSquare2_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare));
+
+        //nppSafeCall(nppiSum_32f_C1R((Npp32f*)projSquare2_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare, (Npp8u*)meanbuffer.GetDevicePtr(), (Npp64f*)meanval.GetDevicePtr()));
+
+        //double SumA = 0;
+        //meanval.CopyDeviceToHost(&SumA, sizeof(double)); // this now contains the square counter-intuitively
+
+        // Real-to-Complex FFT of background subtracted REAL projection
+        cufftSafeCall(cufftExecR2C(handleR2C, (cufftReal*)projSquare_d.GetDevicePtr(), (cufftComplex*)fft_d.GetDevicePtr()));
+
+        // missuse ctf_d as second fft variable
+        // projSubVols_d contains the projection of the model
+        // Make square
+        cts(projSubVols_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, false);
+
+        // Make mean free
+        nppSafeCall(nppiMean_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare,
+                                     (Npp8u*)meanbuffer.GetDevicePtr(), (Npp64f*)meanval.GetDevicePtr()));
+        double MeanB = 0;
+        meanval.CopyDeviceToHost(&MeanB, sizeof(double));
+        nppSafeCall(nppiSubC_32f_C1IR((float)(MeanB), (Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare));
+
+        // Square, and compute the sum of the squared projection
+        // nppSafeCall(nppiSqr_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), (Npp32f*)projSquare2_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare));
+
+        // nppSafeCall(nppiSum_32f_C1R((Npp32f*)projSquare2_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare, (Npp8u*)meanbuffer.GetDevicePtr(), (Npp64f*)meanval.GetDevicePtr()));
+
+        //double SumB = 0;
+        //meanval.CopyDeviceToHost(&SumB, sizeof(double));
+
+#ifdef WRITEDEBUG
+        projSquare_d.CopyDeviceToHost(test);
+		emwrite("realprojection3F.em", test, proj.GetMaxDimension(), proj.GetMaxDimension());/**/
+#endif
+        // Real-to-Complex FFT of FAKE projection
+        cufftSafeCall(cufftExecR2C(handleR2C, (cufftReal*)projSquare_d.GetDevicePtr(), (cufftComplex*)ctf_d.GetDevicePtr()));
+        //fourFilterKernel(ctf_d, (proj.GetMaxDimension() / 2 + 1) * sizeof(cuComplex), proj.GetMaxDimension(), 150, 2, 20, 1);
+
+        // Phase-correlation
+        pcKernel(fft_d, ctf_d, (proj.GetMaxDimension() / 2 + 1) * sizeof(cuComplex), proj.GetMaxDimension());
+
+        //Cuda::CudaDeviceVariable& img, size_t stride, int pixelcount, float lp, float hp, float lps, float hps
+        fourFilterKernel(fft_d, (proj.GetMaxDimension() / 2 + 1) * sizeof(cuComplex), proj.GetMaxDimension(), config.PhaseCorrSigma, 0, config.PhaseCorrSigma, 0);
+
+        // Get CC map (transform back)
+        cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
+#ifdef WRITEDEBUG
+        projSquare_d.CopyDeviceToHost(test);
+		emwrite("cc3F.em", test, proj.GetMaxDimension(), proj.GetMaxDimension());/**/
+#endif
+
+        int maxShift = 10;
+#ifdef REFINE_MODE
+        maxShift = config.MaxShift;
+#endif
+        // Normalize cross correlation result
+        //nppSafeCall(nppiDivC_32f_C1IR((float)(proj.GetMaxDimension() * proj.GetMaxDimension() * sqrt(SumA * SumB)), (Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare));
+
+        //printf("Divs: %f %f\n", (float)SumA, (float)SumB);
+
+        // FFT-shift using NPPI
+        NppiSize ccSize;
+        ccSize.width = roiCC1.width;
+        ccSize.height = roiCC1.height;
+        nppSafeCall(nppiCopy_32f_C1R(
+                (float*)((char*)projSquare_d.GetDevicePtr() + roiCC1.y * proj.GetMaxDimension() * sizeof(float) + roiCC1.x * sizeof(float)),
+                proj.GetMaxDimension() * sizeof(float),
+                (float*)((char*)ccMap_d.GetDevicePtr() + roiDestCC1.y * ccMap_d.GetPitch() + roiDestCC1.x * sizeof(float)),
+                (int)ccMap_d.GetPitch(), ccSize));
+
+        nppSafeCall(nppiCopy_32f_C1R(
+                (float*)((char*)projSquare_d.GetDevicePtr() + roiCC2.y * proj.GetMaxDimension() * sizeof(float) + roiCC2.x * sizeof(float)),
+                proj.GetMaxDimension() * sizeof(float),
+                (float*)((char*)ccMap_d.GetDevicePtr() + roiDestCC2.y * ccMap_d.GetPitch() + roiDestCC2.x * sizeof(float)),
+                (int)ccMap_d.GetPitch(), ccSize));
+
+        nppSafeCall(nppiCopy_32f_C1R(
+                (float*)((char*)projSquare_d.GetDevicePtr() + roiCC3.y * proj.GetMaxDimension() * sizeof(float) + roiCC3.x * sizeof(float)),
+                proj.GetMaxDimension() * sizeof(float),
+                (float*)((char*)ccMap_d.GetDevicePtr() + roiDestCC3.y * ccMap_d.GetPitch() + roiDestCC3.x * sizeof(float)),
+                (int)ccMap_d.GetPitch(), ccSize));
+
+        nppSafeCall(nppiCopy_32f_C1R(
+                (float*)((char*)projSquare_d.GetDevicePtr() + roiCC4.y * proj.GetMaxDimension() * sizeof(float) + roiCC4.x * sizeof(float)),
+                proj.GetMaxDimension() * sizeof(float),
+                (float*)((char*)ccMap_d.GetDevicePtr() + roiDestCC4.y * ccMap_d.GetPitch() + roiDestCC4.x * sizeof(float)),
+                (int)ccMap_d.GetPitch(), ccSize));
+
+        ccMap_d.CopyDeviceToHost(ccMap);
+
+
+        maxShiftKernel(projSquare_d, proj.GetMaxDimension() * sizeof(float), proj.GetMaxDimension(), maxShift);
+
+        nppSafeCall(nppiMaxIndx_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare,
+                                        (Npp8u*)meanbuffer.GetDevicePtr(), (Npp32f*)meanval.GetDevicePtr(), (int*)stdval.GetDevicePtr(),
+                                        (int*)(stdval.GetDevicePtr() + sizeof(int))));
+
+
+#ifdef WRITEDEBUG
+        projSquare_d.CopyDeviceToHost(test);
+		emwrite("shiftTest3F.em", test, proj.GetMaxDimension(), proj.GetMaxDimension());/**/
+#endif
+
+        int maxPixels[2];
+        stdval.CopyDeviceToHost(maxPixels, 2 * sizeof(int));
+
+        float maxVal;
+        meanval.CopyDeviceToHost(&maxVal, sizeof(float));
+        //printf("\nMaxVal: %f", maxVal);
+        if (CCValue != NULL)
+        {
+            *CCValue = maxVal;
+        }
+
+        if (MultiPeakDetection)
+        {
+            //multiPeak
+            nppSafeCall(nppiSet_8u_C1R(255, (Npp8u*)badPixelMask_d.GetDevicePtr(), (int)badPixelMask_d.GetPitch(), roiSquare));
+
+            findPeakKernel(projSquare_d, proj.GetMaxDimension() * sizeof(float), badPixelMask_d, proj.GetMaxDimension(), maxVal * 0.9f);
+
+            nppiSet_32f_C1R(1.0f, (Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare);
+            nppiSet_32f_C1MR(0.0f, (Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare, (Npp8u*)badPixelMask_d.GetDevicePtr(), (int)badPixelMask_d.GetPitch());
+
+            maxShiftWeightedKernel(projSquare_d, proj.GetMaxDimension() * sizeof(float), proj.GetMaxDimension(), maxShift);
+
+
+            nppSafeCall(nppiMaxIndx_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr(), proj.GetMaxDimension() * sizeof(float), roiSquare,
+                                            (Npp8u*)meanbuffer.GetDevicePtr(), (Npp32f*)meanval.GetDevicePtr(), (int*)stdval.GetDevicePtr(),
+                                            (int*)(stdval.GetDevicePtr() + sizeof(int))));
+
+            stdval.CopyDeviceToHost(maxPixels, 2 * sizeof(int));
+
+
+            //NppiSize ccSize;
+            ccSize.width = roiCC1.width;
+            ccSize.height = roiCC1.height;
+            nppSafeCall(nppiCopy_32f_C1R(
+                    (float*)((char*)projSquare_d.GetDevicePtr() + roiCC1.y * proj.GetMaxDimension() * sizeof(float) + roiCC1.x * sizeof(float)),
+                    proj.GetMaxDimension() * sizeof(float),
+                    (float*)((char*)ccMap_d.GetDevicePtr() + roiDestCC1.y * ccMap_d.GetPitch() + roiDestCC1.x * sizeof(float)),
+                    (int)ccMap_d.GetPitch(), ccSize));
+
+            nppSafeCall(nppiCopy_32f_C1R(
+                    (float*)((char*)projSquare_d.GetDevicePtr() + roiCC2.y * proj.GetMaxDimension() * sizeof(float) + roiCC2.x * sizeof(float)),
+                    proj.GetMaxDimension() * sizeof(float),
+                    (float*)((char*)ccMap_d.GetDevicePtr() + roiDestCC2.y * ccMap_d.GetPitch() + roiDestCC2.x * sizeof(float)),
+                    (int)ccMap_d.GetPitch(), ccSize));
+
+            nppSafeCall(nppiCopy_32f_C1R(
+                    (float*)((char*)projSquare_d.GetDevicePtr() + roiCC3.y * proj.GetMaxDimension() * sizeof(float) + roiCC3.x * sizeof(float)),
+                    proj.GetMaxDimension() * sizeof(float),
+                    (float*)((char*)ccMap_d.GetDevicePtr() + roiDestCC3.y * ccMap_d.GetPitch() + roiDestCC3.x * sizeof(float)),
+                    (int)ccMap_d.GetPitch(), ccSize));
+
+            nppSafeCall(nppiCopy_32f_C1R(
+                    (float*)((char*)projSquare_d.GetDevicePtr() + roiCC4.y * proj.GetMaxDimension() * sizeof(float) + roiCC4.x * sizeof(float)),
+                    proj.GetMaxDimension() * sizeof(float),
+                    (float*)((char*)ccMap_d.GetDevicePtr() + roiDestCC4.y * ccMap_d.GetPitch() + roiDestCC4.x * sizeof(float)),
+                    (int)ccMap_d.GetPitch(), ccSize));
+
+            ccMap_d.CopyDeviceToHost(ccMapMulti);
+        }
+
+        //Get shift:
+        shift.x = (float)maxPixels[0];
+        shift.y = (float)maxPixels[1];
+
+        if (shift.x > proj.GetMaxDimension() / 2)
+        {
+            shift.x -= proj.GetMaxDimension();
+        }
+
+        if (shift.y > proj.GetMaxDimension() / 2)
+        {
+            shift.y -= proj.GetMaxDimension();
+        }
+
+        if (maxVal <= 0)
+        {
+            //something went wrong, no shift found
+            shift.x = -1000;
+            shift.y = -1000;
+        }
+    }
+    return shift;
 }
 
 void Reconstructor::rotVol(Cuda::CudaDeviceVariable & vol, float phi, float psi, float theta)

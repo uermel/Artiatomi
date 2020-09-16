@@ -317,6 +317,41 @@ void conjMul(float2* complxA, float2* complxB, size_t stride, int pixelcount)
 
 }
 
+extern "C"
+__global__
+void conjMulPC(float2* complxA, float2* complxB, size_t stride, int pixelcount)
+{
+    //compute x,y,z indiced
+    unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (x >= pixelcount / 2 + 1) return;
+    if (y >= pixelcount) return;
+
+    float2 a = *(((float2*)((char*)complxA + stride * y)) + x);
+    float2 b = *(((float2*)((char*)complxB + stride * y)) + x);
+    float2 erg;
+
+    //conj. complex of a: -a.y
+    erg.x = a.x * b.x + a.y * b.y;
+    erg.y = a.x * b.y - a.y * b.x;
+
+    float amplitude = sqrtf(erg.x * erg.x + erg.y * erg.y);
+
+    if (amplitude != 0)
+    {
+        erg.x /= amplitude;
+        erg.y /= amplitude;
+    }
+    else
+    {
+        erg.x = erg.y = 0;
+    }
+
+    *(((float2*)((char*)complxA + stride * y)) + x) = erg;
+
+}
+
 
 
 extern "C"

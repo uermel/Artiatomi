@@ -97,6 +97,7 @@ private:
 	FourFilterKernel fourFilterKernel;
 	DoseWeightingKernel doseWeightingKernel;
 	ConjKernel conjKernel;
+	PCKernel pcKernel;
 	MaxShiftKernel maxShiftKernel;
 	DimBordersKernel dimBordersKernel;
 #ifdef REFINE_MODE
@@ -245,6 +246,7 @@ public:
     void GetCroppedProjection(float *outImage, float *inImage, int2 roiMin, int2 roiMax);
 	void CopyProjectionToSubVolumeProjection();
 	float2 GetDisplacement(bool MultiPeakDetection, float* CCValue = NULL);
+    float2 GetDisplacementPC(bool MultiPeakDetection, float* CCValue = NULL);
 	void rotVol(Cuda::CudaDeviceVariable& vol, float phi, float psi, float theta);
 	void setRotVolData(float* data);
 	float* GetCCMap();

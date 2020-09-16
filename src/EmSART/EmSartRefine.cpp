@@ -969,8 +969,8 @@ int main(int argc, char* argv[])
             reconstructor.BackProjection(volWithoutSubVols, surfObj, stackIndex, (float)SIRTcount);
             // The volume is now corrected for the reprojection error of this projection.
 
-            auto updatedVolume = new float[volWithoutSubVols->GetSubVolumeSizeInVoxels(0)];
-            vol_Array.CopyFromArrayToHost(updatedVolume);
+            //auto updatedVolume = new float[volWithoutSubVols->GetSubVolumeSizeInVoxels(0)];
+            //vol_Array.CopyFromArrayToHost(updatedVolume);
 
 //            stringstream ss;
 //            ss << "updatedVolume1.em";
@@ -1236,7 +1236,12 @@ int main(int argc, char* argv[])
                 float* ccMapMulti;
                 if (mpi_part == 0)
                 {
-                    shift = reconstructor.GetDisplacement(aConfig.MultiPeakDetection, &ccValue);
+                    if (aConfig.DoPhaseCorrelation) {
+                        shift = reconstructor.GetDisplacementPC(aConfig.MultiPeakDetection, &ccValue);
+                    }
+                    else {
+                        shift = reconstructor.GetDisplacement(aConfig.MultiPeakDetection, &ccValue);
+                    }
                     printf("\t\t\tX: %f, Y: %f, CC: %f\n", shift.x, shift.y, ccValue);
                     ccMap = reconstructor.GetCCMap();
                     if (aConfig.MultiPeakDetection)

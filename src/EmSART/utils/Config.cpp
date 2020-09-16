@@ -78,7 +78,8 @@ namespace Configuration
 		DownWeightTiltsForWBP(false),
 		DoseWeighting(false),
 		PhaseFlipOnly(false),
-		WienerFilterNoiseLevel(0.1f)
+		WienerFilterNoiseLevel(0.1f),
+		LimitToNyquist(true)
 			//ProjNormVal(-1)
 #ifdef REFINE_MODE
 			,
@@ -101,7 +102,8 @@ namespace Configuration
 			SupportingMotiveLists(),
 			MultiPeakDetection(false),
 			TomogramIndex(0),
-			SubtractError(false)
+			DoPhaseCorrelation(true),
+			PhaseCorrSigma(100.f)
 #endif
 #ifdef SUBVOLREC_MODE
 			,
@@ -412,6 +414,7 @@ namespace Configuration
 
 		IgnoreZShiftForCTF = GetBool("IgnoreZShiftForCTF", false);
 		CTFSliceThickness = GetFloat("CTFSliceThickness", 50.0f);
+        LimitToNyquist = GetBool("LimitToNyquist", true);
 		
 #ifdef REFINE_MODE
 		SizeSubVol = GetInt("SizeSubVol");
@@ -456,7 +459,9 @@ namespace Configuration
 		ScaleMotivelistPosition = GetFloat("ScaleMotivelistPosition");
 		MultiPeakDetection = GetBool("MultiPeakDetection");
 		TomogramIndex = GetInt("TomogramIndex");
-        SubtractError = GetBool("SubtractError");
+        DoPhaseCorrelation = GetBool("DoPhaseCorrelation", true);
+        PhaseCorrSigma = GetFloat("PhaseCorrSigma", 100.f);
+
 
 		{
 			string temp = GetStringOptional("SupportingReferences");

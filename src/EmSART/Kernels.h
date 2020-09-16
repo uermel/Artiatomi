@@ -186,6 +186,15 @@ public:
 	float operator()(Cuda::CudaDeviceVariable& img1, Cuda::CudaPitchedDeviceVariable& img2, size_t stride, int pixelcount);
 };
 
+class PCKernel : public Cuda::CudaKernel
+{
+public:
+    PCKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
+    PCKernel(CUmodule aModule);
+
+    float operator()(Cuda::CudaDeviceVariable& img1, Cuda::CudaPitchedDeviceVariable& img2, size_t stride, int pixelcount);
+};
+
 class MaxShiftKernel : public Cuda::CudaKernel
 {
 public:
