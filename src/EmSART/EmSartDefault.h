@@ -63,24 +63,6 @@ typedef unsigned char uchar;
 #include <vector_functions.h>
 #include <cutil_math_.h>
 
-inline dim3 make_dim3(uint a, uint b, uint c)
-{
-	dim3 ret;
-	ret.x = a;
-	ret.y = b;
-	ret.z = c;
-	return ret;
-}
-
-inline dim3 make_dim3(uint3 val)
-{
-	dim3 ret;
-	ret.x = val.x;
-	ret.y = val.y;
-	ret.z = val.z;
-	return ret;
-}
-
 //inline float3 make_float3(uint3 val)
 //{
 //	float3 ret;

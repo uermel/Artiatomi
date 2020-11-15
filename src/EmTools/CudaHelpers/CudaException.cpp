@@ -148,4 +148,46 @@ string Cuda::NppException::GetMessage() const
 {
 	return mMessage;
 }
+
+
+
+
+
+Cuda::CusolverException::CusolverException()
+	: mFileName(), mMessage(), mLine(0)
+{
+
+}
+
+Cuda::CusolverException::~CusolverException() throw()
+{
+
+}
+
+Cuda::CusolverException::CusolverException(string aMessage)
+	: mFileName(), mMessage(aMessage), mLine()
+{
+	stringstream ss;
+	ss << "CUDA CUSOLVER error: " << mMessage << ".";
+	mMessage = ss.str();
+}
+
+Cuda::CusolverException::CusolverException(string aFileName, int aLine, string aMessage, cusolverStatus_t aErr)
+	: mFileName(aFileName), mMessage(aMessage), mLine(aLine), mErr(aErr)
+{
+	stringstream ss;
+	ss << "CUDA SOLVER error = ";
+	ss << mErr << " from file " << mFileName << ", line " << mLine << ": " << mMessage << ".";
+	mMessage = ss.str();
+}
+
+const char* Cuda::CusolverException::what() const throw()
+{
+	return mMessage.c_str();
+}
+
+string Cuda::CusolverException::GetMessage() const
+{
+	return mMessage;
+}
 #endif

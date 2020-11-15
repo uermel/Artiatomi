@@ -28,12 +28,14 @@
 #ifdef USE_CUDA
 #include "cufft.h"
 #include "nppdefs.h"
+#include <cusolver_common.h>
 
 using namespace std;
 
 #define cudaSafeCall(err) __cudaSafeCall (err, __FILE__, __LINE__)
 #define cufftSafeCall(err) __cufftSafeCall (err, __FILE__, __LINE__)
 #define nppSafeCall(err) __nppSafeCall (err, __FILE__, __LINE__, false)
+#define cusolverSafeCall(err) __cusolverSafeCall (err, __FILE__, __LINE__)
 
 
 namespace Cuda
@@ -611,6 +613,151 @@ namespace Cuda
 			{
 				printf("NPP Warning: %s", errMsg.c_str());
 			}
+		} //if CUDA_SUCCESS
+	}
+
+
+
+
+	//!  An exception wrapper class for CUDA CUresult. 
+	/*!
+	  CudaException is thrown, if a CUDA Driver API call via cudaSafeCall does not return CUDA_SUCCESS
+	  \author Michael Kunz
+	  \date   September 2011
+	  \version 1.1
+	*/
+	//An exception wrapper class for CUDA CUresult. 
+	class CusolverException : public exception
+	{
+	protected:
+		string mFileName;
+		string mMessage;
+		int mLine;
+		cusolverStatus_t mErr;
+
+	public:
+		//! Default constructor
+		//Default constructor
+		CusolverException();
+
+		~CusolverException() throw();
+
+		//! CudaException constructor
+		/*!
+			\param aMessage Ecxeption message
+		*/
+		//CudaException constructor
+		CusolverException(string aMessage);
+
+		//! CudaException constructor
+		/*!
+			\param aFileName Source code file where the exception was thrown
+			\param aLine Code line where the exception was thrown
+			\param aMessage Ecxeption message
+			\param aErr CUresult error code
+		*/
+		//CudaException constructor
+		CusolverException(string aFileName, int aLine, string aMessage, cusolverStatus_t aErr);
+
+		//! Returns "CudaException"
+		//Returns "CudaException"
+		virtual const char* what() const throw();
+
+		//! Returns an error message
+		//Returns an error message
+		virtual string GetMessage() const;
+	};
+
+	//! Translates a cufftResult error code into a human readable error description, if \p err is not CUDA_SUCCESS.
+	/*!
+		\param file Source code file where the exception was thrown
+		\param line Code line where the exception was thrown
+		\param err CUresult error code
+	*/
+	//Translates a CUresult error code into a human readable error description, if err is not CUDA_SUCCESS.
+	inline void __cusolverSafeCall(cusolverStatus_t err, const char* file, const int line)
+	{
+		if (CUSOLVER_STATUS_SUCCESS != err)
+		{
+			std::string errMsg;
+			switch (err)
+			{
+			case CUSOLVER_STATUS_NOT_INITIALIZED:
+				errMsg = "CUSOLVER_STATUS_NOT_INITIALIZED";
+				break;
+			case CUSOLVER_STATUS_ALLOC_FAILED:
+				errMsg = "CUSOLVER_STATUS_ALLOC_FAILED";
+				break;
+			case CUSOLVER_STATUS_INVALID_VALUE:
+				errMsg = "CUSOLVER_STATUS_INVALID_VALUE";
+				break;
+			case CUSOLVER_STATUS_ARCH_MISMATCH:
+				errMsg = "CUSOLVER_STATUS_ARCH_MISMATCH";
+				break;
+			case CUSOLVER_STATUS_MAPPING_ERROR:
+				errMsg = "CUSOLVER_STATUS_MAPPING_ERROR";
+				break;
+			case CUSOLVER_STATUS_EXECUTION_FAILED:
+				errMsg = "CUSOLVER_STATUS_EXECUTION_FAILED";
+				break;
+			case CUSOLVER_STATUS_INTERNAL_ERROR:
+				errMsg = "CUSOLVER_STATUS_INTERNAL_ERROR";
+				break;
+			case CUSOLVER_STATUS_MATRIX_TYPE_NOT_SUPPORTED:
+				errMsg = "CUSOLVER_STATUS_MATRIX_TYPE_NOT_SUPPORTED";
+				break;
+			case CUSOLVER_STATUS_NOT_SUPPORTED:
+				errMsg = "CUSOLVER_STATUS_NOT_SUPPORTED";
+				break;
+			case CUSOLVER_STATUS_ZERO_PIVOT:
+				errMsg = "CUSOLVER_STATUS_ZERO_PIVOT";
+				break;
+			case CUSOLVER_STATUS_INVALID_LICENSE:
+				errMsg = "CUSOLVER_STATUS_INVALID_LICENSE";
+				break;
+			case CUSOLVER_STATUS_IRS_PARAMS_NOT_INITIALIZED:
+				errMsg = "CUSOLVER_STATUS_IRS_PARAMS_NOT_INITIALIZED";
+				break;
+			case CUSOLVER_STATUS_IRS_PARAMS_INVALID:
+				errMsg = "CUSOLVER_STATUS_IRS_PARAMS_INVALID";
+				break;
+			case CUSOLVER_STATUS_IRS_PARAMS_INVALID_PREC:
+				errMsg = "CUSOLVER_STATUS_IRS_PARAMS_INVALID_PREC";
+				break;
+			case CUSOLVER_STATUS_IRS_PARAMS_INVALID_REFINE:
+				errMsg = "CUSOLVER_STATUS_IRS_PARAMS_INVALID_REFINE";
+				break;
+			case CUSOLVER_STATUS_IRS_PARAMS_INVALID_MAXITER:
+				errMsg = "CUSOLVER_STATUS_IRS_PARAMS_INVALID_MAXITER";
+				break;
+			case CUSOLVER_STATUS_IRS_INTERNAL_ERROR:
+				errMsg = "CUSOLVER_STATUS_IRS_INTERNAL_ERROR";
+				break;
+			case CUSOLVER_STATUS_IRS_NOT_SUPPORTED:
+				errMsg = "CUSOLVER_STATUS_IRS_NOT_SUPPORTED";
+				break;
+			case CUSOLVER_STATUS_IRS_OUT_OF_RANGE:
+				errMsg = "CUSOLVER_STATUS_IRS_OUT_OF_RANGE";
+				break;
+			case CUSOLVER_STATUS_IRS_NRHS_NOT_SUPPORTED_FOR_REFINE_GMRES:
+				errMsg = "CUSOLVER_STATUS_IRS_NRHS_NOT_SUPPORTED_FOR_REFINE_GMRES";
+				break;
+			case CUSOLVER_STATUS_IRS_INFOS_NOT_INITIALIZED:
+				errMsg = "CUSOLVER_STATUS_IRS_INFOS_NOT_INITIALIZED";
+				break;
+			case CUSOLVER_STATUS_IRS_INFOS_NOT_DESTROYED:
+				errMsg = "CUSOLVER_STATUS_IRS_INFOS_NOT_DESTROYED";
+				break;
+			case CUSOLVER_STATUS_IRS_MATRIX_SINGULAR:
+				errMsg = "CUSOLVER_STATUS_IRS_MATRIX_SINGULAR";
+				break;
+			case CUSOLVER_STATUS_INVALID_WORKSPACE:
+				errMsg = "CUSOLVER_STATUS_INVALID_WORKSPACE";
+				break;
+			}
+
+			CusolverException ex(file, line, errMsg, err);
+			throw ex;
 		} //if CUDA_SUCCESS
 	}
 }

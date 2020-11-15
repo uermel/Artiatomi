@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.13)
-set(CMAKE_CUDA_COMPILER /usr/local/cuda-10.1/bin/nvcc)
+if(UNIX)
+	set(CMAKE_CUDA_COMPILER /usr/local/cuda-10.1/bin/nvcc)
+endif()
 project(Artiatomi LANGUAGES CUDA CXX)
 
 set(CMAKE_BUILD_TYPE Debug)
@@ -17,6 +19,7 @@ set(CLICKER_PATH "src/Clicker" CACHE PATH "Path to Clicker source.")
 set(EMSART_PATH "src/EmSART" CACHE PATH "Path to EmSART source.")
 set(ISA_PATH "src/ImageStackAlignator" CACHE PATH "Path to ImageStackAlignator source.")
 set(STA_PATH "src/SubTomogramAverageMPI" CACHE PATH "Path to SubTomogramAverageMPI source.")
+set(PCA_PATH "src/PCAClassification" CACHE PATH "Path to PCAClassification source.")
 
 if(UNIX)
 	set(CUDA_PATH "/usr/local/cuda-10.1" CACHE PATH "Path to CUDA root")
@@ -40,7 +43,7 @@ set(CUDA_LIBS ${CUDA_CUDA_LIBRARY}
 				${CUDA_nppc_LIBRARY}
 				${CUDA_nppial_LIBRARY}
 				${CUDA_nppicc_LIBRARY}
-				${CUDA_nppicom_LIBRARY}
+				# ${CUDA_nppicom_LIBRARY}
 				${CUDA_nppidei_LIBRARY}
 				${CUDA_nppif_LIBRARY} 
 				${CUDA_nppig_LIBRARY}
@@ -49,23 +52,31 @@ set(CUDA_LIBS ${CUDA_CUDA_LIBRARY}
 				${CUDA_nppisu_LIBRARY}
 				${CUDA_nppitc_LIBRARY}
 				${CUDA_npps_LIBRARY}
-				${CUDA_LIBRARIES})
+				${CUDA_LIBRARIES}
+                ${CUDA_cusolver_LIBRARY})
 
 #set(CUDA_LIBS ${CUDA_LIBRARIES})
-set(BIN2C_EXEC /usr/local/cuda-10.1/bin/bin2c) #in cuda toolkit binary path
+if(UNIX)
+	set(BIN2C_EXEC /usr/local/cuda-10.1/bin/bin2c) #in cuda toolkit binary path
+endif()
+if(WIN32)
+	set(BIN2C_EXEC bin2c) #in cuda toolkit binary path
+endif()
+
+
 ######################### CUDA #############################
 if (UNIX)
 	set(OpenCL_INCLUDE_DIR "/usr/local/cuda/include")
 	set(OpenCL_LIBRARY "/usr/local/cuda/lib64/libOpenCL.so")
+	message( ${OpenCL_INCLUDE_DIR} )
+	message( ${OpenCL_LIBRARIES} )
+	#message( ${OPENGL_INCLUDE_DIR} )
+	#message( ${OPENGL_LIBRARIES} )
 endif()
 	
 find_package(OpenCL REQUIRED)
 find_package(OpenGL REQUIRED)
 
-message( ${OpenCL_INCLUDE_DIR} )
-message( ${OpenCL_LIBRARIES} )
-#message( ${OPENGL_INCLUDE_DIR} )
-#message( ${OPENGL_LIBRARIES} )
 ######################### OpenCL #############################
 
 ######################### FFTW ###########################
@@ -463,7 +474,9 @@ add_dependencies(ImageStackAlignator isa_ptx_header)
 target_include_directories(ImageStackAlignator PUBLIC ${ISA_INC})
 target_link_libraries(ImageStackAlignator ${ISA_LIB})
 target_compile_definitions(ImageStackAlignator PUBLIC NO_OPENCL)
-target_compile_options(ImageStackAlignator PUBLIC -fpermissive)
+if(UNIX)
+    target_compile_options(ImageStackAlignator PUBLIC -fpermissive)
+endif()
 ######################################################################
 
 ######################### EmSART Common ##############################
@@ -595,7 +608,9 @@ add_dependencies(EmSART wbp_ptx_header)
 target_include_directories(EmSART PUBLIC ${EMSART_INC})
 target_link_libraries(EmSART ${EMSART_LIB})
 target_compile_definitions(EmSART PUBLIC NO_OPENCL USE_MPI)
-target_compile_options(EmSART PUBLIC -fpermissive)
+if(UNIX)
+    target_compile_options(EmSART PUBLIC -fpermissive)
+endif()
 ######################### EmSART #####################################
 
 ######################### EmSARTRefine ###############################
@@ -629,7 +644,9 @@ add_dependencies(EmSARTRefine wbp_ptx_header)
 target_include_directories(EmSARTRefine PUBLIC ${EMSARTREFINE_INC})
 target_link_libraries(EmSARTRefine ${EMSARTREFINE_LIB})
 target_compile_definitions(EmSARTRefine PUBLIC NO_OPENCL REFINE_MODE)
-target_compile_options(EmSARTRefine PUBLIC -fpermissive)
+if(UNIX)
+    target_compile_options(EmSARTRefine PUBLIC -fpermissive)
+endif()
 ######################### EmSARTRefine ###############################
 
 ######################### EmSARTSubVolumes ###########################
@@ -663,7 +680,9 @@ add_dependencies(EmSARTSubVols wbp_ptx_header)
 target_include_directories(EmSARTSubVols PUBLIC ${EMSARTSUBVOLS_INC})
 target_link_libraries(EmSARTSubVols ${EMSARTSUBVOLS_LIB})
 target_compile_definitions(EmSARTSubVols PUBLIC NO_OPENCL USE_MPI SUBVOLREC_MODE)
-target_compile_options(EmSARTSubVols PUBLIC -fpermissive)
+if(UNIX)
+    target_compile_options(EmSARTSubVols PUBLIC -fpermissive)
+endif()
 ######################### EmSARTSubVolumes ###############################
 
 
@@ -682,6 +701,46 @@ ADD_LATEX_DOCUMENT(
 )
 endif()
 ######################### Tutorial #####################################
+
+
+######################### SubTomogramTools ########################
+set(SUBTOMOTOOLS_COMMON_SRC
+        ${CUDA_HELPERS_SRC}
+        ${THREADING_SRC}
+
+        ${EMTOOLS_PATH}/SubTomogramTools/CorrelationKernel.cpp
+        ${EMTOOLS_PATH}/SubTomogramTools/Correlator3D.cpp
+        ${EMTOOLS_PATH}/SubTomogramTools/RotationKernel.cpp
+        ${EMTOOLS_PATH}/SubTomogramTools/RotationMatrix.cpp
+        ${EMTOOLS_PATH}/SubTomogramTools/Rotator.cpp
+        )
+
+set(SUBTOMOTOOLS_COMMON_INC
+        ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+        ${CUDA_HELPERS_INC}
+        ${EMTOOLS_PATH}/SubTomogramTools
+        )
+
+set(SUBTOMOTOOLS_COMMON_LIB
+        ${CUDA_LIBS}
+        ${CUDA_HELPERS_LIB}
+        )
+
+set(CMAKE_VERBOSE_MAKEFILE ON)
+
+# PTX-Kernel files
+cuda_compile_ptx(SUBTOMOCORR_PTX_FILES ${EMTOOLS_PATH}/SubTomogramTools/Kernels/CorrelationKernel.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMTOOLS_PATH}/SubTomogramTools/Kernels/CorrelationKernel.cu.h COMMAND ${BIN2C_EXEC} -p 0 --const --name SubTomogramCorrelationKernel ${SUBTOMOCORR_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMTOOLS_PATH}/SubTomogramTools/Kernels/CorrelationKernel.cu.h DEPENDS ${SUBTOMOCORR_PTX_FILES})
+add_custom_target(subtomocorr_ptx_header ALL
+        DEPENDS ${CMAKE_SOURCE_DIR}/${EMTOOLS_PATH}/SubTomogramTools/Kernels/CorrelationKernel.cu.h ${EMTOOLS_PATH}/SubTomogramTools/Kernels/CorrelationKernel.cu
+        SOURCES ${EMTOOLS_PATH}/SubTomogramTools/Kernels/CorrelationKernel.cu)
+
+cuda_compile_ptx(SUBTOMOROT_PTX_FILES ${EMTOOLS_PATH}/SubTomogramTools/Kernels/RotationKernel.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMTOOLS_PATH}/SubTomogramTools/Kernels/RotationKernel.cu.h COMMAND ${BIN2C_EXEC} -p 0 --const --name SubTomogramRotationKernel ${SUBTOMOROT_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMTOOLS_PATH}/SubTomogramTools/Kernels/RotationKernel.cu.h DEPENDS ${SUBTOMOROT_PTX_FILES})
+add_custom_target(subtomorot_ptx_header ALL
+        DEPENDS ${CMAKE_SOURCE_DIR}/${EMTOOLS_PATH}/SubTomogramTools/Kernels/RotationKernel.cu.h ${EMTOOLS_PATH}/SubTomogramTools/Kernels/RotationKernel.cu
+        SOURCES ${EMTOOLS_PATH}/SubTomogramTools/Kernels/RotationKernel.cu)
+######################### SubTomogramTools ########################
 
 
 ######################### STA Common ########################
@@ -763,7 +822,9 @@ add_dependencies(SubTomogramAverageMPI sta_basic_ptx_header)
 target_include_directories(SubTomogramAverageMPI PUBLIC ${STA_INC})
 target_link_libraries(SubTomogramAverageMPI ${STA_LIB})
 target_compile_definitions(SubTomogramAverageMPI PUBLIC NO_OPENCL USE_MPI)
-target_compile_options(SubTomogramAverageMPI PUBLIC -fpermissive)
+if(UNIX)
+    target_compile_options(SubTomogramAverageMPI PUBLIC -fpermissive)
+endif()
 ######################### SubTomogramAverageMPI ########################
 
 ######################### AddParticles ########################
@@ -792,10 +853,71 @@ add_dependencies(AddParticles sta_basic_ptx_header)
 target_include_directories(AddParticles PUBLIC ${ADDPARTICLES_INC})
 target_link_libraries(AddParticles ${ADDPARTICLES_LIB})
 target_compile_definitions(AddParticles PUBLIC NO_OPENCL USE_MPI)
-target_compile_options(AddParticles PUBLIC -fpermissive)
+if(UNIX)
+    target_compile_options(AddParticles PUBLIC -fpermissive)
+endif()
 ######################### AddParticles ########################
 
 
 
+
+##############################################################
+######################### PCAClassification ################
+set(PCA_SRC
+        ${FILEIO_SRC}
+        ${CUDA_HELPERS_SRC}
+        ${MK_LOG_SRC}
+        ${THREADING_SRC}
+        ${FILTER_GRAPH_SRC}
+        ${MINIMIZATION_SRC}
+        ${SUBTOMOTOOLS_COMMON_SRC}
+
+        ${PCA_PATH}/PCAClassification.cpp
+        ${PCA_PATH}/KMeans.cpp
+        ${PCA_PATH}/utils/Config.cpp
+        ${PCA_PATH}/utils/ConfigExceptions.cpp
+		)
+
+set(PCA_INC
+        ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+        ${EMTOOLS_PATH}
+        ${FILEIO_INC}
+        ${SUBTOMOTOOLS_COMMON_INC}
+        ${CUDA_HELPERS_INC}
+        ${MPI_CXX_INCLUDE_DIRS})
+
+set(PCA_LIB
+        ${CUDA_LIBS}
+        ${FILEIO_LIB}
+        ${SUBTOMOTOOLS_COMMON_LIB}
+        ${MK_LOG_LIB}
+        ${MINIMIZATION_LIB}
+        ${THREADING_LIB}
+        ${FILTER_GRAPH_LIB}
+        ${MPI_CXX_LIBRARIES}
+		)
+if(UNIX)
+set(PCA_LIB 
+		${PCA_LIB}
+		m)
+endif()
+
+set(CMAKE_VERBOSE_MAKEFILE ON)
+
+# Executable
+add_executable(PCAClassification
+        ${PCA_SRC})
+
+# Executable depends on ptx files
+add_dependencies(PCAClassification subtomocorr_ptx_header)  
+add_dependencies(PCAClassification subtomorot_ptx_header)  
+
+target_include_directories(PCAClassification PUBLIC ${PCA_INC})
+target_link_libraries(PCAClassification ${PCA_LIB})
+target_compile_definitions(PCAClassification PUBLIC NO_OPENCL USE_MPI)
+if(UNIX)
+    target_compile_options(PCAClassification PUBLIC -fpermissive)
+endif()
+######################################################################
 
 

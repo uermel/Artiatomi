@@ -62,6 +62,8 @@ public:
 	void selectTomo(int index);
     void getRefIndeces(std::vector<int> &unique, int* &correspond, int &count);
 
+	void getWedgeIndeces(std::vector<int>& unique, int*& correspond, int& count);
+
 	int GetParticleCount();
 
 	float GetDistance(int aIndex1, int aIndex2);

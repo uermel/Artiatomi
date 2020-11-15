@@ -262,6 +262,24 @@ inline __host__ __device__ uint4 make_uint4(int4 a)
     return make_uint4(uint(a.x), uint(a.y), uint(a.z), uint(a.w));
 }
 
+inline dim3 make_dim3(uint a, uint b, uint c)
+{
+    dim3 ret;
+    ret.x = a;
+    ret.y = b;
+    ret.z = c;
+    return ret;
+}
+
+inline dim3 make_dim3(uint3 val)
+{
+    dim3 ret;
+    ret.x = val.x;
+    ret.y = val.y;
+    ret.z = val.z;
+    return ret;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // negate
 ////////////////////////////////////////////////////////////////////////////////
