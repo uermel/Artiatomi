@@ -22,7 +22,7 @@
 
 
 #include "Correlator3D.h"
-#include "Kernels/ConversionKernel.cu.h"
+#include "Kernels/CorrelationKernel.cu.h"
 #include <CudaException.h>
 
 using namespace Cuda;
@@ -70,7 +70,7 @@ Correlator3D::Correlator3D(CudaContext* aCtx, int aSize, CudaDeviceVariable& aFi
 	cufftSetWorkArea(planR2C, (void*)scratchMemory->GetDevicePtr());
 	cufftSetWorkArea(planC2R, (void*)scratchMemory->GetDevicePtr());
 
-	CUmodule cuMod = aCtx->LoadModulePTX(SubTomogramConversionKernel, 0, false, false);
+	CUmodule cuMod = aCtx->LoadModulePTX(SubTomogramCorrelationKernel, 0, false, false);
 
 	kernelFftshiftReal = new FftshiftRealKernel(cuMod);
 	kernelEnergynorm = new EnergynormKernel(cuMod);

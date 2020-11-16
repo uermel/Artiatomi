@@ -22,6 +22,7 @@
 
 #include "KMeans.h"
 #include <random>
+#include <cfloat>
 
 KMeans::KMeans(int aDimensions, int aLength, int aClasses, float* aData)
 	: dimensions(aDimensions),

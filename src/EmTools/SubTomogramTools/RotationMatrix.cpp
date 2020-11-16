@@ -141,7 +141,7 @@ RotationMatrix::RotationMatrix(float phi, float psi, float theta)
 	_data[2][2] = costheta;
 }
 
-RotationMatrix::RotationMatrix(RotationMatrix& rotMat)
+RotationMatrix::RotationMatrix(const RotationMatrix& rotMat)
 {
 	_data[0][0] = rotMat._data[0][0];
 	_data[0][1] = rotMat._data[0][1];

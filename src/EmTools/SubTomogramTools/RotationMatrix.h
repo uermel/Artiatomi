@@ -35,7 +35,7 @@ public:
 	RotationMatrix();
 	RotationMatrix(float aMatrix[3][3]);
 	RotationMatrix(float phi, float psi, float theta);
-	RotationMatrix(RotationMatrix& rotMat);
+	RotationMatrix(const RotationMatrix& rotMat);
 
 	void GetEulerAngles(float& phi, float& psi, float& theta);
 	void GetData(float data[3][3]);
