@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
 if(UNIX)
-	set(CMAKE_CUDA_COMPILER /usr/local/cuda-10.1/bin/nvcc)
+	set(CMAKE_CUDA_COMPILER /usr/local/cuda-11.1/bin/nvcc)
 endif()
 project(Artiatomi LANGUAGES CUDA CXX)
 
@@ -22,7 +22,7 @@ set(STA_PATH "src/SubTomogramAverageMPI" CACHE PATH "Path to SubTomogramAverageM
 set(PCA_PATH "src/PCAClassification" CACHE PATH "Path to PCAClassification source.")
 
 if(UNIX)
-	set(CUDA_PATH "/usr/local/cuda-10.1" CACHE PATH "Path to CUDA root")
+	set(CUDA_PATH "/usr/local/cuda-11.1" CACHE PATH "Path to CUDA root")
 endif()
 
 if(WIN32)
@@ -57,7 +57,7 @@ set(CUDA_LIBS ${CUDA_CUDA_LIBRARY}
 
 #set(CUDA_LIBS ${CUDA_LIBRARIES})
 if(UNIX)
-	set(BIN2C_EXEC /usr/local/cuda-10.1/bin/bin2c) #in cuda toolkit binary path
+	set(BIN2C_EXEC /usr/local/cuda-11.1/bin/bin2c) #in cuda toolkit binary path
 endif()
 if(WIN32)
 	set(BIN2C_EXEC bin2c) #in cuda toolkit binary path
@@ -68,14 +68,17 @@ endif()
 if (UNIX)
 	set(OpenCL_INCLUDE_DIR "/usr/local/cuda/include")
 	set(OpenCL_LIBRARY "/usr/local/cuda/lib64/libOpenCL.so")
+endif()
+	
+find_package(OpenCL REQUIRED)
+find_package(OpenGL REQUIRED)
+
+if (UNIX)
 	message( ${OpenCL_INCLUDE_DIR} )
 	message( ${OpenCL_LIBRARIES} )
 	#message( ${OPENGL_INCLUDE_DIR} )
 	#message( ${OPENGL_LIBRARIES} )
 endif()
-	
-find_package(OpenCL REQUIRED)
-find_package(OpenGL REQUIRED)
 
 ######################### OpenCL #############################
 
