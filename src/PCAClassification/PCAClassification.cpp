@@ -42,6 +42,8 @@
 #include <Rotator.h>
 
 // Self
+#include "Kernels/kernels.cu.h"
+#include "PCAKernels.h"
 #include "utils/Config.h"
 #include "KMeans.h"
 
@@ -261,6 +263,10 @@ int main(int argc, char* argv[])
 		int volSize = mask.GetFileHeader().DimX;
 		int maskedVoxels = 0;
 		vector<int> maskIndices;
+
+		CUmodule mod = ctx->LoadModulePTX(PCAKernel, 0, false, false);
+		ComputeEigenImagesKernel kernelEigenImages(mod);
+
 		CudaDeviceVariable d_particle(volSize* volSize* volSize * sizeof(float));
 		CudaDeviceVariable d_particleRef(volSize* volSize* volSize * sizeof(float));
 		CudaDeviceVariable d_mask(volSize* volSize* volSize * sizeof(float));
@@ -278,6 +284,7 @@ int main(int argc, char* argv[])
 		cublasFillMode_t uplo = CUBLAS_FILL_MODE_UPPER;
 		cusolverEigRange_t range = CUSOLVER_EIG_RANGE_I;
 
+		CudaDeviceVariable d_eigenImages((size_t)aConfig.NumberOfEigenVectors * volSize * volSize * volSize * sizeof(float));
 		CudaDeviceVariable d_covVarMat((size_t)totalCount * totalCount * sizeof(float));
 		CudaDeviceVariable d_eigenVecs((size_t)totalCount * totalCount * sizeof(float)); //check size
 		CudaDeviceVariable d_eigenVals(totalCount * sizeof(float)); //check size
@@ -574,11 +581,11 @@ int main(int argc, char* argv[])
 
 			if (mpi_part == 0)
 			{
-				printf("Distribution on nodes:\n");
+				printf("  Distribution on nodes:\n");
 
 				for (int i = 0; i < mpi_size; i++)
 				{
-					printf("Node %d (rows %d -> %d): %d CCs\n", i, startEntries[i], endEntries[i], ccToCompute[i]);
+					printf("  Node %d (rows %d -> %d): %d CCs\n", i, startEntries[i], endEntries[i], ccToCompute[i]);
 				}
 			}
 
@@ -587,7 +594,7 @@ int main(int argc, char* argv[])
 			{
 				if (mpi_part == 0)
 				{
-					printf("processing row %d of %d in matrix\n", pBlock1, endEntries[mpi_part]); fflush(stdout);
+					printf("  processing row %d of %d in matrix\n", pBlock1, endEntries[mpi_part]); fflush(stdout);
 				}
 				//load particles for block 1 from disk and make them mean free
 				for (int p1 = pBlock1; p1 < pBlock1 + aConfig.BlockSize && p1 < endEntries[mpi_part]; p1++)
@@ -851,6 +858,11 @@ int main(int argc, char* argv[])
 		//share eigen vectors/values with nodes	
 		MPI_Bcast(CCMatrix, totalCount* totalCount, MPI_FLOAT, 0, MPI_COMM_WORLD);
 		MPI_Bcast(eigenValuesSorted, aConfig.NumberOfEigenVectors, MPI_FLOAT, 0, MPI_COMM_WORLD);
+
+		if (mpi_part > 0)
+		{
+			d_covVarMat.CopyHostToDevice(CCMatrix);
+		}
 	#endif
 
 
@@ -863,6 +875,8 @@ int main(int argc, char* argv[])
 		{
 			printf("Step 5: Compute Eigen images\n"); fflush(stdout);
 		}
+
+		d_eigenImages.Memset(0);
 
 		for (size_t particle = startParticle; particle < endParticle; particle++)
 		{
@@ -893,21 +907,24 @@ int main(int argc, char* argv[])
 			//apply mask again to have non masked area =0
 			nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
 
-			d_particle.CopyDeviceToHost(part.GetData());
-			float* data = (float*)part.GetData();
+			//d_particle.CopyDeviceToHost(part.GetData());
+			//float* data = (float*)part.GetData();
 
-			for (int eigenImage = 0; eigenImage < aConfig.NumberOfEigenVectors; eigenImage++)
-			{
-				for (int voxel = 0; voxel < maskedVoxels; voxel++)
-				{
-					float ev = CCMatrix[particle + (aConfig.NumberOfEigenVectors - 1 - eigenImage) * totalCount]; //eigenvectors are in inverse order (small to large eigen value)
-					int unmaskedIndex = maskIndices[voxel];
-					float vo = data[unmaskedIndex];
-					eigenImages[eigenImage * volSize * volSize * volSize + unmaskedIndex] += ev * vo;
-				}
-			}
+			//for (int eigenImage = 0; eigenImage < aConfig.NumberOfEigenVectors; eigenImage++)
+			//{
+			//	for (int voxel = 0; voxel < maskedVoxels; voxel++)
+			//	{
+			//		float ev = CCMatrix[particle + (aConfig.NumberOfEigenVectors - 1 - eigenImage) * totalCount]; //eigenvectors are in inverse order (small to large eigen value)
+			//		int unmaskedIndex = maskIndices[voxel];
+			//		float vo = data[unmaskedIndex];
+			//		eigenImages[eigenImage * volSize * volSize * volSize + unmaskedIndex] += ev * vo;
+			//	}
+			//}
+
+			kernelEigenImages(volSize * volSize * volSize, aConfig.NumberOfEigenVectors, particle, totalCount, d_covVarMat, d_particle, d_eigenImages);
 		}
 
+		d_eigenImages.CopyDeviceToHost(eigenImages);
 
 	#ifdef USE_MPI	
 		//accumulate partial eigenImages from MPI nodes
@@ -929,6 +946,7 @@ int main(int argc, char* argv[])
 		}
 		//share eigen images with nodes	
 		MPI_Bcast(eigenImages, aConfig.NumberOfEigenVectors* volSize* volSize* volSize, MPI_FLOAT, 0, MPI_COMM_WORLD);
+		d_eigenImages.CopyHostToDevice(eigenImages);
 	#endif
 
 		if (aConfig.EigenImages.size() > 1 && mpi_part == 0)
@@ -982,18 +1000,26 @@ int main(int argc, char* argv[])
 			//apply mask again to have non masked area =0
 			nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
 
-			d_particle.CopyDeviceToHost(part.GetData());
-			float* data = (float*)part.GetData();
+			//d_particle.CopyDeviceToHost(part.GetData());
+			//float* data = (float*)part.GetData();
 
 			for (int eigenImage = 0; eigenImage < aConfig.NumberOfEigenVectors; eigenImage++)
 			{
-				for (int voxel = 0; voxel < maskedVoxels; voxel++)
+				/*for (int voxel = 0; voxel < maskedVoxels; voxel++)
 				{
 					int unmaskedIndex = maskIndices[voxel];
 					float ei = eigenImages[eigenImage * volSize * volSize * volSize + unmaskedIndex];
 					float vo = data[unmaskedIndex];
 					weightMatrix[eigenImage + particle * aConfig.NumberOfEigenVectors] += ei * vo * eigenValuesSorted[eigenImage] * eigenValuesSorted[eigenImage];
-				}
+				}*/
+				//d_particleRef.CopyHostToDevice(eigenImages + (eigenImage * volSize * volSize * volSize));
+				
+				nppSafeCall(nppsMul_32f(((float*)d_eigenImages.GetDevicePtr()) + ((size_t)eigenImage * volSize * volSize * volSize), (float*)d_particle.GetDevicePtr(), (float*)d_particleRef.GetDevicePtr(), volSize* volSize* volSize));
+				nppSafeCall(nppsSum_32f((float*)d_particleRef.GetDevicePtr(), volSize* volSize* volSize, (float*)d_sum.GetDevicePtr(), (Npp8u*)d_buffer.GetDevicePtr()));
+				float eivo = 0;
+				d_sum.CopyDeviceToHost(&eivo);
+				eivo /= volSize * volSize * volSize; //scale to number of voxels to keep values in a reasonable range;
+				weightMatrix[eigenImage + particle * aConfig.NumberOfEigenVectors] = eivo * eigenValuesSorted[eigenImage] * eigenValuesSorted[eigenImage];
 			}
 		}
 
@@ -1043,6 +1069,23 @@ int main(int argc, char* argv[])
 			KMeans kmeans(aConfig.NumberOfEigenVectors, totalCount, aConfig.NumberOfClasses, weightMatrix);
 
 			int* result = kmeans.GetClasses();
+
+			printf("  Centroids of classes\n");
+			printf("  ");
+			for (int c = 0; c < aConfig.NumberOfClasses; c++)
+			{
+				printf("Class %-6d ", c);
+			}
+			printf("\n  ");
+			for (int ev = 0; ev < aConfig.NumberOfEigenVectors; ev++)
+			{
+				for (int c = 0; c < aConfig.NumberOfClasses; c++)
+				{
+					printf("%12.2f ", kmeans.GetCentroids()[c][ev]);
+				}
+				printf("\n  ");
+			}
+			printf("\n");
 
 			vector<int> classCount(aConfig.NumberOfClasses, 0);
 		

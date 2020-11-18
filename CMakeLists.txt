@@ -874,8 +874,9 @@ set(PCA_SRC
         ${FILTER_GRAPH_SRC}
         ${MINIMIZATION_SRC}
         ${SUBTOMOTOOLS_COMMON_SRC}
-
+        
         ${PCA_PATH}/PCAClassification.cpp
+        ${PCA_PATH}/PCAKernels.cpp
         ${PCA_PATH}/KMeans.cpp
         ${PCA_PATH}/utils/Config.cpp
         ${PCA_PATH}/utils/ConfigExceptions.cpp
@@ -907,11 +908,19 @@ endif()
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
+# PTX-Kernel files
+cuda_compile_ptx(PCA_PTX_FILES ${PCA_PATH}/Kernels/kernels.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${PCA_PATH}/Kernels/kernels.cu.h COMMAND ${BIN2C_EXEC} -p 0 --const --name PCAKernel ${PCA_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${PCA_PATH}/Kernels/kernels.cu.h DEPENDS ${PCA_PTX_FILES})
+add_custom_target(pca_ptx_header ALL
+        DEPENDS ${CMAKE_SOURCE_DIR}/${PCA_PATH}/Kernels/kernels.cu.h ${PCA_PATH}/Kernels/kernels.cu
+        SOURCES ${PCA_PATH}/Kernels/kernels.cu)
+
 # Executable
 add_executable(PCAClassification
         ${PCA_SRC})
 
 # Executable depends on ptx files
+add_dependencies(PCAClassification pca_ptx_header)  
 add_dependencies(PCAClassification subtomocorr_ptx_header)  
 add_dependencies(PCAClassification subtomorot_ptx_header)  
 

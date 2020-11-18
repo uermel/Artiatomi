@@ -21,52 +21,21 @@
 ////////////////////////////////////////////////////////////////////////
 
 
-#ifndef KMEANS_H
-#define KMEANS_H
+#ifndef PCAKERNEL_H
+#define PCAKERNEL_H
 
-#include <vector>
+#include <CudaContext.h>
+#include <CudaKernel.h>
+#include <cutil_math_.h>
 
-using namespace std;
 
-//Implements KMeans using KMeans++ initialization.
-//Loosely based on the implementation given at https://commons.apache.org/proper/commons-math/userguide/ml.html
-
-class KMeans
+class ComputeEigenImagesKernel : public Cuda::CudaKernel
 {
-private:
-	int dimensions;
-	int length;
-	int classes;
-	bool computed;
-		
-	vector<bool> isTaken;
-
-	vector<vector<float> > data;
-
-	vector<vector<float> > centroids;
-
-	vector<float> distances;
-
-	vector<int> classAssigned;
-
-	float computeDistance(int index1, int index2);
-
-	float computeDistanceCentroid(int index1, int index2);
-
-	int getNearestCluster(int index);
-
-	int assignPointsToClusters();
-
-	void recomputeCentroids();
-
-
 public:
+	ComputeEigenImagesKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
+	ComputeEigenImagesKernel(CUmodule aModule);
 
-	KMeans(int aDimensions, int aLength, int aClasses, float* aData);
-
-	int* GetClasses();
-
-	vector<vector<float> >& GetCentroids();
+	float operator()(int numberOfVoxels, int numberOfEigenImages, int particle, int numberOfParticles, Cuda::CudaDeviceVariable& ccMatrix, Cuda::CudaDeviceVariable& volIn, Cuda::CudaDeviceVariable& eigenImages);
 };
 
 #endif

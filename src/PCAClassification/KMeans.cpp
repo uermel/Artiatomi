@@ -161,7 +161,8 @@ int* KMeans::GetClasses()
 
 	assignPointsToClusters();
 
-	while (true)
+	int maxIter = 10000;
+	for (int i = 0; i < maxIter; i++)
 	{
 		recomputeCentroids();
 		int changes = assignPointsToClusters();
@@ -172,6 +173,11 @@ int* KMeans::GetClasses()
 	}	
 	computed = true;
 	return classAssigned.data();
+}
+
+vector<vector<float> >& KMeans::GetCentroids()
+{
+	return centroids;
 }
 
 int KMeans::getNearestCluster(int index)
