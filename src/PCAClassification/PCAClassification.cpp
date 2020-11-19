@@ -824,11 +824,17 @@ int main(int argc, char* argv[])
 			int info;
 			d_info.CopyDeviceToHost(&info);
 
-			if (info != 0)
+			if (info < 0)
 			{
 				stringstream ss;
 				ss << "Something went wrong during computation of Eigen vectors. Info returned: " << info;
 				throw std::invalid_argument(ss.str());
+			}
+			if (info > 0)
+			{
+				stringstream ss;
+				ss << "Something went wrong during computation of Eigen vectors. Info returned: " << info;
+				//throw std::invalid_argument(ss.str());
 			}
 
 			d_covVarMat.CopyDeviceToHost(CCMatrix);
