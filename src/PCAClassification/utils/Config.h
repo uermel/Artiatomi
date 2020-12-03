@@ -84,6 +84,8 @@ namespace Configuration
 			bool	UseFilterVolume;
 			int		NumberOfEigenVectors;
 			int		NumberOfClasses;
+			int		NumberOfParticlesInPCA;
+			bool	LimitNumberOfParticlesInPCA;
 			int		BlockSize;
 			string	CovVarMatrixFilename;
 			bool	ComputeCovVarMatrix;

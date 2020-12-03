@@ -51,7 +51,9 @@ namespace Configuration
 		NumberOfEigenVectors(-1),
 		BlockSize(1),
 		ComputeCovVarMatrix(true),
-		ComputeAverageParticle(true)
+		ComputeAverageParticle(true),
+		LimitNumberOfParticlesInPCA(false),
+		NumberOfParticlesInPCA(-1)
 	{
 		while (appEnvp && *appEnvp) {
 			string envEntry = *appEnvp;
@@ -203,6 +205,13 @@ namespace Configuration
 		ClassFileName = GetString("ClassFileName");
 
 		BlockSize = GetInt("BlockSize");
+
+		LimitNumberOfParticlesInPCA = GetBool("LimitNumberOfParticlesInPCA", false);
+
+		if (LimitNumberOfParticlesInPCA)
+		{
+			NumberOfParticlesInPCA = GetInt("NumberOfParticlesInPCA");
+		}
 
 	}
     Config* Config::config = NULL;

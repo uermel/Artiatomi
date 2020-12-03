@@ -28,6 +28,8 @@
 
 // System
 #include <algorithm>
+#include <numeric>
+#include <random>
 #include <fstream>
 
 // Cuda
@@ -204,17 +206,28 @@ int main(int argc, char* argv[])
 	
 		int totalCount = motl.GetParticleCount();
 		int partCount = motl.GetParticleCount() / mpi_size;
-		int partCountArray = partCount;
 		int lastPartCount = totalCount - (partCount * (mpi_size - 1));
 		int startParticle = mpi_part * partCount;
+	
+		int totalCountPCA = motl.GetParticleCount();
+		if (aConfig.LimitNumberOfParticlesInPCA)
+		{
+			totalCountPCA = aConfig.NumberOfParticlesInPCA;
+		}
+
+		int partCountPCA = totalCountPCA / mpi_size;
+		int lastPartCountPCA = totalCountPCA - (partCountPCA * (mpi_size - 1));
+		int startParticlePCA = mpi_part * partCountPCA;
 
 		//adjust last part to fit really all particles (rounding errors...)
 		if (mpi_part == mpi_size - 1)
 		{
 			partCount = lastPartCount;
+			partCountPCA = lastPartCountPCA;
 		}
 
 		int endParticle = startParticle + partCount;
+		int endParticlePCA = startParticlePCA + partCountPCA;
 
 
 		vector<int> unique_wedge_ids; // Unique wedge IDs
@@ -248,8 +261,6 @@ int main(int argc, char* argv[])
 		{
 			filter.OpenAndRead();
 		}
-
-
 
 		////////////////////////////////////
 		/// Step 1: check input and init ///
@@ -285,9 +296,9 @@ int main(int argc, char* argv[])
 		cusolverEigRange_t range = CUSOLVER_EIG_RANGE_I;
 
 		CudaDeviceVariable d_eigenImages((size_t)aConfig.NumberOfEigenVectors * volSize * volSize * volSize * sizeof(float));
-		CudaDeviceVariable d_covVarMat((size_t)totalCount * totalCount * sizeof(float));
-		CudaDeviceVariable d_eigenVecs((size_t)totalCount * totalCount * sizeof(float)); //check size
-		CudaDeviceVariable d_eigenVals(totalCount * sizeof(float)); //check size
+		CudaDeviceVariable d_covVarMat((size_t)totalCountPCA * totalCountPCA * sizeof(float));
+		CudaDeviceVariable d_eigenVecs((size_t)totalCountPCA * totalCountPCA * sizeof(float)); //check size
+		CudaDeviceVariable d_eigenVals(totalCountPCA * sizeof(float)); //check size
 		CudaDeviceVariable d_info(sizeof(int));
 
 		int64_t h_meig = 0;
@@ -305,14 +316,14 @@ int main(int argc, char* argv[])
 				jobz,
 				range,
 				uplo,
-				totalCount,
+				totalCountPCA,
 				CUDA_R_32F,
 				(float*)d_covVarMat.GetDevicePtr(),
-				totalCount,
+				totalCountPCA,
 				&something,
 				&something,
-				totalCount - aConfig.NumberOfEigenVectors + 1,
-				totalCount,
+				totalCountPCA - aConfig.NumberOfEigenVectors + 1,
+				totalCountPCA,
 				&h_meig,
 				CUDA_R_32F,
 				(float*)d_eigenVals.GetDevicePtr(),
@@ -332,10 +343,10 @@ int main(int argc, char* argv[])
 		float* sumOfParticles = new float[(size_t)volSize * volSize * volSize];
 		float* MPIBuffer = new float[(size_t)volSize * volSize * volSize];
 
-		float* CCMatrix = new float[(size_t)totalCount * totalCount];
-		memset(CCMatrix, 0, (size_t)totalCount* totalCount * sizeof(float));
-		float* CCMatrixMPI = new float[(size_t)totalCount * totalCount];
-		memset(CCMatrixMPI, 0, (size_t)totalCount* totalCount * sizeof(float));
+		float* CCMatrix = new float[(size_t)totalCountPCA * totalCountPCA];
+		memset(CCMatrix, 0, (size_t)totalCountPCA* totalCountPCA * sizeof(float));
+		float* CCMatrixMPI = new float[(size_t)totalCountPCA * totalCountPCA];
+		memset(CCMatrixMPI, 0, (size_t)totalCountPCA* totalCountPCA * sizeof(float));
 
 		float* eigenValues = new float[aConfig.NumberOfEigenVectors];
 		float* eigenValuesSorted = new float[aConfig.NumberOfEigenVectors];
@@ -405,6 +416,24 @@ int main(int argc, char* argv[])
 		Rotator rotator(ctx, volSize);
 		Correlator3D correlator(ctx, volSize, d_filter, aConfig.HighPass, aConfig.LowPass, aConfig.Sigma, aConfig.UseFilterVolume);
 
+		//prepare motive list subset of NumberOfParticlesInPCA particles:
+		std::default_random_engine rand(1234); 
+		std::vector<int> motiveListIndeces(totalCount);
+
+		if (mpi_part == 0)
+		{
+			std::iota(motiveListIndeces.begin(), motiveListIndeces.end(), 0);
+			std::shuffle(motiveListIndeces.begin(), motiveListIndeces.end(), rand);
+		}
+
+#ifdef USE_MPI	
+		//share random indeces, just to be sure they are the same on all nodes
+		MPI_Bcast(&motiveListIndeces[0], totalCount, MPI_INT, 0, MPI_COMM_WORLD);
+#endif
+
+
+
+
 		////////////////////////////////////
 		/// Step 2: sum up all particles ///
 		////////////////////////////////////
@@ -420,9 +449,9 @@ int main(int argc, char* argv[])
 		if (aConfig.ComputeAverageParticle)
 		{
 
-			for (size_t particle = startParticle; particle < endParticle; particle++)
+			for (size_t particle = startParticlePCA; particle < endParticlePCA; particle++)
 			{
-				motive m = motl.GetAt(particle);
+				motive m = motl.GetAt(motiveListIndeces[particle]);
 				stringstream ss;
 				ss << aConfig.Particles;
 				ss << m.GetIndexCoding(aConfig.NamingConv) << ".em";
@@ -455,7 +484,7 @@ int main(int argc, char* argv[])
 	#ifndef USE_MPI
 			//If not in MPI mode, scale the sum directly here, otherwise later after gathering all partial results from nodes
 			//Scale to number of particles
-			nppSafeCall(nppsDivC_32f_I(totalCount, (float*)d_meanParticle.GetDevicePtr(), volSize * volSize * volSize));
+			nppSafeCall(nppsDivC_32f_I(totalCountPCA, (float*)d_meanParticle.GetDevicePtr(), volSize * volSize * volSize));
 	#endif
 			d_meanParticle.CopyDeviceToHost(sumOfParticles);
 
@@ -481,7 +510,7 @@ int main(int argc, char* argv[])
 			{
 				//In MPI mode, scale the sum now
 				//Scale to number of particles
-				nppSafeCall(nppsDivC_32f_I(totalCount, (float*)d_meanParticle.GetDevicePtr(), volSize * volSize * volSize));
+				nppSafeCall(nppsDivC_32f_I(totalCountPCA, (float*)d_meanParticle.GetDevicePtr(), volSize * volSize * volSize));
 
 				d_meanParticle.CopyDeviceToHost(sumOfParticles);
 			}
@@ -547,7 +576,7 @@ int main(int argc, char* argv[])
 			vector<int> endEntries(mpi_size, 0);
 			vector<int> ccToCompute(mpi_size, 0);
 
-			int totalRows = totalCount;
+			int totalRows = totalCountPCA;
 
 			startEntries[0] = 0;
 			int rowsDone = 0;
@@ -571,12 +600,12 @@ int main(int argc, char* argv[])
 
 			ccToCompute[mpi_size - 1] = totalRows * totalRows - (totalRows * (totalRows + 1)) / 2;
 
-			endEntries[mpi_size - 1] = totalCount;
+			endEntries[mpi_size - 1] = totalCountPCA;
 
 			if (mpi_size == 1)
 			{
 				startEntries[0] = 0;
-				endEntries[0] = totalCount;
+				endEntries[0] = totalCountPCA;
 			}
 
 			if (mpi_part == 0)
@@ -599,7 +628,7 @@ int main(int argc, char* argv[])
 				//load particles for block 1 from disk and make them mean free
 				for (int p1 = pBlock1; p1 < pBlock1 + aConfig.BlockSize && p1 < endEntries[mpi_part]; p1++)
 				{
-					motive m = motl.GetAt(p1);
+					motive m = motl.GetAt(motiveListIndeces[p1]);
 					stringstream ss;
 					ss << aConfig.Particles;
 					ss << m.GetIndexCoding(aConfig.NamingConv) << ".em";
@@ -630,12 +659,12 @@ int main(int argc, char* argv[])
 				}
 
 				//we have to scan the entire line, i.e. all colums = all particles
-				for (int pBlock2 = pBlock1; pBlock2 < totalCount; pBlock2 += aConfig.BlockSize)
+				for (int pBlock2 = pBlock1; pBlock2 < totalCountPCA; pBlock2 += aConfig.BlockSize)
 				{
 					//load particles for block 2 from disk and make them mean free
-					for (int p2 = pBlock2; p2 < pBlock2 + aConfig.BlockSize && p2 < totalCount; p2++)
+					for (int p2 = pBlock2; p2 < pBlock2 + aConfig.BlockSize && p2 < totalCountPCA; p2++)
 					{
-						motive m = motl.GetAt(p2);
+						motive m = motl.GetAt(motiveListIndeces[p2]);
 						stringstream ss;
 						ss << aConfig.Particles;
 						ss << m.GetIndexCoding(aConfig.NamingConv) << ".em";
@@ -668,7 +697,7 @@ int main(int argc, char* argv[])
 
 					for (int p1 = pBlock1; p1 < pBlock1 + aConfig.BlockSize && p1 < endEntries[mpi_part]; p1++)
 					{
-						motive m1 = motl.GetAt(p1);
+						motive m1 = motl.GetAt(motiveListIndeces[p1]);
 						int wedgeIdx1 = 0;
 						if (!aConfig.SingleWedge)
 						{
@@ -679,12 +708,12 @@ int main(int argc, char* argv[])
 
 						d_particle.CopyHostToDevice(particleBlock1[p1 - pBlock1]);
 
-						for (int p2 = pBlock2; p2 < pBlock2 + aConfig.BlockSize && p2 < totalCount; p2++)
+						for (int p2 = pBlock2; p2 < pBlock2 + aConfig.BlockSize && p2 < totalCountPCA; p2++)
 						{
 							if (p2 > p1) //only upper diagonal part of matrix needed
 							{
 								//compute CC
-								motive m2 = motl.GetAt(p2);
+								motive m2 = motl.GetAt(motiveListIndeces[p2]);
 
 								int wedgeIdx2 = 0;
 								if (!aConfig.SingleWedge)
@@ -714,7 +743,7 @@ int main(int argc, char* argv[])
 
 								float CC = correlator.GettCCFast(d_mask, d_particle, d_particleRef, d_wedgeMerge);
 							
-								CCMatrix[p1 + p2 * totalCount] = CC;
+								CCMatrix[p1 + p2 * totalCountPCA] = CC;
 							}
 						}
 					}
@@ -727,42 +756,42 @@ int main(int argc, char* argv[])
 			{
 				for (int mpi = 1; mpi < mpi_size; mpi++)
 				{
-					MPI_Recv(CCMatrixMPI, totalCount * totalCount, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+					MPI_Recv(CCMatrixMPI, totalCountPCA * totalCountPCA, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-					for (int i = 0; i < totalCount * totalCount; i++)
+					for (int i = 0; i < totalCountPCA * totalCountPCA; i++)
 					{
 						CCMatrix[i] += CCMatrixMPI[i];
 					}
-					//Fill diagonal
-					for (int i = 0; i < totalCount; i++)
-					{
-						CCMatrix[i + totalCount * i] = 1.0f;
-					}
+					////Fill diagonal
+					//for (int i = 0; i < totalCountPCA; i++)
+					//{
+					//	CCMatrix[i + totalCountPCA * i] = 1.0f;
+					//}
 				}
 
 				//Fill diagonal
-				for (int i = 0; i < totalCount; i++)
+				for (int i = 0; i < totalCountPCA; i++)
 				{
-					CCMatrix[i + totalCount * i] = 1.0f;
+					CCMatrix[i + totalCountPCA * i] = 1.0f;
 				}			
 			}
 			else
 			{
-				MPI_Send(CCMatrix, totalCount * totalCount, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+				MPI_Send(CCMatrix, totalCountPCA * totalCountPCA, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
 			}
 
 	#endif
 	#ifndef USE_MPI
 			//Fill diagonal
-			for (int i = 0; i < totalCount; i++)
+			for (int i = 0; i < totalCountPCA; i++)
 			{
-				CCMatrix[i + totalCount * i] = 1.0f;
+				CCMatrix[i + totalCountPCA * i] = 1.0f;
 			}
 	#endif
 
 			if (mpi_part == 0)
 			{
-				emwrite(aConfig.CovVarMatrixFilename, CCMatrix, totalCount, totalCount);
+				emwrite(aConfig.CovVarMatrixFilename, CCMatrix, totalCountPCA, totalCountPCA);
 			}
 		} //if compute ccMatrix
 		else
@@ -773,7 +802,15 @@ int main(int argc, char* argv[])
 			}
 			EmFile ccMat(aConfig.CovVarMatrixFilename);
 			ccMat.OpenAndRead();
-			for (int i = 0; i < totalCount * totalCount; i++)
+
+			if (ccMat.GetFileHeader().DimX != ccMat.GetFileHeader().DimY || 
+				ccMat.GetFileHeader().DimX != totalCountPCA || 
+				ccMat.GetFileHeader().DimZ != 1)
+			{
+				throw std::invalid_argument("Provided EM file dimensions do not fit dimensions of the covariance matrix");
+			}
+
+			for (int i = 0; i < totalCountPCA * totalCountPCA; i++)
 			{
 				CCMatrix[i] = ((float*)ccMat.GetData())[i];
 			}
@@ -800,14 +837,14 @@ int main(int argc, char* argv[])
 				jobz,
 				range,
 				uplo,
-				totalCount,
+				totalCountPCA,
 				CUDA_R_32F,
 				(float*)d_covVarMat.GetDevicePtr(),
-				totalCount,
+				totalCountPCA,
 				&something,
 				&something,
-				totalCount - aConfig.NumberOfEigenVectors + 1,
-				totalCount,
+				totalCountPCA - aConfig.NumberOfEigenVectors + 1,
+				totalCountPCA,
 				&h_meig,
 				CUDA_R_32F,
 				(float*)d_eigenVals.GetDevicePtr(),
@@ -840,7 +877,7 @@ int main(int argc, char* argv[])
 			d_covVarMat.CopyDeviceToHost(CCMatrix);
 			if (aConfig.EigenVectors.size() > 1)
 			{
-				emwrite(aConfig.EigenVectors, CCMatrix, totalCount, totalCount);
+				emwrite(aConfig.EigenVectors, CCMatrix, totalCountPCA, totalCountPCA);
 			}
 
 			d_eigenVals.CopyDeviceToHost(eigenValues, aConfig.NumberOfEigenVectors * sizeof(float));
@@ -862,7 +899,7 @@ int main(int argc, char* argv[])
 
 	#ifdef USE_MPI	
 		//share eigen vectors/values with nodes	
-		MPI_Bcast(CCMatrix, totalCount* totalCount, MPI_FLOAT, 0, MPI_COMM_WORLD);
+		MPI_Bcast(CCMatrix, totalCountPCA* totalCountPCA, MPI_FLOAT, 0, MPI_COMM_WORLD);
 		MPI_Bcast(eigenValuesSorted, aConfig.NumberOfEigenVectors, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
 		if (mpi_part > 0)
@@ -884,6 +921,7 @@ int main(int argc, char* argv[])
 
 		d_eigenImages.Memset(0);
 
+		//now all particles of the motive list:
 		for (size_t particle = startParticle; particle < endParticle; particle++)
 		{
 			motive m = motl.GetAt(particle);
@@ -920,14 +958,14 @@ int main(int argc, char* argv[])
 			//{
 			//	for (int voxel = 0; voxel < maskedVoxels; voxel++)
 			//	{
-			//		float ev = CCMatrix[particle + (aConfig.NumberOfEigenVectors - 1 - eigenImage) * totalCount]; //eigenvectors are in inverse order (small to large eigen value)
+			//		float ev = CCMatrix[particle + (aConfig.NumberOfEigenVectors - 1 - eigenImage) * totalCountPCA]; //eigenvectors are in inverse order (small to large eigen value)
 			//		int unmaskedIndex = maskIndices[voxel];
 			//		float vo = data[unmaskedIndex];
 			//		eigenImages[eigenImage * volSize * volSize * volSize + unmaskedIndex] += ev * vo;
 			//	}
 			//}
 
-			kernelEigenImages(volSize * volSize * volSize, aConfig.NumberOfEigenVectors, particle, totalCount, d_covVarMat, d_particle, d_eigenImages);
+			kernelEigenImages(volSize * volSize * volSize, aConfig.NumberOfEigenVectors, particle, totalCountPCA, d_covVarMat, d_particle, d_eigenImages);
 		}
 
 		d_eigenImages.CopyDeviceToHost(eigenImages);
