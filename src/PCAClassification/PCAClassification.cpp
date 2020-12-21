@@ -279,6 +279,7 @@ int main(int argc, char* argv[])
 		ComputeEigenImagesKernel kernelEigenImages(mod);
 
 		CudaDeviceVariable d_particle(volSize* volSize* volSize * sizeof(float));
+		CudaDeviceVariable d_particleMasked(volSize* volSize* volSize * sizeof(float));
 		CudaDeviceVariable d_particleRef(volSize* volSize* volSize * sizeof(float));
 		CudaDeviceVariable d_mask(volSize* volSize* volSize * sizeof(float));
 		CudaDeviceVariable d_filter(volSize* volSize* volSize * sizeof(float));
@@ -466,16 +467,16 @@ int main(int argc, char* argv[])
 				rotator.ShiftRotateTwoStep(shift, -m.psi, -m.phi, -m.theta, d_particle);
 
 				//apply mask
-				nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
+				nppSafeCall(nppsMul_32f((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), (float*)d_particleMasked.GetDevicePtr(), volSize * volSize * volSize));
 
-				//mean free
-				nppSafeCall(nppsSum_32f((float*)d_particle.GetDevicePtr(), volSize * volSize * volSize, (float*)d_sum.GetDevicePtr(), (unsigned char*)d_buffer.GetDevicePtr()));
+				//mean free (in masked area)
+				nppSafeCall(nppsSum_32f((float*)d_particleMasked.GetDevicePtr(), volSize * volSize * volSize, (float*)d_sum.GetDevicePtr(), (unsigned char*)d_buffer.GetDevicePtr()));
 				float sum_h;
 				d_sum.CopyDeviceToHost(&sum_h);
 				nppSafeCall(nppsSubC_32f_I(sum_h / maskedVoxels, (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
 
 				//apply mask again to have non masked area =0
-				nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
+				//nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
 
 				//sum up
 				nppSafeCall(nppsAdd_32f_I((float*)d_particle.GetDevicePtr(), (float*)d_meanParticle.GetDevicePtr(), volSize * volSize * volSize));
@@ -646,16 +647,16 @@ int main(int argc, char* argv[])
 					nppSafeCall(nppsSub_32f_I((float*)d_meanParticle.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize* volSize* volSize));
 
 					//apply mask
-					nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
+					nppSafeCall(nppsMul_32f((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), (float*)d_particleMasked.GetDevicePtr(), volSize * volSize * volSize));
 
-					//mean free
-					nppSafeCall(nppsSum_32f((float*)d_particle.GetDevicePtr(), volSize * volSize * volSize, (float*)d_sum.GetDevicePtr(), (unsigned char*)d_buffer.GetDevicePtr()));
+					//mean free (in masked area)
+					nppSafeCall(nppsSum_32f((float*)d_particleMasked.GetDevicePtr(), volSize * volSize * volSize, (float*)d_sum.GetDevicePtr(), (unsigned char*)d_buffer.GetDevicePtr()));
 					float sum_h;
 					d_sum.CopyDeviceToHost(&sum_h);
 					nppSafeCall(nppsSubC_32f_I(sum_h / maskedVoxels, (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
 
 					//apply mask again to have non masked area =0
-					nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
+					//nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
 
 					d_particle.CopyDeviceToHost(particleBlock1[p1 - pBlock1]);
 				}
@@ -684,16 +685,16 @@ int main(int argc, char* argv[])
 						nppSafeCall(nppsSub_32f_I((float*)d_meanParticle.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize* volSize* volSize));
 
 						//apply mask
-						nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
+						nppSafeCall(nppsMul_32f((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), (float*)d_particleMasked.GetDevicePtr(), volSize* volSize* volSize));
 
-						//mean free
-						nppSafeCall(nppsSum_32f((float*)d_particle.GetDevicePtr(), volSize * volSize * volSize, (float*)d_sum.GetDevicePtr(), (unsigned char*)d_buffer.GetDevicePtr()));
+						//mean free (in masked area)
+						nppSafeCall(nppsSum_32f((float*)d_particleMasked.GetDevicePtr(), volSize * volSize * volSize, (float*)d_sum.GetDevicePtr(), (unsigned char*)d_buffer.GetDevicePtr()));
 						float sum_h;
 						d_sum.CopyDeviceToHost(&sum_h);
 						nppSafeCall(nppsSubC_32f_I(sum_h / maskedVoxels, (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
 
 						//apply mask again to have non masked area =0
-						nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
+						//nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
 
 						d_particle.CopyDeviceToHost(particleBlock2[p2 - pBlock2]);
 					}
@@ -945,7 +946,7 @@ int main(int argc, char* argv[])
 			//remove mean particle
 			nppSafeCall(nppsSub_32f_I((float*)d_meanParticle.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize* volSize* volSize));
 
-			//apply mask
+			//apply mask (directly to particle)
 			nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
 
 			//mean free
@@ -1031,8 +1032,10 @@ int main(int argc, char* argv[])
 			part.OpenAndRead();
 
 			d_particle.CopyHostToDevice(part.GetData());
-			nppSafeCall(nppsSub_32f_I((float*)d_meanParticle.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize* volSize* volSize));
 			correlator.FourierFilter(d_particle);
+
+			//remove mean particle
+			nppSafeCall(nppsSub_32f_I((float*)d_meanParticle.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize* volSize* volSize));
 
 			//rotate and shift particle
 			float3 shift = make_float3(-m.x_Shift, -m.y_Shift, -m.z_Shift);
