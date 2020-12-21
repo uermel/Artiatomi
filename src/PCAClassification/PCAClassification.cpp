@@ -636,12 +636,14 @@ int main(int argc, char* argv[])
 					part.OpenAndRead();
 
 					d_particle.CopyHostToDevice(part.GetData());
-					nppSafeCall(nppsSub_32f_I((float*)d_meanParticle.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize* volSize* volSize));
 					correlator.FourierFilter(d_particle);
 
 					//rotate and shift particle
 					float3 shift = make_float3(-m.x_Shift, -m.y_Shift, -m.z_Shift);
 					rotator.ShiftRotateTwoStep(shift, -m.psi, -m.phi, -m.theta, d_particle);
+
+					//remove mean particle
+					nppSafeCall(nppsSub_32f_I((float*)d_meanParticle.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize* volSize* volSize));
 
 					//apply mask
 					nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
@@ -672,12 +674,14 @@ int main(int argc, char* argv[])
 						part.OpenAndRead();
 
 						d_particle.CopyHostToDevice(part.GetData());
-						nppSafeCall(nppsSub_32f_I((float*)d_meanParticle.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize* volSize* volSize));
 						correlator.FourierFilter(d_particle);
 
 						//rotate and shift particle
 						float3 shift = make_float3(-m.x_Shift, -m.y_Shift, -m.z_Shift);
 						rotator.ShiftRotateTwoStep(shift, -m.psi, -m.phi, -m.theta, d_particle);
+
+						//remove mean particle
+						nppSafeCall(nppsSub_32f_I((float*)d_meanParticle.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize* volSize* volSize));
 
 						//apply mask
 						nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
@@ -932,12 +936,14 @@ int main(int argc, char* argv[])
 			part.OpenAndRead();
 
 			d_particle.CopyHostToDevice(part.GetData());
-			nppSafeCall(nppsSub_32f_I((float*)d_meanParticle.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize* volSize* volSize));
 			correlator.FourierFilter(d_particle);
 
 			//rotate and shift particle
 			float3 shift = make_float3(-m.x_Shift, -m.y_Shift, -m.z_Shift);
 			rotator.ShiftRotateTwoStep(shift, -m.psi, -m.phi, -m.theta, d_particle);
+
+			//remove mean particle
+			nppSafeCall(nppsSub_32f_I((float*)d_meanParticle.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize* volSize* volSize));
 
 			//apply mask
 			nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
