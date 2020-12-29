@@ -42,6 +42,7 @@ public:
 		->std::future<typename std::result_of<F(Args...)>::type>;
 	~ThreadPool();
 	ThreadPool(const ThreadPool&) = delete;
+	void SyncTasks();
 private:
 	// need to keep track of threads so we can join them
 	std::vector< std::thread > workers;
@@ -118,6 +119,16 @@ inline ThreadPool::~ThreadPool()
 	condition.notify_all();
 	for (std::thread &worker : workers)
 		worker.join();
+}
+
+
+inline void ThreadPool::SyncTasks()
+{
+	enqueue([this]{condition.notify_all(); });
+	{
+		std::unique_lock<std::mutex> lock(this->queue_mutex);
+		this->condition.wait(lock, [this] { return this->tasks.empty(); });
+	}
 }
 
 #endif
