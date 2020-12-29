@@ -33,20 +33,26 @@ namespace Cuda
 	}
 
 	CudaDeviceVariable::CudaDeviceVariable(const CUdeviceptr & aDevPtr, bool aIsOwner)
-		: mIsOwner(aIsOwner)
+		: mDevPtr(aDevPtr), mIsOwner(aIsOwner)
 	{
 		cudaSafeCall(cuMemGetAddressRange(NULL, &mSizeInBytes, aDevPtr));
 	}
 
-	CudaDeviceVariable::CudaDeviceVariable(CudaDeviceVariable & aDevVar, bool aIsOwner)
+	CudaDeviceVariable::CudaDeviceVariable(const CudaDeviceVariable & aDevVar, bool aIsOwner)
 		: mDevPtr(aDevVar.mDevPtr), mSizeInBytes(aDevVar.mSizeInBytes), mIsOwner(aIsOwner)
 	{
 		
 	}
 
 	CudaDeviceVariable::CudaDeviceVariable()
-		: mDevPtr(0), mSizeInBytes(0)
+		: mDevPtr(0), mSizeInBytes(0), mIsOwner(false)
 	{
+	}
+
+	CudaDeviceVariable::CudaDeviceVariable(CudaDeviceVariable&& aDevVar)
+		: mDevPtr(aDevVar.mDevPtr), mSizeInBytes(aDevVar.mSizeInBytes), mIsOwner(aDevVar.mIsOwner)
+	{
+		aDevVar.mIsOwner = false;
 	}
 
 	void CudaDeviceVariable::Alloc(size_t aSizeInBytes)
@@ -60,11 +66,6 @@ namespace Cuda
 		mIsOwner = true;
 		mSizeInBytes = aSizeInBytes;
 	}
-
-	/*CudaDeviceVariable::CudaDeviceVariable(BufferRequest & aBufferRequest) :
-		mDevPtr((CUdeviceptr)aBufferRequest.mPtr), mSizeInBytes(aBufferRequest.mRequestedSizeInBytes), mIsOwner(false)
-	{
-	}*/
 
 	
 	CudaDeviceVariable::~CudaDeviceVariable()
@@ -100,6 +101,33 @@ namespace Cuda
 		cudaSafeCall(cuMemcpyDtoH(aDest, mDevPtr, size));
 	}
 
+	void CudaDeviceVariable::CopyDeviceToDeviceAsync(CUstream stream, CUdeviceptr aSource)
+	{
+		cudaSafeCall(cuMemcpyDtoDAsync(mDevPtr, aSource, mSizeInBytes, stream));
+	}
+
+	void CudaDeviceVariable::CopyDeviceToDeviceAsync(CUstream stream, CudaDeviceVariable& aSource)
+	{
+		cudaSafeCall(cuMemcpyDtoDAsync(mDevPtr, aSource.GetDevicePtr(), mSizeInBytes, stream));
+	}
+
+
+	void CudaDeviceVariable::CopyHostToDeviceAsync(CUstream stream, void* aSource, size_t aSizeInBytes)
+	{
+		size_t size = aSizeInBytes;
+		if (size == 0)
+			size = mSizeInBytes;
+		cudaSafeCall(cuMemcpyHtoDAsync(mDevPtr, aSource, size, stream));
+	}
+
+	void CudaDeviceVariable::CopyDeviceToHostAsync(CUstream stream, void* aDest, size_t aSizeInBytes)
+	{
+		size_t size = aSizeInBytes;
+		if (size == 0)
+			size = mSizeInBytes;
+		cudaSafeCall(cuMemcpyDtoHAsync(aDest, mDevPtr, size, stream));
+	}
+
 	size_t CudaDeviceVariable::GetSize()
 	{
 		return mSizeInBytes;
@@ -113,6 +141,11 @@ namespace Cuda
 	void CudaDeviceVariable::Memset(uchar aValue)
 	{
 		cudaSafeCall(cuMemsetD8(mDevPtr, aValue, mSizeInBytes));
+	}
+
+	void CudaDeviceVariable::MemsetAsync(CUstream stream, uchar aValue)
+	{
+		cudaSafeCall(cuMemsetD8Async(mDevPtr, aValue, mSizeInBytes, stream));
 	}
 
 	bool CudaPitchedDeviceVariable::IsReallyPitched()
@@ -145,21 +178,28 @@ namespace Cuda
 		}
 	}
 
-	CudaPitchedDeviceVariable::CudaPitchedDeviceVariable(CudaPitchedDeviceVariable& aDevVar, bool aIsOwner)
-		: mPitch(aDevVar.mPitch), mHeight(aDevVar.mHeight), mWidthInBytes(aDevVar.mWidthInBytes), mElementSize(aDevVar.mElementSize), mIsOwner(aIsOwner), mSizeInBytes(aDevVar.mSizeInBytes)
+	CudaPitchedDeviceVariable::CudaPitchedDeviceVariable(const CudaPitchedDeviceVariable& aDevVar, bool aIsOwner)
+		: mDevPtr(aDevVar.mDevPtr), mPitch(aDevVar.mPitch), mHeight(aDevVar.mHeight), mWidthInBytes(aDevVar.mWidthInBytes), mElementSize(aDevVar.mElementSize), mIsOwner(aIsOwner), mSizeInBytes(aDevVar.mSizeInBytes)
 	{
 	
 	}
 
 	CudaPitchedDeviceVariable::CudaPitchedDeviceVariable(CUdeviceptr aPtr, size_t aWidthInBytes, size_t aHeight, size_t aPitch, uint aElementSize, bool aIsOwner)
-		: mPitch(aPitch), mHeight(aHeight), mWidthInBytes(aWidthInBytes), mElementSize(aElementSize), mIsOwner(aIsOwner), mSizeInBytes(aPitch * aHeight)
+		: mDevPtr(aPtr), mPitch(aPitch), mHeight(aHeight), mWidthInBytes(aWidthInBytes), mElementSize(aElementSize), mIsOwner(aIsOwner), mSizeInBytes(aPitch * aHeight)
 	{
 	
 	}
 
 	CudaPitchedDeviceVariable::CudaPitchedDeviceVariable()
-		: mPitch(0), mHeight(0), mWidthInBytes(0), mElementSize(0), mDevPtr(0)
+		: mPitch(0), mHeight(0), mWidthInBytes(0), mElementSize(0), mDevPtr(0), mIsOwner(false), mSizeInBytes(0)
 	{
+	}
+
+	CudaPitchedDeviceVariable::CudaPitchedDeviceVariable(CudaPitchedDeviceVariable&& aDevVar)
+		: mPitch(aDevVar.mPitch), mHeight(aDevVar.mHeight), mWidthInBytes(aDevVar.mWidthInBytes), 
+		mElementSize(aDevVar.mElementSize), mDevPtr(aDevVar.mDevPtr), mIsOwner(aDevVar.mIsOwner), mSizeInBytes(aDevVar.mSizeInBytes)
+	{
+		aDevVar.mIsOwner = false;
 	}
 
 	void CudaPitchedDeviceVariable::Alloc(size_t aWidthInBytes, size_t aHeight, uint aElementSize)
@@ -258,6 +298,79 @@ namespace Cuda
 		}
 	}
 
+	void CudaPitchedDeviceVariable::CopyDeviceToDeviceAsync(CUstream stream, CudaPitchedDeviceVariable& aSource)
+	{
+		if (IsReallyPitched())
+		{
+			CUDA_MEMCPY2D params;
+			memset(&params, 0, sizeof(params));
+			params.srcDevice = aSource.GetDevicePtr();
+			params.srcMemoryType = CU_MEMORYTYPE_DEVICE;
+			params.srcPitch = aSource.GetPitch();
+			params.dstDevice = mDevPtr;
+			params.dstMemoryType = CU_MEMORYTYPE_DEVICE;
+			params.dstPitch = mPitch;
+			params.Height = mHeight;
+			params.WidthInBytes = mWidthInBytes;
+
+			cudaSafeCall(cuMemcpy2DAsync(&params, stream));
+		}
+		else
+		{
+			cudaSafeCall(cuMemcpyDtoDAsync(mDevPtr, aSource.mDevPtr, mSizeInBytes, stream));
+		}
+	}
+
+	void CudaPitchedDeviceVariable::CopyHostToDeviceAsync(CUstream stream, void* aSource)
+	{
+		if (IsReallyPitched())
+		{
+			CUDA_MEMCPY2D params;
+			memset(&params, 0, sizeof(params));
+			params.srcHost = aSource;
+			//params.srcPitch = mWidthInBytes;
+			params.srcMemoryType = CU_MEMORYTYPE_HOST;
+			params.dstDevice = mDevPtr;
+			params.dstMemoryType = CU_MEMORYTYPE_DEVICE;
+			params.dstPitch = mPitch;
+			params.Height = mHeight;
+			params.WidthInBytes = mWidthInBytes;
+
+
+			//printf("\n\nCopy To Device:\nWidthInBytes: %ld\nHeight: %ld\nPitch: %ld\n", mWidthInBytes, mHeight, mPitch);
+
+			cudaSafeCall(cuMemcpy2DAsync(&params, stream));
+		}
+		else
+		{
+			cudaSafeCall(cuMemcpyHtoDAsync(mDevPtr, aSource, mSizeInBytes, stream));
+		}
+	}
+	void CudaPitchedDeviceVariable::CopyDeviceToHostAsync(CUstream stream, void* aDest)
+	{
+		if (IsReallyPitched())
+		{
+			CUDA_MEMCPY2D params;
+			memset(&params, 0, sizeof(params));
+			params.srcDevice = mDevPtr;
+			params.srcMemoryType = CU_MEMORYTYPE_DEVICE;
+			params.srcPitch = mPitch;
+			params.dstHost = aDest;
+			params.dstMemoryType = CU_MEMORYTYPE_HOST;
+			//params.dstPitch = mWidthInBytes;
+			params.Height = mHeight;
+			params.WidthInBytes = mWidthInBytes;
+
+			//printf("\n\nCopy To Host:\nWidthInBytes: %ld\nHeight: %ld\nPitch: %ld\n", mWidthInBytes, mHeight, mPitch);
+
+			cudaSafeCall(cuMemcpy2DAsync(&params, stream));
+		}
+		else
+		{
+			cudaSafeCall(cuMemcpyDtoHAsync(aDest, mDevPtr, mSizeInBytes, stream));
+		}
+	}
+
 	size_t CudaPitchedDeviceVariable::GetSize()
 	{
 		return mSizeInBytes;
@@ -280,6 +393,9 @@ namespace Cuda
 
 	size_t CudaPitchedDeviceVariable::GetWidth()
 	{
+		if (mElementSize == 0)
+			return 0;
+
 		return mWidthInBytes / mElementSize;
 	}
 
@@ -298,6 +414,11 @@ namespace Cuda
 		cudaSafeCall(cuMemsetD8(mDevPtr, aValue, mSizeInBytes));
 	}
 
+	void CudaPitchedDeviceVariable::MemsetAsync(CUstream stream, uchar aValue)
+	{
+		cudaSafeCall(cuMemsetD8Async(mDevPtr, aValue, mSizeInBytes, stream));
+	}
+
 
 	//CudaPageLockedHostVariable
 	CudaPageLockedHostVariable::CudaPageLockedHostVariable(size_t aSizeInBytes, uint aFlags)
@@ -306,10 +427,19 @@ namespace Cuda
 		cudaSafeCall(cuMemHostAlloc(&mHostPtr, mSizeInBytes, aFlags));
 	}
 
+	CudaPageLockedHostVariable::CudaPageLockedHostVariable(CudaPageLockedHostVariable&& plVar)
+		: mSizeInBytes(plVar.mSizeInBytes), mHostPtr(plVar.mHostPtr)
+	{
+		plVar.mHostPtr = 0;
+		plVar.mSizeInBytes = 0;
+	}
+
 	CudaPageLockedHostVariable::~CudaPageLockedHostVariable()
 	{
-		//cudaSafeCall(cuMemFreeHost(mHostPtr));
-		cuMemFreeHost(mHostPtr);
+		if (!mHostPtr)
+		{
+			cuMemFreeHost(mHostPtr);
+		}
 	}
 
 	size_t CudaPageLockedHostVariable::GetSize()

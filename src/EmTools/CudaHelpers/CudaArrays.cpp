@@ -66,6 +66,15 @@ namespace Cuda
 		cudaSafeCall(cuMemcpyAtoH(aDest, mCUarray, aOffsetInBytes, mDescriptor.Width * GetChannelSize(mDescriptor.Format) * mDescriptor.NumChannels));
 	}
 
+	void CudaArray1D::CopyFromHostToArrayAsync(CUstream stream, void* aSource, size_t aOffsetInBytes)
+	{
+		cudaSafeCall(cuMemcpyHtoAAsync(mCUarray, aOffsetInBytes, aSource, mDescriptor.Width * GetChannelSize(mDescriptor.Format) * mDescriptor.NumChannels, stream));
+	}
+	void CudaArray1D::CopyFromArrayToHostAsync(CUstream stream, void* aDest, size_t aOffsetInBytes)
+	{
+		cudaSafeCall(cuMemcpyAtoHAsync(aDest, mCUarray, aOffsetInBytes, mDescriptor.Width * GetChannelSize(mDescriptor.Format) * mDescriptor.NumChannels, stream));
+	}
+
 	CUDA_ARRAY_DESCRIPTOR CudaArray1D::GetArrayDescriptor()
 	{
 		return mDescriptor;
@@ -158,6 +167,65 @@ namespace Cuda
 		cudaSafeCall(cuMemcpy2D(&params));
 	}
 
+	void CudaArray2D::CopyFromDeviceToArrayAsync(CUstream stream, CudaPitchedDeviceVariable& aSource)
+	{
+		CUDA_MEMCPY2D params;
+		memset(&params, 0, sizeof(params));
+		params.srcDevice = aSource.GetDevicePtr();
+		params.srcMemoryType = CU_MEMORYTYPE_DEVICE;
+		params.srcPitch = aSource.GetPitch();
+		params.dstArray = mCUarray;
+		params.dstMemoryType = CU_MEMORYTYPE_ARRAY;
+		params.Height = aSource.GetHeight();
+		params.WidthInBytes = aSource.GetWidthInBytes();
+
+		cudaSafeCall(cuMemcpy2DAsync(&params, stream));
+	}
+	void CudaArray2D::CopyFromArrayToDeviceAsync(CUstream stream, CudaPitchedDeviceVariable& aDest)
+	{
+		CUDA_MEMCPY2D params;
+		memset(&params, 0, sizeof(params));
+		params.dstDevice = aDest.GetDevicePtr();
+		params.dstMemoryType = CU_MEMORYTYPE_DEVICE;
+		params.dstPitch = aDest.GetPitch();
+		params.srcArray = mCUarray;
+		params.srcMemoryType = CU_MEMORYTYPE_ARRAY;
+		params.Height = aDest.GetHeight();
+		params.WidthInBytes = aDest.GetWidthInBytes();
+
+		cudaSafeCall(cuMemcpy2DAsync(&params, stream));
+	}
+
+	void CudaArray2D::CopyFromHostToArrayAsync(CUstream stream, void* aSource)
+	{
+		CUDA_MEMCPY2D params;
+		memset(&params, 0, sizeof(params));
+		params.srcHost = aSource;
+		params.srcMemoryType = CU_MEMORYTYPE_HOST;
+		params.srcPitch = mDescriptor.Width * mDescriptor.NumChannels * GetChannelSize(mDescriptor.Format);
+		params.dstArray = mCUarray;
+		params.dstMemoryType = CU_MEMORYTYPE_ARRAY;
+		params.Height = mDescriptor.Height;
+		params.WidthInBytes = params.srcPitch;
+
+		cudaSafeCall(cuMemcpy2DAsync(&params, stream));
+	}
+
+	void CudaArray2D::CopyFromArrayToHostAsync(CUstream stream, void* aDest)
+	{
+		CUDA_MEMCPY2D params;
+		memset(&params, 0, sizeof(params));
+		params.dstHost = aDest;
+		params.dstMemoryType = CU_MEMORYTYPE_HOST;
+		params.dstPitch = mDescriptor.Width * mDescriptor.NumChannels * GetChannelSize(mDescriptor.Format);
+		params.srcArray = mCUarray;
+		params.srcMemoryType = CU_MEMORYTYPE_ARRAY;
+		params.Height = mDescriptor.Height;
+		params.WidthInBytes = params.dstPitch;
+
+		cudaSafeCall(cuMemcpy2DAsync(&params, stream));
+	}
+
 	CUDA_ARRAY_DESCRIPTOR CudaArray2D::GetArrayDescriptor()
 	{
 		return mDescriptor;
@@ -207,7 +275,7 @@ namespace Cuda
 		params.Height = mDescriptor.Height;
 		params.WidthInBytes = mDescriptor.Width * mDescriptor.NumChannels * GetChannelSize(mDescriptor.Format);
 
-		cudaSafeCall(cuMemcpy3D_v2(&params));
+		cudaSafeCall(cuMemcpy3D(&params));
 	}
 	void CudaArray3D::CopyFromArrayToDevice(CudaDeviceVariable& aDest)
 	{
@@ -285,6 +353,100 @@ namespace Cuda
 		params.WidthInBytes = params.dstPitch;
 
 		cudaSafeCall(cuMemcpy3D(&params));
+	}
+
+	void CudaArray3D::CopyFromDeviceToArrayAsync(CUstream stream, CudaDeviceVariable& aSource)
+	{
+		CUDA_MEMCPY3D params;
+		memset(&params, 0, sizeof(params));
+		params.srcDevice = aSource.GetDevicePtr();
+		params.srcMemoryType = CU_MEMORYTYPE_DEVICE;
+		//params.srcHeight = mDescriptor.Height;
+		//params.srcPitch = mDescriptor.Width * mDescriptor.NumChannels * GetChannelSize(mDescriptor.Format);
+		params.dstArray = mCUarray;
+		params.dstMemoryType = CU_MEMORYTYPE_ARRAY;
+		params.Depth = mDescriptor.Depth;
+		params.Height = mDescriptor.Height;
+		params.WidthInBytes = mDescriptor.Width * mDescriptor.NumChannels * GetChannelSize(mDescriptor.Format);
+
+		cudaSafeCall(cuMemcpy3DAsync(&params, stream));
+	}
+	void CudaArray3D::CopyFromArrayToDeviceAsync(CUstream stream, CudaDeviceVariable& aDest)
+	{
+		CUDA_MEMCPY3D params;
+		memset(&params, 0, sizeof(params));
+		params.dstDevice = aDest.GetDevicePtr();
+		params.dstMemoryType = CU_MEMORYTYPE_DEVICE;
+		params.dstPitch = mDescriptor.Width * mDescriptor.NumChannels * GetChannelSize(mDescriptor.Format);
+		params.srcArray = mCUarray;
+		params.srcMemoryType = CU_MEMORYTYPE_ARRAY;
+		params.Depth = mDescriptor.Depth;
+		params.Height = mDescriptor.Height;
+		params.WidthInBytes = params.srcPitch;
+
+		cudaSafeCall(cuMemcpy3DAsync(&params, stream));
+	}
+
+	void CudaArray3D::CopyFromDeviceToArrayAsync(CUstream stream, CudaPitchedDeviceVariable& aSource)
+	{
+		CUDA_MEMCPY3D params;
+		memset(&params, 0, sizeof(params));
+		params.srcDevice = aSource.GetDevicePtr();
+		params.srcMemoryType = CU_MEMORYTYPE_DEVICE;
+		params.srcPitch = aSource.GetPitch();
+		params.dstArray = mCUarray;
+		params.dstMemoryType = CU_MEMORYTYPE_ARRAY;
+		params.Depth = mDescriptor.Depth;
+		params.Height = mDescriptor.Height;
+		params.WidthInBytes = params.srcPitch;
+
+		cudaSafeCall(cuMemcpy3DAsync(&params, stream));
+	}
+	void CudaArray3D::CopyFromArrayToDeviceAsync(CUstream stream, CudaPitchedDeviceVariable& aDest)
+	{
+		CUDA_MEMCPY3D params;
+		memset(&params, 0, sizeof(params));
+		params.dstDevice = aDest.GetDevicePtr();
+		params.dstMemoryType = CU_MEMORYTYPE_DEVICE;
+		params.dstPitch = aDest.GetPitch();
+		params.srcArray = mCUarray;
+		params.srcMemoryType = CU_MEMORYTYPE_ARRAY;
+		params.Depth = mDescriptor.Depth;
+		params.Height = mDescriptor.Height;
+		params.WidthInBytes = params.srcPitch;
+
+		cudaSafeCall(cuMemcpy3DAsync(&params, stream));
+	}
+
+	void CudaArray3D::CopyFromHostToArrayAsync(CUstream stream, void* aSource)
+	{
+		CUDA_MEMCPY3D params;
+		memset(&params, 0, sizeof(params));
+		params.srcHost = aSource;
+		params.srcMemoryType = CU_MEMORYTYPE_HOST;
+		params.srcPitch = mDescriptor.Width * mDescriptor.NumChannels * GetChannelSize(mDescriptor.Format);
+		params.dstArray = mCUarray;
+		params.dstMemoryType = CU_MEMORYTYPE_ARRAY;
+		params.Depth = mDescriptor.Depth;
+		params.Height = mDescriptor.Height;
+		params.WidthInBytes = params.srcPitch;
+
+		cudaSafeCall(cuMemcpy3DAsync(&params, stream));
+	}
+	void CudaArray3D::CopyFromArrayToHostAsync(CUstream stream, void* aDest)
+	{
+		CUDA_MEMCPY3D params;
+		memset(&params, 0, sizeof(params));
+		params.dstHost = aDest;
+		params.dstMemoryType = CU_MEMORYTYPE_HOST;
+		params.dstPitch = mDescriptor.Width * mDescriptor.NumChannels * GetChannelSize(mDescriptor.Format);
+		params.srcArray = mCUarray;
+		params.srcMemoryType = CU_MEMORYTYPE_ARRAY;
+		params.Depth = mDescriptor.Depth;
+		params.Height = mDescriptor.Height;
+		params.WidthInBytes = params.dstPitch;
+
+		cudaSafeCall(cuMemcpy3DAsync(&params, stream));
 	}
 
 	CUDA_ARRAY3D_DESCRIPTOR CudaArray3D::GetArrayDescriptor()

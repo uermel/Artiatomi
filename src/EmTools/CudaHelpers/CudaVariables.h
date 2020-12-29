@@ -54,7 +54,9 @@ namespace Cuda
 		//CudaDeviceVariable constructor
 		CudaDeviceVariable(size_t aSizeInBytes);
 		CudaDeviceVariable(const CUdeviceptr& aDevPtr, bool aIsOwner);
-		CudaDeviceVariable(CudaDeviceVariable& aDevVar, bool aIsOwner = false);
+		CudaDeviceVariable(const CudaDeviceVariable& aDevVar, bool aIsOwner);
+		CudaDeviceVariable(const CudaDeviceVariable& aDevVar) = delete;
+		CudaDeviceVariable(CudaDeviceVariable&& aDevVar);
 
 		//! Initializes the object but doesn't allocate GPU memory. Inner ptr is 0;
 		CudaDeviceVariable();
@@ -97,6 +99,37 @@ namespace Cuda
 		//Copy data from this CudaDeviceVariable to host memory
 		void CopyDeviceToHost(void* aDest, size_t aSizeInBytes = 0);
 
+		//! Copy data from device memory to this CudaDeviceVariable
+		/*!
+			\param aSource Data source in device memory
+		*/
+		//Copy data from device memory to this CudaDeviceVariable
+		void CopyDeviceToDeviceAsync(CUstream stream, CUdeviceptr aSource);
+
+		//! Copy data from device memory to this CudaDeviceVariable
+		/*!
+			\param aSource Data source in device memory
+		*/
+		//Copy data from device memory to this CudaDeviceVariable
+		void CopyDeviceToDeviceAsync(CUstream stream, CudaDeviceVariable& aSource);
+
+
+		//! Copy data from host memory to this CudaDeviceVariable
+		/*!
+			\param aSource Data source in host memory
+			\param aSizeInBytes Number of bytes to copy
+		*/
+		//Copy data from host memory to this CudaDeviceVariable
+		void CopyHostToDeviceAsync(CUstream stream, void* aSource, size_t aSizeInBytes = 0);
+
+		//! Copy data from this CudaDeviceVariable to host memory
+		/*!
+			\param aDest Data destination in host memory
+			\param aSizeInBytes Number of bytes to copy
+		*/
+		//Copy data from this CudaDeviceVariable to host memory
+		void CopyDeviceToHostAsync(CUstream stream, void* aDest, size_t aSizeInBytes = 0);
+
 		//! Returns the size in bytes of the allocated device memory
 		size_t GetSize();
 
@@ -105,6 +138,9 @@ namespace Cuda
 
 		//! Sets the allocated memory to \p aValue
 		void Memset(uchar aValue);
+
+		//! Sets the allocated memory to \p aValue
+		void MemsetAsync(CUstream stream, uchar aValue);
 	};
 
 	//!  A wrapper class for a pitched CUDA Device variable.
@@ -136,9 +172,10 @@ namespace Cuda
 		*/
 		//CudaPitchedDeviceVariable constructor
 		CudaPitchedDeviceVariable(size_t aWidthInBytes, size_t aHeight, uint aElementSize);
-		CudaPitchedDeviceVariable(CudaPitchedDeviceVariable& aDevVar, bool aIsOwner = false);
+		CudaPitchedDeviceVariable(const CudaPitchedDeviceVariable& aDevVar, bool aIsOwner);
 		CudaPitchedDeviceVariable(CUdeviceptr aPtr, size_t aWidthInBytes, size_t aHeight, size_t aPitch, uint aElementSize, bool aIsOwner = false);
-		//CudaPitchedDeviceVariable(BufferRequest& aBufferRequest);
+		CudaPitchedDeviceVariable(const CudaPitchedDeviceVariable& aDevVar) = delete;
+		CudaPitchedDeviceVariable(CudaPitchedDeviceVariable&& aDevVar);
 
 		//! Initializes the object but doesn't allocate GPU memory. Inner ptr is 0;
 		CudaPitchedDeviceVariable();
@@ -179,6 +216,28 @@ namespace Cuda
 		//Copy data from this CudaPitchedDeviceVariable to host memory
 		void CopyDeviceToHost(void* aDest);
 
+		//! Copy data from device memory to this CudaPitchedDeviceVariable
+		/*!
+			\param aSource Data source in device memory
+		*/
+		//Copy data from device memory to this CudaPitchedDeviceVariable
+		void CopyDeviceToDeviceAsync(CUstream stream, CudaPitchedDeviceVariable& aSource);
+
+
+		//! Copy data from host memory to this CudaPitchedDeviceVariable
+		/*!
+			\param aSource Data source in host memory
+		*/
+		//Copy data from host memory to this CudaPitchedDeviceVariable
+		void CopyHostToDeviceAsync(CUstream stream, void* aSource);
+
+		//! Copy data from this CudaPitchedDeviceVariable to host memory
+		/*!
+			\param aDest Data destination in host memory
+		*/
+		//Copy data from this CudaPitchedDeviceVariable to host memory
+		void CopyDeviceToHostAsync(CUstream stream, void* aDest);
+
 		//! Returns the data size in bytes. NOT the pitched allocated size in device memory
 		//Returns the data size in bytes. NOT the pitched allocated size in device memory
 		size_t GetSize();
@@ -210,6 +269,9 @@ namespace Cuda
 		//! Sets the allocated memory to \p aValue
 		void Memset(uchar aValue);
 
+		//! Sets the allocated memory to \p aValue
+		void MemsetAsync(CUstream stream, uchar aValue);
+
 
 		static bool IsReallyPitched(uint aElementSize);
 	};
@@ -236,6 +298,8 @@ namespace Cuda
 		*/
 		//CudaPageLockedHostVariable constructor
 		CudaPageLockedHostVariable(size_t aSizeInBytes, uint aFlags);
+		CudaPageLockedHostVariable(const CudaPageLockedHostVariable&) = delete;
+		CudaPageLockedHostVariable(CudaPageLockedHostVariable&&);
 
 		//!CudaPageLockedHostVariable destructor
 		//CudaPageLockedHostVariable destructor

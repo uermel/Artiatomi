@@ -55,6 +55,7 @@ namespace Cuda
 			\param aNumChannels Number of array channels. Must be 1, 2 or 4.
 		*/
 		CudaArray1D(CUarray_format aFormat, size_t aSizeInElements, uint aNumChannels);
+		CudaArray1D(const CudaArray1D&) = delete;
 
 		//! CudaArray1D destructor
 		~CudaArray1D();
@@ -91,6 +92,23 @@ namespace Cuda
 			\param aOffsetInBytes An Offset in the source array.
 		*/
 		void CopyFromArrayToHost(void* aDest, size_t aOffsetInBytes = 0);
+
+
+		//! Copy data from host memory to this array
+		/*!
+			Copies the data given by \p aSource in host memory to this array.
+			\param aSource Data source in host memory
+			\param aOffsetInBytes An Offset in the destination array.
+		*/
+		void CopyFromHostToArrayAsync(CUstream stream, void* aSource, size_t aOffsetInBytes = 0);
+
+		//! Copy data from this array to host memory
+		/*!
+			Copies from this array to host memory given by \p aDest.
+			\param aDest Data destination in host memory
+			\param aOffsetInBytes An Offset in the source array.
+		*/
+		void CopyFromArrayToHostAsync(CUstream stream, void* aDest, size_t aOffsetInBytes = 0);
 
 
 		//! Get the CUDA_ARRAY_DESCRIPTOR of this array
@@ -131,6 +149,7 @@ namespace Cuda
 			\param aNumChannels Number of array channels. Must be 1, 2 or 4.
 		*/
 		CudaArray2D(CUarray_format aFormat, size_t aWidthInElements, size_t aHeightInElements, uint aNumChannels);
+		CudaArray2D(const CudaArray2D&) = delete;
 
 		//! CudaArray2D destructor
 		~CudaArray2D();
@@ -163,6 +182,36 @@ namespace Cuda
 			\param aDest Data destination in host memory
 		*/
 		void CopyFromArrayToHost(void* aDest);
+
+
+		//! Copy data from device memory to this array
+		/*!
+			Copies the data given by \p aSource in device memory to this array.
+			\param aSource Data source in device memory
+		*/
+		void CopyFromDeviceToArrayAsync(CUstream stream, CudaPitchedDeviceVariable& aSource);
+
+		//! Copy data from this array to device memory
+		/*!
+			Copies from this array to device memory given by \p aDest.
+			\param aDest Data destination in device memory
+		*/
+		void CopyFromArrayToDeviceAsync(CUstream stream, CudaPitchedDeviceVariable& aDest);
+
+
+		//! Copy data from host memory to this array
+		/*!
+			Copies the data given by \p aSource in host memory to this array.
+			\param aSource Data source in host memory
+		*/
+		void CopyFromHostToArrayAsync(CUstream stream, void* aSource);
+
+		//! Copy data from this array to host memory
+		/*!
+			Copies from this array to host memory given by \p aDest.
+			\param aDest Data destination in host memory
+		*/
+		void CopyFromArrayToHostAsync(CUstream stream, void* aDest);
 
 
 		//! Get the CUDA_ARRAY_DESCRIPTOR of this array
@@ -205,6 +254,7 @@ namespace Cuda
 			\param aFlags Array creation flags.
 		*/
 		CudaArray3D(CUarray_format aFormat, size_t aWidthInElements, size_t aHeightInElements, size_t aDepthInElements, uint aNumChannels, uint aFlags = 0);
+		CudaArray3D(const CudaArray3D&) = delete;
 
 		//! CudaArray3D destructor
 		~CudaArray3D();
@@ -252,6 +302,50 @@ namespace Cuda
 			\param aDest Data destination in host memory
 		*/
 		void CopyFromArrayToHost(void* aDest);
+
+
+		//! Copy data from device memory to this array
+		/*!
+			Copies the data given by \p aSource in device memory to this array.
+			\param aSource Data source in device memory
+		*/
+		void CopyFromDeviceToArrayAsync(CUstream stream, CudaDeviceVariable& aSource);
+
+		//! Copy data from this array to device memory
+		/*!
+			Copies from this array to device memory given by \p aDest.
+			\param aDest Data destination in device memory
+		*/
+		void CopyFromArrayToDeviceAsync(CUstream stream, CudaDeviceVariable& aDest);
+
+		//! Copy data from device memory to this array
+		/*!
+			Copies the data given by \p aSource in device memory to this array.
+			\param aSource Data source in device memory
+		*/
+		void CopyFromDeviceToArrayAsync(CUstream stream, CudaPitchedDeviceVariable& aSource);
+
+		//! Copy data from this array to device memory
+		/*!
+			Copies from this array to device memory given by \p aDest.
+			\param aDest Data destination in device memory
+		*/
+		void CopyFromArrayToDeviceAsync(CUstream stream, CudaPitchedDeviceVariable& aDest);
+
+
+		//! Copy data from host memory to this array
+		/*!
+			Copies the data given by \p aSource in host memory to this array.
+			\param aSource Data source in host memory
+		*/
+		void CopyFromHostToArrayAsync(CUstream stream, void* aSource);
+
+		//! Copy data from this array to host memory
+		/*!
+			Copies from this array to host memory given by \p aDest.
+			\param aDest Data destination in host memory
+		*/
+		void CopyFromArrayToHostAsync(CUstream stream, void* aDest);
 
 
 		//! Get the CUDA_ARRAY_DESCRIPTOR of this array
