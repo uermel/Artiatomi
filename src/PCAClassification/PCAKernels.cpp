@@ -75,3 +75,24 @@ float ComputeEigenImagesKernel::operator()(int numberOfVoxels, int numberOfEigen
 
 	return ms;
 }
+
+void ComputeEigenImagesKernel::operator()(CUstream stream, int numberOfVoxels, int numberOfEigenImages, int particle, int numberOfParticles, CudaDeviceVariable& ccMatrix,
+	CudaDeviceVariable& volIn, CudaDeviceVariable& eigenImages)
+{
+	CudaKernel::SetComputeSize(numberOfVoxels, numberOfEigenImages, 1);
+	CUdeviceptr ccMatrix_dptr = ccMatrix.GetDevicePtr();
+	CUdeviceptr volIn_dptr = volIn.GetDevicePtr();
+	CUdeviceptr eigenImages_dptr = eigenImages.GetDevicePtr();
+
+	void* arglist[7];
+
+	arglist[0] = &numberOfVoxels;
+	arglist[1] = &numberOfEigenImages;
+	arglist[2] = &particle;
+	arglist[3] = &numberOfParticles;
+	arglist[4] = &ccMatrix_dptr;
+	arglist[5] = &volIn_dptr;
+	arglist[6] = &eigenImages_dptr;
+
+	cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, stream, arglist, NULL));
+}

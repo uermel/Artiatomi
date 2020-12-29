@@ -70,6 +70,21 @@ float FftshiftRealKernel::operator()(int size, CudaDeviceVariable& inVol, CudaDe
 	return ms;
 }
 
+void FftshiftRealKernel::operator()(CUstream stream,int size, CudaDeviceVariable& inVol, CudaDeviceVariable& outVol)
+{
+	CudaKernel::SetComputeSize(size, size, size);
+	CUdeviceptr inVol_dptr = inVol.GetDevicePtr();
+	CUdeviceptr outVol_dptr = outVol.GetDevicePtr();
+
+	void* arglist[3];
+
+	arglist[0] = &size;
+	arglist[1] = &inVol_dptr;
+	arglist[2] = &outVol_dptr;
+
+	cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, stream, arglist, NULL));
+}
+
 EnergynormKernel::EnergynormKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim)
 	: CudaKernel("energynorm", aModule, aGridDim, aBlockDim, 0)
 {
@@ -123,6 +138,29 @@ float EnergynormKernel::operator()(int size, CudaDeviceVariable& particle, CudaD
 	return ms;
 }
 
+void EnergynormKernel::operator()(CUstream stream, int size, CudaDeviceVariable& particle, CudaDeviceVariable& partSqr, CudaDeviceVariable& cccMap, CudaDeviceVariable& energyRef, CudaDeviceVariable& nVox)
+{
+	CudaKernel::SetComputeSize(size, size, size);
+	CUdeviceptr particle_dptr = particle.GetDevicePtr();
+	CUdeviceptr partSqr_dptr = partSqr.GetDevicePtr();
+	CUdeviceptr cccMap_dptr = cccMap.GetDevicePtr();
+	CUdeviceptr energyRef_dptr = energyRef.GetDevicePtr();
+	CUdeviceptr nVox_dptr = nVox.GetDevicePtr();
+
+	void* arglist[6];
+
+	arglist[0] = &size;
+	arglist[1] = &particle_dptr;
+	arglist[2] = &partSqr_dptr;
+	arglist[3] = &cccMap_dptr;
+	arglist[4] = &energyRef_dptr;
+	arglist[5] = &nVox_dptr;
+
+	cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, stream, arglist, NULL));
+
+	cudaSafeCall(cuCtxSynchronize());
+}
+
 
 BinarizeKernel::BinarizeKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim)
 	: CudaKernel("binarize", aModule, aGridDim, aBlockDim, 0)
@@ -169,6 +207,21 @@ float BinarizeKernel::operator()(int length, CudaDeviceVariable& inVol, CudaDevi
 	cudaSafeCall(cuEventDestroy(eventEnd));
 
 	return ms;
+}
+
+void BinarizeKernel::operator()(CUstream stream, int length, CudaDeviceVariable& inVol, CudaDeviceVariable& outVol)
+{
+	CudaKernel::SetComputeSize(length);
+	CUdeviceptr inVol_dptr = inVol.GetDevicePtr();
+	CUdeviceptr outVol_dptr = outVol.GetDevicePtr();
+
+	void* arglist[3];
+
+	arglist[0] = &length;
+	arglist[1] = &inVol_dptr;
+	arglist[2] = &outVol_dptr;
+
+	cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, stream, arglist, NULL));
 }
 
 
@@ -219,6 +272,21 @@ float ConvKernel::operator()(int length, CudaDeviceVariable& inVol, CudaDeviceVa
 	return ms;
 }
 
+void ConvKernel::operator()(CUstream stream, int length, CudaDeviceVariable& inVol, CudaDeviceVariable& outVol)
+{
+	CudaKernel::SetComputeSize(length);
+	CUdeviceptr inVol_dptr = inVol.GetDevicePtr();
+	CUdeviceptr outVol_dptr = outVol.GetDevicePtr();
+
+	void* arglist[3];
+
+	arglist[0] = &length;
+	arglist[1] = &inVol_dptr;
+	arglist[2] = &outVol_dptr;
+
+	cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, stream, arglist, NULL));
+}
+
 
 CorrelKernel::CorrelKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim)
 	: CudaKernel("correl", aModule, aGridDim, aBlockDim, 0)
@@ -267,6 +335,21 @@ float CorrelKernel::operator()(int length, CudaDeviceVariable& inVol, CudaDevice
 	return ms;
 }
 
+void CorrelKernel::operator()(CUstream stream, int length, CudaDeviceVariable& inVol, CudaDeviceVariable& outVol)
+{
+	CudaKernel::SetComputeSize(length);
+	CUdeviceptr inVol_dptr = inVol.GetDevicePtr();
+	CUdeviceptr outVol_dptr = outVol.GetDevicePtr();
+
+	void* arglist[3];
+
+	arglist[0] = &length;
+	arglist[1] = &inVol_dptr;
+	arglist[2] = &outVol_dptr;
+
+	cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, stream, arglist, NULL));
+}
+
 
 PhaseCorrelKernel::PhaseCorrelKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim)
 	: CudaKernel("phaseCorrel", aModule, aGridDim, aBlockDim, 0)
@@ -313,6 +396,21 @@ float PhaseCorrelKernel::operator()(int length, CudaDeviceVariable& inVol, CudaD
 	cudaSafeCall(cuEventDestroy(eventEnd));
 
 	return ms;
+}
+
+void PhaseCorrelKernel::operator()(CUstream stream, int length, CudaDeviceVariable& inVol, CudaDeviceVariable& outVol)
+{
+	CudaKernel::SetComputeSize(length);
+	CUdeviceptr inVol_dptr = inVol.GetDevicePtr();
+	CUdeviceptr outVol_dptr = outVol.GetDevicePtr();
+
+	void* arglist[3];
+
+	arglist[0] = &length;
+	arglist[1] = &inVol_dptr;
+	arglist[2] = &outVol_dptr;
+
+	cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, stream, arglist, NULL));
 }
 
 
@@ -365,6 +463,22 @@ float BandpassFFTShiftKernel::operator()(int size, CudaDeviceVariable& vol, floa
 	return ms;
 }
 
+void BandpassFFTShiftKernel::operator()(CUstream stream, int size, CudaDeviceVariable& vol, float rDown, float rUp, float smooth)
+{
+	CudaKernel::SetComputeSize((size / 2 + 1), size, size);
+	CUdeviceptr vol_dptr = vol.GetDevicePtr();
+
+	void* arglist[5];
+
+	arglist[0] = &size;
+	arglist[1] = &vol_dptr;
+	arglist[2] = &rDown;
+	arglist[3] = &rUp;
+	arglist[4] = &smooth;
+
+	cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, stream, arglist, NULL));
+}
+
 
 MulRealCplxFFTShiftKernel::MulRealCplxFFTShiftKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim)
 	: CudaKernel("mulRealCplxFFTShift", aModule, aGridDim, aBlockDim, 0)
@@ -413,6 +527,21 @@ float MulRealCplxFFTShiftKernel::operator()(int size, CudaDeviceVariable& inReal
 	return ms;
 }
 
+void MulRealCplxFFTShiftKernel::operator()(CUstream stream, int size, CudaDeviceVariable& inRealVol, CudaDeviceVariable& inOutCplxVol)
+{
+	CudaKernel::SetComputeSize((size / 2 + 1), size, size);
+	CUdeviceptr inRealVol_dptr = inRealVol.GetDevicePtr();
+	CUdeviceptr inOutCplxVol_dptr = inOutCplxVol.GetDevicePtr();
+
+	void* arglist[3];
+
+	arglist[0] = &size;
+	arglist[1] = &inRealVol_dptr;
+	arglist[2] = &inOutCplxVol_dptr;
+
+	cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, stream, arglist, NULL));
+}
+
 
 WedgeNormKernel::WedgeNormKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim)
 	: CudaKernel("wedgeNorm", aModule, aGridDim, aBlockDim, 0)
@@ -426,7 +555,7 @@ WedgeNormKernel::WedgeNormKernel(CUmodule aModule)
 
 }
 
-float WedgeNormKernel::operator()(int size, CudaDeviceVariable& wedge, CudaDeviceVariable& part, float maxVal)
+float WedgeNormKernel::operator()(int size, CudaDeviceVariable& wedge, CudaDeviceVariable& part, CudaDeviceVariable& maxVal)
 {
 	CudaKernel::SetComputeSize((size / 2 + 1), size, size);
 	CUdeviceptr wedge_dptr = wedge.GetDevicePtr();
@@ -460,4 +589,20 @@ float WedgeNormKernel::operator()(int size, CudaDeviceVariable& wedge, CudaDevic
 	cudaSafeCall(cuEventDestroy(eventEnd));
 
 	return ms;
+}
+
+void WedgeNormKernel::operator()(CUstream stream, int size, CudaDeviceVariable& wedge, CudaDeviceVariable& part, CudaDeviceVariable& maxVal)
+{
+	CudaKernel::SetComputeSize((size / 2 + 1), size, size);
+	CUdeviceptr wedge_dptr = wedge.GetDevicePtr();
+	CUdeviceptr part_dptr = part.GetDevicePtr();
+
+	void* arglist[4];
+
+	arglist[0] = &size;
+	arglist[1] = &wedge_dptr;
+	arglist[2] = &part;
+	arglist[3] = &maxVal;
+
+	cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, stream, arglist, NULL));
 }

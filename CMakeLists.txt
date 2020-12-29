@@ -713,6 +713,7 @@ set(SUBTOMOTOOLS_COMMON_SRC
 
         ${EMTOOLS_PATH}/SubTomogramTools/CorrelationKernel.cpp
         ${EMTOOLS_PATH}/SubTomogramTools/Correlator3D.cpp
+        ${EMTOOLS_PATH}/SubTomogramTools/SubDeviceKernel.cpp
         ${EMTOOLS_PATH}/SubTomogramTools/RotationKernel.cpp
         ${EMTOOLS_PATH}/SubTomogramTools/RotationMatrix.cpp
         ${EMTOOLS_PATH}/SubTomogramTools/Rotator.cpp
@@ -743,6 +744,12 @@ add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMTOOLS_PATH}/SubTomogramTools/K
 add_custom_target(subtomorot_ptx_header ALL
         DEPENDS ${CMAKE_SOURCE_DIR}/${EMTOOLS_PATH}/SubTomogramTools/Kernels/RotationKernel.cu.h ${EMTOOLS_PATH}/SubTomogramTools/Kernels/RotationKernel.cu
         SOURCES ${EMTOOLS_PATH}/SubTomogramTools/Kernels/RotationKernel.cu)
+
+cuda_compile_ptx(SUBTOMOSUBDEVICE_PTX_FILES ${EMTOOLS_PATH}/SubTomogramTools/Kernels/SubDeviceKernel.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMTOOLS_PATH}/SubTomogramTools/Kernels/SubDeviceKernel.cu.h COMMAND ${BIN2C_EXEC} -p 0 --const --name SubTomogramSubDeviceKernel ${SUBTOMOSUBDEVICE_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMTOOLS_PATH}/SubTomogramTools/Kernels/SubDeviceKernel.cu.h DEPENDS ${SUBTOMOSUBDEVICE_PTX_FILES})
+add_custom_target(subtomosubdevice_ptx_header ALL
+        DEPENDS ${CMAKE_SOURCE_DIR}/${EMTOOLS_PATH}/SubTomogramTools/Kernels/SubDeviceKernel.cu.h ${EMTOOLS_PATH}/SubTomogramTools/Kernels/SubDeviceKernel.cu
+        SOURCES ${EMTOOLS_PATH}/SubTomogramTools/Kernels/SubDeviceKernel.cu)
 ######################### SubTomogramTools ########################
 
 
@@ -921,7 +928,8 @@ add_executable(PCAClassification
 
 # Executable depends on ptx files
 add_dependencies(PCAClassification pca_ptx_header)  
-add_dependencies(PCAClassification subtomocorr_ptx_header)  
+add_dependencies(PCAClassification subtomocorr_ptx_header) 
+add_dependencies(PCAClassification subtomosubdevice_ptx_header)   
 add_dependencies(PCAClassification subtomorot_ptx_header)  
 
 target_include_directories(PCAClassification PUBLIC ${PCA_INC})

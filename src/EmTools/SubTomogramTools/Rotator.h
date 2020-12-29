@@ -42,6 +42,8 @@ private:
 	Rot3dKernel* kernelRot3d;
 	ShiftRot3dKernel* kernelShiftRot3d;
 	ShiftKernel* kernelShift;
+	Cuda::CudaTextureObject3D* _texObjShift;
+	Cuda::CudaTextureObject3D* _texObjRot;
 
 	int _size;
 
@@ -49,20 +51,30 @@ private:
 	float oldPsi;
 	float oldTheta;
 
+	CUstream _stream;
+
 public:
-	Rotator(Cuda::CudaContext* aCtx, int aSize);
+	Rotator(Cuda::CudaContext* aCtx, CUstream stream, int aSize);
 
 	~Rotator();
 
 	void SetOldAngles(float aPhi, float aPsi, float aTheta);
 
 	void Rotate(float phi, float psi, float theta, Cuda::CudaDeviceVariable& vol);
-
+	
 	void Shift(float3 shift, Cuda::CudaDeviceVariable& vol);
 
 	void ShiftRotate(float3 shift, float phi, float psi, float theta, Cuda::CudaDeviceVariable& vol);
-
+	
 	void ShiftRotateTwoStep(float3 shift, float phi, float psi, float theta, Cuda::CudaDeviceVariable& vol);
+
+	/*void Rotate(CUstream stream, float phi, float psi, float theta, Cuda::CudaDeviceVariable& vol);
+
+	void Shift(CUstream stream, float3 shift, Cuda::CudaDeviceVariable& vol);
+
+	void ShiftRotate(CUstream stream, float3 shift, float phi, float psi, float theta, Cuda::CudaDeviceVariable& vol);
+
+	void ShiftRotateTwoStep(CUstream stream, float3 shift, float phi, float psi, float theta, Cuda::CudaDeviceVariable& vol);*/
 
 };
 

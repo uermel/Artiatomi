@@ -36,6 +36,7 @@ public:
 	ComputeEigenImagesKernel(CUmodule aModule);
 
 	float operator()(int numberOfVoxels, int numberOfEigenImages, int particle, int numberOfParticles, Cuda::CudaDeviceVariable& ccMatrix, Cuda::CudaDeviceVariable& volIn, Cuda::CudaDeviceVariable& eigenImages);
+	void operator()(CUstream stream, int numberOfVoxels, int numberOfEigenImages, int particle, int numberOfParticles, Cuda::CudaDeviceVariable& ccMatrix, Cuda::CudaDeviceVariable& volIn, Cuda::CudaDeviceVariable& eigenImages);
 };
 
 #endif

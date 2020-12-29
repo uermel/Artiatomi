@@ -42,12 +42,18 @@
 #include <CudaContext.h>
 #include <Correlator3D.h>
 #include <Rotator.h>
+#include <SubDeviceKernel.h>
+#include <Kernels/SubDeviceKernel.cu.h>
+#include <ThreadPool.h>
+#include <SpecificBackgroundThread.h>
 
 // Self
 #include "Kernels/kernels.cu.h"
 #include "PCAKernels.h"
 #include "utils/Config.h"
 #include "KMeans.h"
+#include <cudaProfiler.h>
+#include <chrono>
 
 using namespace std;
 using namespace Cuda;
@@ -56,6 +62,8 @@ using namespace Cuda;
 
 #define round(x) (x >= 0 ? (int)(x + 0.5) : (int)(x - 0.5))
 
+#define runBatch SingletonThread::Get(batch)->enqueue
+
 void WaitForInput(int exitCode)
 {
 	char c;
@@ -63,6 +71,7 @@ void WaitForInput(int exitCode)
 	c = cin.get();
 	exit(exitCode);
 }
+
 
 int main(int argc, char* argv[])
 {
@@ -197,8 +206,24 @@ int main(int argc, char* argv[])
 
 	try
 	{
+		const int batchSize = 4;
 		Configuration::Config aConfig = Configuration::Config::GetConfig("pca.cfg", argc, argv, mpi_part, NULL);
-		ctx = CudaContext::CreateInstance(aConfig.CudaDeviceIDs[mpi_part], CU_CTX_SCHED_SPIN);
+		ctx = CudaContext::GetPrimaryContext(aConfig.CudaDeviceIDs[mpi_part]);
+		ctx->SetCurrent();
+		CUdevice dev;
+		cudaSafeCall(cuDeviceGet(&dev, 0));
+		cudaSafeCall(cuDevicePrimaryCtxSetFlags(dev, CU_CTX_SCHED_SPIN));
+
+		vector<CUstream> streams(batchSize);
+		vector<NppStreamContext> streamCtx(batchSize);
+		for (size_t batch = 0; batch < batchSize; batch++)
+		{
+			cudaSafeCall(cuStreamCreate(&streams[batch], CU_STREAM_DEFAULT));
+			nppSafeCall(nppSetStream(streams[batch]));
+			nppSafeCall(nppGetStreamContext(&streamCtx[batch]));
+		}
+		nppSafeCall(nppSetStream(0));
+
 
 		printf("\nLoad motivelist..."); fflush(stdout);
 		MotiveList motl(aConfig.MotiveList, 1.0f, aConfig.ScaleMotivelistShift);
@@ -276,19 +301,39 @@ int main(int argc, char* argv[])
 		vector<int> maskIndices;
 
 		CUmodule mod = ctx->LoadModulePTX(PCAKernel, 0, false, false);
+		CUmodule mod2 = ctx->LoadModulePTX(SubTomogramSubDeviceKernel, 0, false, false);
 		ComputeEigenImagesKernel kernelEigenImages(mod);
+		SubDivDeviceKernel kernelSubDiv(mod2);
 
-		CudaDeviceVariable d_particle(volSize* volSize* volSize * sizeof(float));
-		CudaDeviceVariable d_particleMasked(volSize* volSize* volSize * sizeof(float));
-		CudaDeviceVariable d_particleRef(volSize* volSize* volSize * sizeof(float));
-		CudaDeviceVariable d_mask(volSize* volSize* volSize * sizeof(float));
-		CudaDeviceVariable d_filter(volSize* volSize* volSize * sizeof(float));
-		CudaDeviceVariable d_meanParticle(volSize* volSize* volSize * sizeof(float));
+		vector<CudaDeviceVariable> d_particle;
+		vector<CudaDeviceVariable> d_particleMasked;
+		vector<CudaDeviceVariable> d_particleRef;
+		vector<CudaDeviceVariable> d_mask;
+		vector<CudaDeviceVariable> d_filter;
+		vector<CudaDeviceVariable> d_meanParticle;
 
-		CudaDeviceVariable d_wedge1((size_t)volSize* volSize* volSize * sizeof(float));
-		CudaDeviceVariable d_wedge2((size_t)volSize* volSize* volSize * sizeof(float));
-		CudaDeviceVariable d_wedgeMerge((size_t)volSize* volSize* volSize * sizeof(float));
-		CudaDeviceVariable d_CC((size_t)volSize* volSize* volSize * sizeof(float));
+		vector<CudaDeviceVariable> d_wedge1;
+		vector<CudaDeviceVariable> d_wedge2;
+		vector<CudaDeviceVariable> d_wedgeMerge;
+		vector<CudaDeviceVariable> d_CC;
+		vector<CudaPageLockedHostVariable> h_pagelockedBuffer;
+
+		for (size_t batch = 0; batch < batchSize; batch++)
+		{
+			d_particle.push_back(std::move(CudaDeviceVariable((size_t)volSize * volSize * volSize * sizeof(float))));
+			d_particleMasked.push_back(std::move(CudaDeviceVariable((size_t)volSize * volSize * volSize * sizeof(float))));
+			d_particleRef.push_back(std::move(CudaDeviceVariable((size_t)volSize * volSize * volSize * sizeof(float))));
+			d_mask.push_back(std::move(CudaDeviceVariable((size_t)volSize * volSize * volSize * sizeof(float))));
+			d_filter.push_back(std::move(CudaDeviceVariable((size_t)volSize * volSize * volSize * sizeof(float))));
+			d_meanParticle.push_back(std::move(CudaDeviceVariable((size_t)volSize * volSize * volSize * sizeof(float))));
+
+			d_wedge1.push_back(std::move(CudaDeviceVariable((size_t)volSize * volSize * volSize * sizeof(float))));
+			d_wedge2.push_back(std::move(CudaDeviceVariable((size_t)volSize * volSize * volSize * sizeof(float))));
+			d_wedgeMerge.push_back(std::move(CudaDeviceVariable((size_t)volSize * volSize * volSize * sizeof(float))));
+			d_CC.push_back(std::move(CudaDeviceVariable((size_t)volSize * volSize * volSize * sizeof(float))));
+
+			h_pagelockedBuffer.push_back(std::move(CudaPageLockedHostVariable((size_t)volSize * volSize * volSize * sizeof(float), 0)));
+		}
 
 		cusolverDnHandle_t cusolverH = NULL;
 		cusolverDnParams_t params = NULL;
@@ -338,8 +383,14 @@ int main(int argc, char* argv[])
 
 		int bufferSize = 0;
 		nppSafeCall(nppsSumGetBufferSize_32f(volSize* volSize* volSize, &bufferSize));
-		Cuda::CudaDeviceVariable d_buffer(bufferSize);
-		Cuda::CudaDeviceVariable d_sum(sizeof(float));
+		vector<CudaDeviceVariable> d_buffer;
+		vector<CudaDeviceVariable> d_sum;
+
+		for (size_t batch = 0; batch < batchSize; batch++)
+		{
+			d_buffer.push_back(std::move(CudaDeviceVariable((size_t)bufferSize)));
+			d_sum.push_back(std::move(CudaDeviceVariable(sizeof(float))));
+		}
 
 		float* sumOfParticles = new float[(size_t)volSize * volSize * volSize];
 		float* MPIBuffer = new float[(size_t)volSize * volSize * volSize];
@@ -375,7 +426,11 @@ int main(int argc, char* argv[])
 			{
 				throw std::invalid_argument("Filter volume dimension does not fit mask volume dimensions.");
 			}
-			d_filter.CopyHostToDevice(filter.GetData());
+			for (size_t batch = 0; batch < batchSize; batch++)
+			{
+				d_filter[batch].CopyHostToDevice(filter.GetData());
+			}
+			
 		}
 
 		{
@@ -414,8 +469,14 @@ int main(int argc, char* argv[])
 			}
 		}
 
-		Rotator rotator(ctx, volSize);
-		Correlator3D correlator(ctx, volSize, d_filter, aConfig.HighPass, aConfig.LowPass, aConfig.Sigma, aConfig.UseFilterVolume);
+		vector<Rotator*> rotators;
+		vector<Correlator3D*> correlators;
+		for (size_t batch = 0; batch < batchSize; batch++)
+		{
+			rotators.push_back(new Rotator(ctx, streams[batch], volSize));
+			correlators.push_back(new Correlator3D(ctx, volSize, &d_filter[batch], aConfig.HighPass, aConfig.LowPass, aConfig.Sigma, aConfig.UseFilterVolume, streams[batch]));
+		}
+		
 
 		//prepare motive list subset of NumberOfParticlesInPCA particles:
 		std::default_random_engine rand(1234); 
@@ -432,7 +493,10 @@ int main(int argc, char* argv[])
 		MPI_Bcast(&motiveListIndeces[0], totalCount, MPI_INT, 0, MPI_COMM_WORLD);
 #endif
 
-
+		for (size_t i = 0; i < batchSize; i++)
+		{
+			SingletonThread::Get(i)->enqueue([ctx] {ctx->SetCurrent(); });
+		}
 
 
 		////////////////////////////////////
@@ -444,50 +508,78 @@ int main(int argc, char* argv[])
 			printf("Step 2: Sum up all particles\n"); fflush(stdout);
 		}
 
-		d_mask.CopyHostToDevice(mask.GetData());
-		d_meanParticle.Memset(0);
+		for (size_t batch = 0; batch < batchSize; batch++)
+		{
+			d_mask[batch].CopyHostToDevice(mask.GetData());
+			d_meanParticle[batch].Memset(0);
+		}
 
+		ctx->Synchronize();
 		if (aConfig.ComputeAverageParticle)
 		{
-
-			for (size_t particle = startParticlePCA; particle < endParticlePCA; particle++)
+			for (size_t i = startParticlePCA; i < endParticlePCA; i+=batchSize)
 			{
-				motive m = motl.GetAt(motiveListIndeces[particle]);
-				stringstream ss;
-				ss << aConfig.Particles;
-				ss << m.GetIndexCoding(aConfig.NamingConv) << ".em";
-				EmFile part(ss.str());
-				part.OpenAndRead();
+				for (size_t batch = 0; batch < batchSize; batch++)
+				{
+					size_t particle = i + batch;
+					if (particle >= endParticlePCA)
+					{
+						continue;
+					}
 
-				d_particle.CopyHostToDevice(part.GetData());
-				correlator.FourierFilter(d_particle);
+					motive m = motl.GetAt(motiveListIndeces[particle]);
+					stringstream ss;
+					ss << aConfig.Particles;
+					ss << m.GetIndexCoding(aConfig.NamingConv) << ".em";
+					EmFile* part = new EmFile(ss.str());
 
-				//rotate and shift particle
-				float3 shift = make_float3(-m.x_Shift, -m.y_Shift, -m.z_Shift);
-				rotator.ShiftRotateTwoStep(shift, -m.psi, -m.phi, -m.theta, d_particle);
+					float3 shift = make_float3(-m.x_Shift, -m.y_Shift, -m.z_Shift);
+					float phi = -m.psi;
+					float psi = -m.phi;
+					float theta = -m.theta;
 
-				//apply mask
-				nppSafeCall(nppsMul_32f((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), (float*)d_particleMasked.GetDevicePtr(), volSize * volSize * volSize));
+					runBatch([&, batch, part, shift, phi, psi, theta] {
+						part->OpenAndRead();
+						memcpy(h_pagelockedBuffer[batch].GetHostPtr(), part->GetData(), part->GetDataSize());
 
-				//mean free (in masked area)
-				nppSafeCall(nppsSum_32f((float*)d_particleMasked.GetDevicePtr(), volSize * volSize * volSize, (float*)d_sum.GetDevicePtr(), (unsigned char*)d_buffer.GetDevicePtr()));
-				float sum_h;
-				d_sum.CopyDeviceToHost(&sum_h);
-				nppSafeCall(nppsSubC_32f_I(sum_h / maskedVoxels, (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
+						d_particle[batch].CopyHostToDeviceAsync(streams[batch], h_pagelockedBuffer[batch].GetHostPtr());
+						correlators[batch]->FourierFilter(d_particle[batch]);
+						//rotate and shift particle
+						rotators[batch]->ShiftRotateTwoStep(shift, phi, psi, theta, d_particle[batch]);
+						//apply mask
+						nppSafeCall(nppsMul_32f_Ctx((float*)d_mask[batch].GetDevicePtr(), (float*)d_particle[batch].GetDevicePtr(), (float*)d_particleMasked[batch].GetDevicePtr(), volSize* volSize* volSize, streamCtx[batch]));
+						//mean free (in masked area)
+						nppSafeCall(nppsSum_32f_Ctx((float*)d_particleMasked[batch].GetDevicePtr(), volSize * volSize * volSize, (float*)d_sum[batch].GetDevicePtr(), (unsigned char*)d_buffer[batch].GetDevicePtr(), streamCtx[batch]));
+						kernelSubDiv(streams[batch], d_sum[batch], d_particle[batch], volSize * volSize * volSize, (float)maskedVoxels);
+						//sum up
+						nppSafeCall(nppsAdd_32f_I_Ctx((float*)d_particle[batch].GetDevicePtr(), (float*)d_meanParticle[batch].GetDevicePtr(), volSize * volSize * volSize, streamCtx[batch]));
 
-				//apply mask again to have non masked area =0
-				//nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
-
-				//sum up
-				nppSafeCall(nppsAdd_32f_I((float*)d_particle.GetDevicePtr(), (float*)d_meanParticle.GetDevicePtr(), volSize * volSize * volSize));
+						//delete particle after queuing some work on GPU...
+						delete part;
+						});
+				}
 			}
+
+			//Wait for command queue to finish
+			for (size_t batch = 0; batch < batchSize; batch++)
+			{
+				SingletonThread::Get(batch)->SyncTasks();
+			}
+			//wait for GPU
+			ctx->Synchronize();
+			//merge batched results
+			for (size_t batch = 1; batch < batchSize; batch++)
+			{
+				nppSafeCall(nppsAdd_32f_I((float*)d_meanParticle[batch].GetDevicePtr(), (float*)d_meanParticle[0].GetDevicePtr(), volSize * volSize * volSize));
+			}
+			ctx->Synchronize();
 
 	#ifndef USE_MPI
 			//If not in MPI mode, scale the sum directly here, otherwise later after gathering all partial results from nodes
 			//Scale to number of particles
-			nppSafeCall(nppsDivC_32f_I(totalCountPCA, (float*)d_meanParticle.GetDevicePtr(), volSize * volSize * volSize));
+			nppSafeCall(nppsDivC_32f_I(totalCountPCA, (float*)d_meanParticle[0].GetDevicePtr(), volSize * volSize * volSize));
 	#endif
-			d_meanParticle.CopyDeviceToHost(sumOfParticles);
+			d_meanParticle[0].CopyDeviceToHost(sumOfParticles);
 
 
 	#ifdef USE_MPI	
@@ -497,8 +589,8 @@ int main(int argc, char* argv[])
 				for (int mpi = 1; mpi < mpi_size; mpi++)
 				{
 					MPI_Recv(MPIBuffer, volSize * volSize * volSize, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-					d_particle.CopyHostToDevice(MPIBuffer);
-					nppSafeCall(nppsAdd_32f_I((float*)d_particle.GetDevicePtr(), (float*)d_meanParticle.GetDevicePtr(), volSize * volSize * volSize));
+					d_particle[0].CopyHostToDevice(MPIBuffer);
+					nppSafeCall(nppsAdd_32f_I((float*)d_particle[0].GetDevicePtr(), (float*)d_meanParticle[0].GetDevicePtr(), volSize * volSize * volSize));
 				}
 			}
 			else
@@ -511,15 +603,22 @@ int main(int argc, char* argv[])
 			{
 				//In MPI mode, scale the sum now
 				//Scale to number of particles
-				nppSafeCall(nppsDivC_32f_I(totalCountPCA, (float*)d_meanParticle.GetDevicePtr(), volSize * volSize * volSize));
+				nppSafeCall(nppsDivC_32f_I(totalCountPCA, (float*)d_meanParticle[0].GetDevicePtr(), volSize * volSize * volSize));
 
-				d_meanParticle.CopyDeviceToHost(sumOfParticles);
+				d_meanParticle[0].CopyDeviceToHost(sumOfParticles);
+				for (size_t batch = 1; batch < batchSize; batch++)
+				{
+					d_meanParticle[batch].CopyDeviceToDevice(d_meanParticle[0]);
+				}
 			}
 			MPI_Bcast(sumOfParticles, volSize * volSize * volSize, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
 			if (mpi_part != 0)
 			{
-				d_meanParticle.CopyHostToDevice(sumOfParticles);
+				for (size_t batch = 0; batch < batchSize; batch++)
+				{
+					d_meanParticle[batch].CopyHostToDevice(sumOfParticles);
+				}
 			}
 	#endif
 
@@ -536,7 +635,10 @@ int main(int argc, char* argv[])
 			}
 			EmFile partSum(aConfig.AverageParticleFile);
 			partSum.OpenAndRead();
-			d_meanParticle.CopyHostToDevice(partSum.GetData());
+			for (size_t batch = 0; batch < batchSize; batch++)
+			{
+				d_meanParticle[batch].CopyHostToDevice(partSum.GetData());
+			}
 		}
 
 		///////////////////////////////////////////
@@ -558,8 +660,13 @@ int main(int argc, char* argv[])
 		}
 
 		float* cc_vol = new float[(size_t)volSize * volSize * volSize];
-		correlator.PrepareMask(d_mask, false); //mask must be binary anyway
-
+		
+		for (size_t batch = 0; batch < batchSize; batch++)
+		{
+			correlators[batch]->PrepareMask(d_mask[batch], false); //mask must be binary anyway
+		}
+		
+		ctx->Synchronize();
 		if (aConfig.ComputeCovVarMatrix)
 		{
 			//distribute the CC values to compute evenly on compute nodes
@@ -627,77 +734,118 @@ int main(int argc, char* argv[])
 					printf("  processing row %d of %d in matrix\n", pBlock1, endEntries[mpi_part]); fflush(stdout);
 				}
 				//load particles for block 1 from disk and make them mean free
-				for (int p1 = pBlock1; p1 < pBlock1 + aConfig.BlockSize && p1 < endEntries[mpi_part]; p1++)
+				for (int i = pBlock1; i < pBlock1 + aConfig.BlockSize && i < endEntries[mpi_part]; i+=batchSize)
 				{
-					motive m = motl.GetAt(motiveListIndeces[p1]);
-					stringstream ss;
-					ss << aConfig.Particles;
-					ss << m.GetIndexCoding(aConfig.NamingConv) << ".em";
-					EmFile part(ss.str());
-					part.OpenAndRead();
+					for (int batch = 0; batch < batchSize; batch++)
+					{
+						int p1 = i + batch;
+						if (p1 >= pBlock1 + aConfig.BlockSize || p1 >= endEntries[mpi_part])
+						{
+							continue;
+						}
 
-					d_particle.CopyHostToDevice(part.GetData());
-					correlator.FourierFilter(d_particle);
+						motive m = motl.GetAt(motiveListIndeces[p1]);
+						stringstream ss;
+						ss << aConfig.Particles;
+						ss << m.GetIndexCoding(aConfig.NamingConv) << ".em";
+						EmFile* part = new EmFile(ss.str());
+						float3 shift = make_float3(-m.x_Shift, -m.y_Shift, -m.z_Shift);
+						float phi = -m.psi;
+						float psi = -m.phi;
+						float theta = -m.theta;
 
-					//rotate and shift particle
-					float3 shift = make_float3(-m.x_Shift, -m.y_Shift, -m.z_Shift);
-					rotator.ShiftRotateTwoStep(shift, -m.psi, -m.phi, -m.theta, d_particle);
+						runBatch([&, batch, part, shift, phi, psi, theta, p1, pBlock1] {
+							part->OpenAndRead();
+							memcpy(h_pagelockedBuffer[batch].GetHostPtr(), part->GetData(), part->GetDataSize());
+							d_particle[batch].CopyHostToDeviceAsync(streams[batch], h_pagelockedBuffer[batch].GetHostPtr());
+							correlators[batch]->FourierFilter(d_particle[batch]);
+							rotators[batch]->ShiftRotateTwoStep(shift, phi, psi, theta, d_particle[batch]);
 
-					//remove mean particle
-					nppSafeCall(nppsSub_32f_I((float*)d_meanParticle.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize* volSize* volSize));
+							//remove mean particle
+							nppSafeCall(nppsSub_32f_I_Ctx((float*)d_meanParticle[batch].GetDevicePtr(), (float*)d_particle[batch].GetDevicePtr(), volSize* volSize* volSize, streamCtx[batch]));
 
-					//apply mask
-					nppSafeCall(nppsMul_32f((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), (float*)d_particleMasked.GetDevicePtr(), volSize * volSize * volSize));
+							//apply mask
+							nppSafeCall(nppsMul_32f_Ctx((float*)d_mask[batch].GetDevicePtr(), (float*)d_particle[batch].GetDevicePtr(), (float*)d_particleMasked[batch].GetDevicePtr(), volSize * volSize * volSize, streamCtx[batch]));
 
-					//mean free (in masked area)
-					nppSafeCall(nppsSum_32f((float*)d_particleMasked.GetDevicePtr(), volSize * volSize * volSize, (float*)d_sum.GetDevicePtr(), (unsigned char*)d_buffer.GetDevicePtr()));
-					float sum_h;
-					d_sum.CopyDeviceToHost(&sum_h);
-					nppSafeCall(nppsSubC_32f_I(sum_h / maskedVoxels, (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
+							//mean free (in masked area)
+							nppSafeCall(nppsSum_32f_Ctx((float*)d_particleMasked[batch].GetDevicePtr(), volSize * volSize * volSize, (float*)d_sum[batch].GetDevicePtr(), (unsigned char*)d_buffer[batch].GetDevicePtr(), streamCtx[batch]));
+							kernelSubDiv(streams[batch], d_sum[batch], d_particle[batch], volSize * volSize * volSize, (float)maskedVoxels);
 
-					//apply mask again to have non masked area =0
-					//nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
+							delete part;
+							d_particle[batch].CopyDeviceToHostAsync(streams[batch], h_pagelockedBuffer[batch].GetHostPtr());
+							cudaSafeCall(cuStreamSynchronize(streams[batch]));
 
-					d_particle.CopyDeviceToHost(particleBlock1[p1 - pBlock1]);
+							memcpy(particleBlock1[p1 - pBlock1], h_pagelockedBuffer[batch].GetHostPtr(), d_particle[batch].GetSize());
+
+							});
+					}
 				}
+				//Wait for command queue to finish
+				for (size_t batch = 0; batch < batchSize; batch++)
+				{
+					SingletonThread::Get(batch)->SyncTasks();
+				}
+				//wait for GPU
+				ctx->Synchronize();
 
 				//we have to scan the entire line, i.e. all colums = all particles
 				for (int pBlock2 = pBlock1; pBlock2 < totalCountPCA; pBlock2 += aConfig.BlockSize)
 				{
 					//load particles for block 2 from disk and make them mean free
-					for (int p2 = pBlock2; p2 < pBlock2 + aConfig.BlockSize && p2 < totalCountPCA; p2++)
+					for (int i = pBlock2; i < pBlock2 + aConfig.BlockSize && i < totalCountPCA; i += batchSize)
 					{
-						motive m = motl.GetAt(motiveListIndeces[p2]);
-						stringstream ss;
-						ss << aConfig.Particles;
-						ss << m.GetIndexCoding(aConfig.NamingConv) << ".em";
-						EmFile part(ss.str());
-						part.OpenAndRead();
+						for (int batch = 0; batch < batchSize; batch++)
+						{
+							int p2 = i + batch;
+							if (p2 >= pBlock2 + aConfig.BlockSize || p2 >= totalCountPCA)
+							{
+								continue;
+							}
 
-						d_particle.CopyHostToDevice(part.GetData());
-						correlator.FourierFilter(d_particle);
+							motive m = motl.GetAt(motiveListIndeces[p2]);
+							stringstream ss;
+							ss << aConfig.Particles;
+							ss << m.GetIndexCoding(aConfig.NamingConv) << ".em";
+							EmFile* part = new EmFile(ss.str());
+							float3 shift = make_float3(-m.x_Shift, -m.y_Shift, -m.z_Shift);
+							float phi = -m.psi;
+							float psi = -m.phi;
+							float theta = -m.theta;
 
-						//rotate and shift particle
-						float3 shift = make_float3(-m.x_Shift, -m.y_Shift, -m.z_Shift);
-						rotator.ShiftRotateTwoStep(shift, -m.psi, -m.phi, -m.theta, d_particle);
+							runBatch([&, batch, part, shift, phi, psi, theta, p2, pBlock2] {
+								part->OpenAndRead();
+								memcpy(h_pagelockedBuffer[batch].GetHostPtr(), part->GetData(), part->GetDataSize());
+								d_particle[batch].CopyHostToDeviceAsync(streams[batch], h_pagelockedBuffer[batch].GetHostPtr());
+								correlators[batch]->FourierFilter(d_particle[batch]);
 
-						//remove mean particle
-						nppSafeCall(nppsSub_32f_I((float*)d_meanParticle.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize* volSize* volSize));
+								//rotate and shift particle
+								rotators[batch]->ShiftRotateTwoStep(shift, phi, psi, theta, d_particle[batch]);
 
-						//apply mask
-						nppSafeCall(nppsMul_32f((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), (float*)d_particleMasked.GetDevicePtr(), volSize* volSize* volSize));
+								//remove mean particle
+								nppSafeCall(nppsSub_32f_I_Ctx((float*)d_meanParticle[batch].GetDevicePtr(), (float*)d_particle[batch].GetDevicePtr(), volSize* volSize* volSize, streamCtx[batch]));
 
-						//mean free (in masked area)
-						nppSafeCall(nppsSum_32f((float*)d_particleMasked.GetDevicePtr(), volSize * volSize * volSize, (float*)d_sum.GetDevicePtr(), (unsigned char*)d_buffer.GetDevicePtr()));
-						float sum_h;
-						d_sum.CopyDeviceToHost(&sum_h);
-						nppSafeCall(nppsSubC_32f_I(sum_h / maskedVoxels, (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
+								//apply mask
+								nppSafeCall(nppsMul_32f_Ctx((float*)d_mask[batch].GetDevicePtr(), (float*)d_particle[batch].GetDevicePtr(), (float*)d_particleMasked[batch].GetDevicePtr(), volSize * volSize * volSize, streamCtx[batch]));
 
-						//apply mask again to have non masked area =0
-						//nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
+								//mean free (in masked area)
+								nppSafeCall(nppsSum_32f_Ctx((float*)d_particleMasked[batch].GetDevicePtr(), volSize * volSize * volSize, (float*)d_sum[batch].GetDevicePtr(), (unsigned char*)d_buffer[batch].GetDevicePtr(), streamCtx[batch]));
+								kernelSubDiv(streams[batch], d_sum[batch], d_particle[batch], volSize * volSize * volSize, (float)maskedVoxels);
 
-						d_particle.CopyDeviceToHost(particleBlock2[p2 - pBlock2]);
+								delete part;
+								d_particle[batch].CopyDeviceToHostAsync(streams[batch], h_pagelockedBuffer[batch].GetHostPtr());
+								cudaSafeCall(cuStreamSynchronize(streams[batch]));
+
+								memcpy(particleBlock2[p2 - pBlock2], h_pagelockedBuffer[batch].GetHostPtr(), d_particle[batch].GetSize());
+								});
+						}
 					}
+					//Wait for command queue to finish
+					for (size_t batch = 0; batch < batchSize; batch++)
+					{
+						SingletonThread::Get(batch)->SyncTasks();
+					}
+					//wait for GPU
+					ctx->Synchronize();
 
 
 					for (int p1 = pBlock1; p1 < pBlock1 + aConfig.BlockSize && p1 < endEntries[mpi_part]; p1++)
@@ -708,52 +856,67 @@ int main(int argc, char* argv[])
 						{
 							wedgeIdx1 = (int)m1.wedgeIdx;
 						}
-						d_wedge1.CopyHostToDevice((float*)wedges[wedgeIdx1]->GetData());
-						rotator.Rotate(-m1.psi, -m1.phi, -m1.theta, d_wedge1);
 
-						d_particle.CopyHostToDevice(particleBlock1[p1 - pBlock1]);
-
-						for (int p2 = pBlock2; p2 < pBlock2 + aConfig.BlockSize && p2 < totalCountPCA; p2++)
+						for (size_t batch = 0; batch < batchSize; batch++)
 						{
-							if (p2 > p1) //only upper diagonal part of matrix needed
+							d_wedge1[batch].CopyHostToDevice((float*)wedges[wedgeIdx1]->GetData());
+							rotators[batch]->Rotate(-m1.psi, -m1.phi, -m1.theta, d_wedge1[batch]);
+							d_particle[batch].CopyHostToDevice(particleBlock1[p1 - pBlock1]);
+						}
+
+						for (int i = pBlock2; i < pBlock2 + aConfig.BlockSize && i < totalCountPCA; i+=batchSize)
+						{
+							for (int batch = 0; batch < batchSize; batch++)
 							{
-								//compute CC
-								motive m2 = motl.GetAt(motiveListIndeces[p2]);
-
-								int wedgeIdx2 = 0;
-								if (!aConfig.SingleWedge)
+								int p2 = i + batch;
+								if (p2 >= pBlock2 + aConfig.BlockSize || p2 >= totalCountPCA)
 								{
-									wedgeIdx2 = (int)m2.wedgeIdx;
+									continue;
 								}
+								if (p2 > p1) //only upper diagonal part of matrix needed
+								{
+									//compute CC
+									motive m2 = motl.GetAt(motiveListIndeces[p2]);
+									float phi = -m2.psi;
+									float psi = -m2.phi;
+									float theta = -m2.theta;
 
-								d_wedge2.CopyHostToDevice((float*)wedges[wedgeIdx2]->GetData());
-								rotator.Rotate(-m2.psi, -m2.phi, -m2.theta, d_wedge2);
+									int wedgeIdx2 = 0;
+									if (!aConfig.SingleWedge)
+									{
+										wedgeIdx2 = (int)m2.wedgeIdx;
+									}
+									
 
-								nppSafeCall(nppsMul_32f((float*)d_wedge1.GetDevicePtr(), (float*)d_wedge2.GetDevicePtr(), (float*)d_wedgeMerge.GetDevicePtr(), volSize * volSize * volSize));
+									runBatch([&, batch, wedgeIdx2, phi, psi, theta, p1, p2, pBlock2] {
+										//GetCCFast syncs with host thread due to copy to host, i.e. here we are for sure in sync with device
+										memcpy(h_pagelockedBuffer[batch].GetHostPtr(), wedges[wedgeIdx2]->GetData(), d_wedge2[batch].GetSize());
+										d_wedge2[batch].CopyHostToDeviceAsync(streams[batch], h_pagelockedBuffer[batch].GetHostPtr());
 
-								d_particleRef.CopyHostToDevice(particleBlock2[p2 - pBlock2]);
+										rotators[batch]->Rotate(phi, psi, theta, d_wedge2[batch]);
 
-								//correlator.PrepareParticle(d_particle, d_wedgeMerge);
-								//correlator.GetCC(d_mask, d_particleRef, d_wedgeMerge, d_CC);
+										nppSafeCall(nppsMul_32f_Ctx((float*)d_wedge1[batch].GetDevicePtr(), (float*)d_wedge2[batch].GetDevicePtr(), (float*)d_wedgeMerge[batch].GetDevicePtr(), volSize* volSize* volSize, streamCtx[batch]));
 
-								//correlator.PhaseCorrelate(d_particle, d_mask, d_particleRef, d_wedgeMerge, d_CC);
+										//make sure that the previous copy to device has finished:
+										cudaSafeCall(cuStreamSynchronize(streams[batch]));
+										memcpy(h_pagelockedBuffer[batch].GetHostPtr(), particleBlock2[p2 - pBlock2], d_particleRef[batch].GetSize());
+										d_particleRef[batch].CopyHostToDeviceAsync(streams[batch], h_pagelockedBuffer[batch].GetHostPtr());
 
-								//d_CC.CopyDeviceToHost(cc_vol);
+										correlators[batch]->GettCCFast(d_mask[batch], d_particle[batch], d_particleRef[batch], d_wedgeMerge[batch], &CCMatrix[p1 + p2 * totalCountPCA]);
+										});
 
-								//emwrite("J:\\TestData\\Test\\cc.em", cc_vol, volSize, volSize, volSize);
-
-								//int ccIdx = (volSize / 2) * volSize * volSize + (volSize / 2) * volSize + (volSize / 2);
-
-								//float CC = cc_vol[ccIdx];
-
-								float CC = correlator.GettCCFast(d_mask, d_particle, d_particleRef, d_wedgeMerge);
-							
-								CCMatrix[p1 + p2 * totalCountPCA] = CC;
+								}
 							}
+						}
+						//Wait for command queue to finish
+						for (size_t batch = 0; batch < batchSize; batch++)
+						{
+							SingletonThread::Get(batch)->SyncTasks();
 						}
 					}
 				}
 			}
+			ctx->Synchronize();
 
 	#ifdef USE_MPI	
 			//accumulate partial cc Matrix from MPI nodes
@@ -767,11 +930,6 @@ int main(int argc, char* argv[])
 					{
 						CCMatrix[i] += CCMatrixMPI[i];
 					}
-					////Fill diagonal
-					//for (int i = 0; i < totalCountPCA; i++)
-					//{
-					//	CCMatrix[i + totalCountPCA * i] = 1.0f;
-					//}
 				}
 
 				//Fill diagonal
@@ -820,7 +978,6 @@ int main(int argc, char* argv[])
 				CCMatrix[i] = ((float*)ccMat.GetData())[i];
 			}
 		}
-
 
 		/////////////////////////////////////////////////////////////
 		/// Step 4: compute Eigen values and vectors of cc matrix ///
@@ -925,55 +1082,66 @@ int main(int argc, char* argv[])
 		}
 
 		d_eigenImages.Memset(0);
+		ctx->Synchronize();
 
 		//now all particles of the motive list:
-		for (size_t particle = startParticle; particle < endParticle; particle++)
+		for (size_t i = startParticle; i < endParticle; i+=batchSize)
 		{
-			motive m = motl.GetAt(particle);
-			stringstream ss;
-			ss << aConfig.Particles;
-			ss << m.GetIndexCoding(aConfig.NamingConv) << ".em";
-			EmFile part(ss.str());
-			part.OpenAndRead();
+			for (size_t batch = 0; batch < batchSize; batch++)
+			{
+				size_t particle = i + batch;
+				if (particle >= endParticle)
+				{
+					continue;
+				}
+				motive m = motl.GetAt(particle);
+				float3 shift = make_float3(-m.x_Shift, -m.y_Shift, -m.z_Shift);
+				float phi = -m.psi;
+				float psi = -m.phi;
+				float theta = -m.theta;
+				stringstream ss;
+				ss << aConfig.Particles;
+				ss << m.GetIndexCoding(aConfig.NamingConv) << ".em";
+				EmFile* part = new EmFile(ss.str());
 
-			d_particle.CopyHostToDevice(part.GetData());
-			correlator.FourierFilter(d_particle);
+				runBatch([&, batch, particle, part, shift, phi, psi, theta] {
 
-			//rotate and shift particle
-			float3 shift = make_float3(-m.x_Shift, -m.y_Shift, -m.z_Shift);
-			rotator.ShiftRotateTwoStep(shift, -m.psi, -m.phi, -m.theta, d_particle);
+						part->OpenAndRead();
 
-			//remove mean particle
-			nppSafeCall(nppsSub_32f_I((float*)d_meanParticle.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize* volSize* volSize));
+						cudaSafeCall(cuStreamSynchronize(streams[batch]));
+						memcpy(h_pagelockedBuffer[batch].GetHostPtr(), part->GetData(), part->GetDataSize());
+						d_particle[batch].CopyHostToDeviceAsync(streams[batch], h_pagelockedBuffer[batch].GetHostPtr());
+						correlators[batch]->FourierFilter(d_particle[batch]);
 
-			//apply mask (directly to particle)
-			nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
+						//rotate and shift particle
+						rotators[batch]->ShiftRotateTwoStep(shift, phi, psi, theta, d_particle[batch]);
 
-			//mean free
-			nppSafeCall(nppsSum_32f((float*)d_particle.GetDevicePtr(), volSize * volSize * volSize, (float*)d_sum.GetDevicePtr(), (unsigned char*)d_buffer.GetDevicePtr()));
-			float sum_h;
-			d_sum.CopyDeviceToHost(&sum_h);
-			nppSafeCall(nppsSubC_32f_I(sum_h / maskedVoxels, (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
+						//remove mean particle
+						nppSafeCall(nppsSub_32f_I_Ctx((float*)d_meanParticle[batch].GetDevicePtr(), (float*)d_particle[batch].GetDevicePtr(), volSize* volSize* volSize, streamCtx[batch]));
 
-			//apply mask again to have non masked area =0
-			nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
+						//apply mask (directly to particle)
+						nppSafeCall(nppsMul_32f_I_Ctx((float*)d_mask[batch].GetDevicePtr(), (float*)d_particle[batch].GetDevicePtr(), volSize * volSize * volSize, streamCtx[batch]));
 
-			//d_particle.CopyDeviceToHost(part.GetData());
-			//float* data = (float*)part.GetData();
+						//mean free
+						nppSafeCall(nppsSum_32f_Ctx((float*)d_particle[batch].GetDevicePtr(), volSize * volSize * volSize, (float*)d_sum[batch].GetDevicePtr(), (unsigned char*)d_buffer[batch].GetDevicePtr(), streamCtx[batch]));
+						kernelSubDiv(streams[batch], d_sum[batch], d_particle[batch], volSize * volSize * volSize, maskedVoxels);
 
-			//for (int eigenImage = 0; eigenImage < aConfig.NumberOfEigenVectors; eigenImage++)
-			//{
-			//	for (int voxel = 0; voxel < maskedVoxels; voxel++)
-			//	{
-			//		float ev = CCMatrix[particle + (aConfig.NumberOfEigenVectors - 1 - eigenImage) * totalCountPCA]; //eigenvectors are in inverse order (small to large eigen value)
-			//		int unmaskedIndex = maskIndices[voxel];
-			//		float vo = data[unmaskedIndex];
-			//		eigenImages[eigenImage * volSize * volSize * volSize + unmaskedIndex] += ev * vo;
-			//	}
-			//}
+						//apply mask again to have non masked area =0
+						nppSafeCall(nppsMul_32f_I_Ctx((float*)d_mask[batch].GetDevicePtr(), (float*)d_particle[batch].GetDevicePtr(), volSize * volSize * volSize, streamCtx[batch]));
 
-			kernelEigenImages(volSize * volSize * volSize, aConfig.NumberOfEigenVectors, particle, totalCountPCA, d_covVarMat, d_particle, d_eigenImages);
+						//uses atomic add for eigenImage addition, it is safe to use the same array for all batches
+						kernelEigenImages(streams[batch], volSize * volSize * volSize, aConfig.NumberOfEigenVectors, particle, totalCountPCA, d_covVarMat, d_particle[batch], d_eigenImages);
+						delete part;
+					});
+			}
 		}
+		//Wait for command queue to finish
+		for (size_t batch = 0; batch < batchSize; batch++)
+		{
+			SingletonThread::Get(batch)->SyncTasks();
+		}
+		//wait for GPU
+		ctx->Synchronize();
 
 		d_eigenImages.CopyDeviceToHost(eigenImages);
 
@@ -1022,60 +1190,75 @@ int main(int argc, char* argv[])
 			printf("Step 6: Compute weight matrix\n"); fflush(stdout);
 		}
 
-		for (size_t particle = startParticle; particle < endParticle; particle++)
+		ctx->Synchronize();
+		for (size_t i = startParticle; i < endParticle; i+=batchSize)
 		{
-			motive m = motl.GetAt(particle);
-			stringstream ss;
-			ss << aConfig.Particles;
-			ss << m.GetIndexCoding(aConfig.NamingConv) << ".em";
-			EmFile part(ss.str());
-			part.OpenAndRead();
-
-			d_particle.CopyHostToDevice(part.GetData());
-			correlator.FourierFilter(d_particle);
-
-			//rotate and shift particle
-			float3 shift = make_float3(-m.x_Shift, -m.y_Shift, -m.z_Shift);
-			rotator.ShiftRotateTwoStep(shift, -m.psi, -m.phi, -m.theta, d_particle);
-
-			//remove mean particle
-			nppSafeCall(nppsSub_32f_I((float*)d_meanParticle.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize* volSize* volSize));
-
-			//apply mask
-			nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
-
-			//mean free
-			nppSafeCall(nppsSum_32f((float*)d_particle.GetDevicePtr(), volSize * volSize * volSize, (float*)d_sum.GetDevicePtr(), (unsigned char*)d_buffer.GetDevicePtr()));
-			float sum_h;
-			d_sum.CopyDeviceToHost(&sum_h);
-			nppSafeCall(nppsSubC_32f_I(sum_h / maskedVoxels, (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
-
-			//apply mask again to have non masked area =0
-			nppSafeCall(nppsMul_32f_I((float*)d_mask.GetDevicePtr(), (float*)d_particle.GetDevicePtr(), volSize * volSize * volSize));
-
-			//d_particle.CopyDeviceToHost(part.GetData());
-			//float* data = (float*)part.GetData();
-
-			for (int eigenImage = 0; eigenImage < aConfig.NumberOfEigenVectors; eigenImage++)
+			for (size_t batch = 0; batch < batchSize; batch++)
 			{
-				/*for (int voxel = 0; voxel < maskedVoxels; voxel++)
+				size_t particle = i + batch;
+				if (particle >= endParticle)
 				{
-					int unmaskedIndex = maskIndices[voxel];
-					float ei = eigenImages[eigenImage * volSize * volSize * volSize + unmaskedIndex];
-					float vo = data[unmaskedIndex];
-					weightMatrix[eigenImage + particle * aConfig.NumberOfEigenVectors] += ei * vo * eigenValuesSorted[eigenImage] * eigenValuesSorted[eigenImage];
-				}*/
-				//d_particleRef.CopyHostToDevice(eigenImages + (eigenImage * volSize * volSize * volSize));
-				
-				nppSafeCall(nppsMul_32f(((float*)d_eigenImages.GetDevicePtr()) + ((size_t)eigenImage * volSize * volSize * volSize), (float*)d_particle.GetDevicePtr(), (float*)d_particleRef.GetDevicePtr(), volSize* volSize* volSize));
-				nppSafeCall(nppsSum_32f((float*)d_particleRef.GetDevicePtr(), volSize* volSize* volSize, (float*)d_sum.GetDevicePtr(), (Npp8u*)d_buffer.GetDevicePtr()));
-				float eivo = 0;
-				d_sum.CopyDeviceToHost(&eivo);
-				eivo /= volSize * volSize * volSize; //scale to number of voxels to keep values in a reasonable range;
-				weightMatrix[eigenImage + particle * aConfig.NumberOfEigenVectors] = eivo * eigenValuesSorted[eigenImage] * eigenValuesSorted[eigenImage];
+					continue;
+				}
+
+				motive m = motl.GetAt(particle);
+				float3 shift = make_float3(-m.x_Shift, -m.y_Shift, -m.z_Shift);
+				float phi = -m.psi;
+				float psi = -m.phi;
+				float theta = -m.theta;
+				stringstream ss;
+				ss << aConfig.Particles;
+				ss << m.GetIndexCoding(aConfig.NamingConv) << ".em";
+				EmFile* part = new EmFile(ss.str());
+
+				runBatch([&, batch, particle, part, shift, phi, psi, theta] {
+
+					part->OpenAndRead();
+					//host is synced later in the loop: here the device is certainly not accessing h_pagelockedBuffer[batch]
+					memcpy(h_pagelockedBuffer[batch].GetHostPtr(), part->GetData(), part->GetDataSize());
+					d_particle[batch].CopyHostToDeviceAsync(streams[batch], h_pagelockedBuffer[batch].GetHostPtr());
+					correlators[batch]->FourierFilter(d_particle[batch]);
+
+					//rotate and shift particle
+					rotators[batch]->ShiftRotateTwoStep(shift, phi, psi, theta, d_particle[batch]);
+
+					//remove mean particle
+					nppSafeCall(nppsSub_32f_I_Ctx((float*)d_meanParticle[batch].GetDevicePtr(), (float*)d_particle[batch].GetDevicePtr(), volSize* volSize* volSize, streamCtx[batch]));
+
+					//apply mask (directly to particle)
+					nppSafeCall(nppsMul_32f_I_Ctx((float*)d_mask[batch].GetDevicePtr(), (float*)d_particle[batch].GetDevicePtr(), volSize* volSize* volSize, streamCtx[batch]));
+
+					//mean free
+					nppSafeCall(nppsSum_32f_Ctx((float*)d_particle[batch].GetDevicePtr(), volSize* volSize* volSize, (float*)d_sum[batch].GetDevicePtr(), (unsigned char*)d_buffer[batch].GetDevicePtr(), streamCtx[batch]));
+
+					//apply mask again to have non masked area =0
+					nppSafeCall(nppsMul_32f_I_Ctx((float*)d_mask[batch].GetDevicePtr(), (float*)d_particle[batch].GetDevicePtr(), volSize* volSize* volSize, streamCtx[batch]));
+
+					delete part;
+					for (int eigenImage = 0; eigenImage < aConfig.NumberOfEigenVectors; eigenImage++)
+					{
+						nppSafeCall(nppsMul_32f_Ctx(((float*)d_eigenImages.GetDevicePtr()) + ((size_t)eigenImage * volSize * volSize * volSize), (float*)d_particle[batch].GetDevicePtr(), (float*)d_particleRef[batch].GetDevicePtr(), volSize * volSize * volSize, streamCtx[batch]));
+						nppSafeCall(nppsSum_32f_Ctx((float*)d_particleRef[batch].GetDevicePtr(), volSize * volSize * volSize, (float*)d_sum[batch].GetDevicePtr(), (Npp8u*)d_buffer[batch].GetDevicePtr(), streamCtx[batch]));
+
+						d_sum[batch].CopyDeviceToHostAsync(streams[batch], h_pagelockedBuffer[batch].GetHostPtr());
+						cudaSafeCall(cuStreamSynchronize(streams[batch]));
+
+						float eivo = *((float*)h_pagelockedBuffer[batch].GetHostPtr());
+
+						//scale to number of voxels to keep values in a reasonable range
+						eivo /= volSize * volSize * volSize;
+						weightMatrix[eigenImage + particle * aConfig.NumberOfEigenVectors] = eivo * eigenValuesSorted[eigenImage] * eigenValuesSorted[eigenImage];
+					}
+				});
 			}
 		}
-
+		//Wait for command queue to finish
+		for (size_t batch = 0; batch < batchSize; batch++)
+		{
+			SingletonThread::Get(batch)->SyncTasks();
+		}
+		//wait for GPU
+		ctx->Synchronize();
 
 	#ifdef USE_MPI	
 		//accumulate partial eigenImages from MPI nodes
@@ -1127,7 +1310,7 @@ int main(int argc, char* argv[])
 			printf("  ");
 			for (int c = 0; c < aConfig.NumberOfClasses; c++)
 			{
-				printf("Class %-6d ", c);
+				printf("Class %-6d ", c+1);
 			}
 			printf("\n  ");
 			for (int ev = 0; ev < aConfig.NumberOfEigenVectors; ev++)
@@ -1175,46 +1358,80 @@ int main(int argc, char* argv[])
 
 		for (int c = 1; c <= aConfig.NumberOfClasses; c++)
 		{
-			d_particleRef.Memset(0);
-			d_wedgeMerge.Memset(0);
-
-			for (int particle = startParticle; particle < endParticle; particle++)
+			for (size_t batch = 0; batch < batchSize; batch++)
 			{
-				if (classes[particle] == c)
+				d_particleRef[batch].Memset(0);
+				d_wedgeMerge[batch].Memset(0);
+			}
+			ctx->Synchronize();
+
+			for (int i = startParticle; i < endParticle; i+=batchSize)
+			{
+				for (size_t batch = 0; batch < batchSize; batch++)
 				{
-					motive m = motl.GetAt(particle);
-
-					stringstream ss;
-					ss << aConfig.Particles;
-					ss << m.GetIndexCoding(aConfig.NamingConv) << ".em";
-					EmFile part(ss.str());
-					part.OpenAndRead();
-
-					d_particle.CopyHostToDevice(part.GetData());
-
-					int wedgeIdx = 0;
-					if (!aConfig.SingleWedge)
+					size_t particle = i + batch;
+					if (particle >= endParticle)
 					{
-						wedgeIdx = (int)m.wedgeIdx;
+						continue;
 					}
 
-					d_wedge1.CopyHostToDevice((float*)wedges[wedgeIdx]->GetData());
+					if (classes[particle] == c)
+					{
+						motive m = motl.GetAt(particle);
+						float3 shift = make_float3(-m.x_Shift, -m.y_Shift, -m.z_Shift);
+						float phi = -m.psi;
+						float psi = -m.phi;
+						float theta = -m.theta;
+						int wedgeIdx = 0;
+						if (!aConfig.SingleWedge)
+						{
+							wedgeIdx = (int)m.wedgeIdx;
+						}
+						stringstream ss;
+						ss << aConfig.Particles;
+						ss << m.GetIndexCoding(aConfig.NamingConv) << ".em";
+						EmFile* part = new EmFile(ss.str());
 
-					correlator.MultiplyWedge(d_particle, d_wedge1);
+						runBatch([&, batch, part, shift, phi, psi, theta, wedgeIdx] {
 
-					float3 shift = make_float3(-m.x_Shift, -m.y_Shift, -m.z_Shift);
-					rotator.ShiftRotateTwoStep(shift, -m.psi, -m.phi, -m.theta, d_particle);
+							part->OpenAndRead();
 
-					nppSafeCall(nppsAdd_32f_I((float*)d_particle.GetDevicePtr(), (float*)d_particleRef.GetDevicePtr(), volSize* volSize* volSize));
+							cudaSafeCall(cuStreamSynchronize(streams[batch]));
+							memcpy(h_pagelockedBuffer[batch].GetHostPtr(), part->GetData(), part->GetDataSize());
+							d_particle[batch].CopyHostToDeviceAsync(streams[batch], h_pagelockedBuffer[batch].GetHostPtr());
 
-					rotator.Rotate(-m.psi, -m.phi, -m.theta, d_wedge1);
+							cudaSafeCall(cuStreamSynchronize(streams[batch]));
+							memcpy(h_pagelockedBuffer[batch].GetHostPtr(), wedges[wedgeIdx]->GetData(), d_wedge1[batch].GetSize());
+							d_wedge1[batch].CopyHostToDeviceAsync(streams[batch], h_pagelockedBuffer[batch].GetHostPtr());
 
-					nppSafeCall(nppsAdd_32f_I((float*)d_wedge1.GetDevicePtr(), (float*)d_wedgeMerge.GetDevicePtr(), volSize* volSize* volSize));
+							correlators[batch]->MultiplyWedge(d_particle[batch], d_wedge1[batch]);
 
+							rotators[batch]->ShiftRotateTwoStep(shift, phi, psi, theta, d_particle[batch]);
+
+							nppSafeCall(nppsAdd_32f_I_Ctx((float*)d_particle[batch].GetDevicePtr(), (float*)d_particleRef[batch].GetDevicePtr(), volSize * volSize * volSize, streamCtx[batch]));
+
+							rotators[batch]->Rotate(phi, psi, theta, d_wedge1[batch]);
+
+							nppSafeCall(nppsAdd_32f_I_Ctx((float*)d_wedge1[batch].GetDevicePtr(), (float*)d_wedgeMerge[batch].GetDevicePtr(), volSize * volSize * volSize, streamCtx[batch]));
+
+							delete part;
+						});
+					}
 				}
 			}
-
-
+			//Wait for command queue to finish
+			for (size_t batch = 0; batch < batchSize; batch++)
+			{
+				SingletonThread::Get(batch)->SyncTasks();
+			}
+			//wait for GPU
+			ctx->Synchronize();
+			for (size_t batch = 1; batch < batchSize; batch++)
+			{
+				nppSafeCall(nppsAdd_32f_I((float*)d_particleRef[batch].GetDevicePtr(), (float*)d_particleRef[0].GetDevicePtr(), volSize * volSize * volSize));
+				nppSafeCall(nppsAdd_32f_I((float*)d_wedgeMerge[batch].GetDevicePtr(), (float*)d_wedgeMerge[0].GetDevicePtr(), volSize* volSize* volSize));
+			}
+			ctx->Synchronize();
 	#ifdef USE_MPI	
 			//accumulate partial sums over MPI nodes
 			if (mpi_part == 0)
@@ -1222,27 +1439,27 @@ int main(int argc, char* argv[])
 				for (int mpi = 1; mpi < mpi_size; mpi++)
 				{
 					MPI_Recv(MPIBuffer, volSize * volSize * volSize, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-					d_particle.CopyHostToDevice(MPIBuffer);
-					nppSafeCall(nppsAdd_32f_I((float*)d_particle.GetDevicePtr(), (float*)d_particleRef.GetDevicePtr(), volSize * volSize * volSize));
+					d_particle[0].CopyHostToDevice(MPIBuffer);
+					nppSafeCall(nppsAdd_32f_I_Ctx((float*)d_particle[0].GetDevicePtr(), (float*)d_particleRef[0].GetDevicePtr(), volSize * volSize * volSize, streamCtx[0]));
 
 					MPI_Recv(MPIBuffer, volSize * volSize * volSize, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-					d_wedge1.CopyHostToDevice(MPIBuffer);
-					nppSafeCall(nppsAdd_32f_I((float*)d_wedge1.GetDevicePtr(), (float*)d_wedgeMerge.GetDevicePtr(), volSize * volSize * volSize));
+					d_wedge1[0].CopyHostToDevice(MPIBuffer);
+					nppSafeCall(nppsAdd_32f_I_Ctx((float*)d_wedge1[0].GetDevicePtr(), (float*)d_wedgeMerge[0].GetDevicePtr(), volSize * volSize * volSize, streamCtx[0]));
 				}
 			}
 			else
 			{
-				d_particleRef.CopyDeviceToHost(MPIBuffer);
+				d_particleRef[0].CopyDeviceToHost(MPIBuffer);
 				MPI_Send(MPIBuffer, volSize * volSize * volSize, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
-				d_wedgeMerge.CopyDeviceToHost(MPIBuffer);
+				d_wedgeMerge[0].CopyDeviceToHost(MPIBuffer);
 				MPI_Send(MPIBuffer, volSize * volSize * volSize, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
 			}
 	#endif
 
 			if (mpi_part == 0)
 			{
-				correlator.NormalizeWedge(d_particleRef, d_wedgeMerge);
-				d_particleRef.CopyDeviceToHost(sumOfParticles);
+				correlators[0]->NormalizeWedge(d_particleRef[0], d_wedgeMerge[0]);
+				d_particleRef[0].CopyDeviceToHost(sumOfParticles);
 
 
 				stringstream ss;
@@ -1300,7 +1517,7 @@ int main(int argc, char* argv[])
 	}
 
 
-	CudaContext::DestroyContext(ctx);
+	CudaContext::DestroyInstance(ctx);
 
 #ifdef USE_MPI
 	MPI_Finalize();

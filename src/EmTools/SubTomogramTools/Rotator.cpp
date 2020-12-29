@@ -24,24 +24,36 @@
 #include "Rotator.h"
 #include "Kernels/RotationKernel.cu.h"
 
+using namespace Cuda;
 
-Rotator::Rotator(Cuda::CudaContext* aCtx, int aSize) : 
+Rotator::Rotator(Cuda::CudaContext* aCtx, CUstream stream, int aSize) : 
 	_ctx(aCtx),
 	_array(CUarray_format::CU_AD_FORMAT_FLOAT, aSize, aSize, aSize, 1),
 	_size(aSize),
+	_texObjShift(NULL),
+	_texObjRot(NULL),
 	oldPhi(0),
 	oldPsi(0),
-	oldTheta(0)
+	oldTheta(0),
+	_stream(stream)
 {
 	CUmodule cuMod = aCtx->LoadModulePTX(SubTomogramRotationKernel, 0, false, false);
 
 	kernelRot3d = new Rot3dKernel(cuMod);
 	kernelShiftRot3d = new ShiftRot3dKernel(cuMod);
 	kernelShift = new ShiftKernel(cuMod);
+
+	_texObjShift = new Cuda::CudaTextureObject3D(CU_TR_ADDRESS_MODE_WRAP, CU_TR_ADDRESS_MODE_WRAP,
+		CU_TR_ADDRESS_MODE_WRAP, CU_TR_FILTER_MODE_LINEAR, CU_TRSF_NORMALIZED_COORDINATES, &_array);
+
+	_texObjRot = new Cuda::CudaTextureObject3D(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP,
+		CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, &_array);
 }
 
 Rotator::~Rotator()
 {
+	delete _texObjRot;
+	delete _texObjShift;
 	delete kernelRot3d;
 	delete kernelShiftRot3d;
 	delete kernelShift;
@@ -56,9 +68,9 @@ void Rotator::SetOldAngles(float aPhi, float aPsi, float aTheta)
 
 void Rotator::Rotate(float phi, float psi, float theta, Cuda::CudaDeviceVariable& vol)
 {
-	_array.CopyFromDeviceToArray(vol);
-	Cuda::CudaTextureObject3D texObj(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP,
-		CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, &_array);
+	_array.CopyFromDeviceToArrayAsync(_stream, vol);
+	//Cuda::CudaTextureObject3D texObj(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP,
+	//	CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, &_array);
 
 	RotationMatrix rotMatOld(oldPhi, oldPsi, oldTheta);
 	RotationMatrix rotMatNew(phi, psi, theta);
@@ -68,23 +80,23 @@ void Rotator::Rotate(float phi, float psi, float theta, Cuda::CudaDeviceVariable
 	float3 rotMat1 = make_float3(rotMat(1, 0), rotMat(1, 1), rotMat(1, 2));
 	float3 rotMat2 = make_float3(rotMat(2, 0), rotMat(2, 1), rotMat(2, 2));
 
-	(*kernelRot3d)(_size, rotMat0, rotMat1, rotMat2, texObj, vol);
+	(*kernelRot3d)(_stream, _size, rotMat0, rotMat1, rotMat2, *_texObjRot, vol);
 }
 
 void Rotator::Shift(float3 shift, Cuda::CudaDeviceVariable& vol)
 {
-	_array.CopyFromDeviceToArray(vol);
-	Cuda::CudaTextureObject3D texObj(CU_TR_ADDRESS_MODE_WRAP, CU_TR_ADDRESS_MODE_WRAP,
-		CU_TR_ADDRESS_MODE_WRAP, CU_TR_FILTER_MODE_LINEAR, CU_TRSF_NORMALIZED_COORDINATES, &_array);
+	_array.CopyFromDeviceToArrayAsync(_stream, vol);
+	//Cuda::CudaTextureObject3D texObj(CU_TR_ADDRESS_MODE_WRAP, CU_TR_ADDRESS_MODE_WRAP,
+	//	CU_TR_ADDRESS_MODE_WRAP, CU_TR_FILTER_MODE_LINEAR, CU_TRSF_NORMALIZED_COORDINATES, &_array);
 
-	(*kernelShift)(_size, shift, texObj, vol);
+	(*kernelShift)(_stream, _size, shift, *_texObjShift, vol);
 }
 
 void Rotator::ShiftRotate(float3 shift, float phi, float psi, float theta, Cuda::CudaDeviceVariable& vol)
 {
-	_array.CopyFromDeviceToArray(vol);
-	Cuda::CudaTextureObject3D texObj(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP,
-		CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, &_array);
+	_array.CopyFromDeviceToArrayAsync(_stream, vol);
+	//Cuda::CudaTextureObject3D texObj(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP,
+	//	CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, &_array);
 
 	RotationMatrix rotMatOld(oldPhi, oldPsi, oldTheta);
 	RotationMatrix rotMatNew(phi, psi, theta);
@@ -94,26 +106,26 @@ void Rotator::ShiftRotate(float3 shift, float phi, float psi, float theta, Cuda:
 	float3 rotMat1 = make_float3(rotMat(1, 0), rotMat(1, 1), rotMat(1, 2));
 	float3 rotMat2 = make_float3(rotMat(2, 0), rotMat(2, 1), rotMat(2, 2));
 
-	(*kernelShiftRot3d)(_size, shift, rotMat0, rotMat1, rotMat2, texObj, vol);
+	(*kernelShiftRot3d)(_stream, _size, shift, rotMat0, rotMat1, rotMat2, *_texObjRot, vol);
 }
 
 void Rotator::ShiftRotateTwoStep(float3 shift, float phi, float psi, float theta, Cuda::CudaDeviceVariable& vol)
 {
-	_array.CopyFromDeviceToArray(vol);
-	Cuda::CudaTextureObject3D texObjShift(CU_TR_ADDRESS_MODE_WRAP, CU_TR_ADDRESS_MODE_WRAP,
-		CU_TR_ADDRESS_MODE_WRAP, CU_TR_FILTER_MODE_LINEAR, CU_TRSF_NORMALIZED_COORDINATES, &_array);
+	_array.CopyFromDeviceToArrayAsync(_stream, vol);
+	//Cuda::CudaTextureObject3D texObjShift(CU_TR_ADDRESS_MODE_WRAP, CU_TR_ADDRESS_MODE_WRAP,
+	//	CU_TR_ADDRESS_MODE_WRAP, CU_TR_FILTER_MODE_LINEAR, CU_TRSF_NORMALIZED_COORDINATES, &_array);
 
 	float3 shiftInteger = make_float3(round(shift.x), round(shift.y), round(shift.z));
 	shift.x = shift.x - shiftInteger.x;
 	shift.y = shift.y - shiftInteger.y;
 	shift.z = shift.z - shiftInteger.z;
 
-	(*kernelShift)(_size, shiftInteger, texObjShift, vol);
+	(*kernelShift)(_stream, _size, shiftInteger, *_texObjShift, vol);
 
-	_array.CopyFromDeviceToArray(vol);
+	_array.CopyFromDeviceToArrayAsync(_stream, vol);
 
-	Cuda::CudaTextureObject3D texObjRot(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP,
-		CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, &_array);
+	//Cuda::CudaTextureObject3D texObjRot(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP,
+	//	CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, &_array);
 
 	RotationMatrix rotMatOld(oldPhi, oldPsi, oldTheta);
 	RotationMatrix rotMatNew(phi, psi, theta);
@@ -123,5 +135,73 @@ void Rotator::ShiftRotateTwoStep(float3 shift, float phi, float psi, float theta
 	float3 rotMat1 = make_float3(rotMat(1, 0), rotMat(1, 1), rotMat(1, 2));
 	float3 rotMat2 = make_float3(rotMat(2, 0), rotMat(2, 1), rotMat(2, 2));
 
-	(*kernelShiftRot3d)(_size, shift, rotMat0, rotMat1, rotMat2, texObjRot, vol);
+	(*kernelShiftRot3d)(_stream, _size, shift, rotMat0, rotMat1, rotMat2, *_texObjRot, vol);
 }
+
+//
+//void Rotator::Rotate(CUstream stream, float phi, float psi, float theta, Cuda::CudaDeviceVariable& vol)
+//{
+//	cudaSafeCall(cuStreamSynchronize(stream));
+//	_array.CopyFromDeviceToArrayAsync(stream, vol);
+//	cudaSafeCall(cuStreamSynchronize(stream));
+//
+//	RotationMatrix rotMatOld(oldPhi, oldPsi, oldTheta);
+//	RotationMatrix rotMatNew(phi, psi, theta);
+//	RotationMatrix rotMat = rotMatNew * rotMatOld;
+//
+//	float3 rotMat0 = make_float3(rotMat(0, 0), rotMat(0, 1), rotMat(0, 2));
+//	float3 rotMat1 = make_float3(rotMat(1, 0), rotMat(1, 1), rotMat(1, 2));
+//	float3 rotMat2 = make_float3(rotMat(2, 0), rotMat(2, 1), rotMat(2, 2));
+//
+//	(*kernelRot3d)(stream, _size, rotMat0, rotMat1, rotMat2, *_texObjRot, vol);
+//}
+//
+//void Rotator::Shift(CUstream stream, float3 shift, Cuda::CudaDeviceVariable& vol)
+//{
+//	_array.CopyFromDeviceToArrayAsync(stream, vol);
+//
+//	(*kernelShift)(stream, _size, shift, *_texObjShift, vol);
+//}
+//
+//void Rotator::ShiftRotate(CUstream stream, float3 shift, float phi, float psi, float theta, Cuda::CudaDeviceVariable& vol)
+//{
+//	_array.CopyFromDeviceToArrayAsync(stream, vol);
+//
+//	RotationMatrix rotMatOld(oldPhi, oldPsi, oldTheta);
+//	RotationMatrix rotMatNew(phi, psi, theta);
+//	RotationMatrix rotMat = rotMatNew * rotMatOld;
+//
+//	float3 rotMat0 = make_float3(rotMat(0, 0), rotMat(0, 1), rotMat(0, 2));
+//	float3 rotMat1 = make_float3(rotMat(1, 0), rotMat(1, 1), rotMat(1, 2));
+//	float3 rotMat2 = make_float3(rotMat(2, 0), rotMat(2, 1), rotMat(2, 2));
+//
+//	(*kernelShiftRot3d)(stream, _size, shift, rotMat0, rotMat1, rotMat2, *_texObjRot, vol);
+//}
+//
+//void Rotator::ShiftRotateTwoStep(CUstream stream, float3 shift, float phi, float psi, float theta, Cuda::CudaDeviceVariable& vol)
+//{
+//	//cudaSafeCall(cuStreamSynchronize(stream));
+//	_array.CopyFromDeviceToArrayAsync(stream, vol); 
+//	//cudaSafeCall(cuStreamSynchronize(stream));
+//
+//	float3 shiftInteger = make_float3(round(shift.x), round(shift.y), round(shift.z));
+//	shift.x = shift.x - shiftInteger.x;
+//	shift.y = shift.y - shiftInteger.y;
+//	shift.z = shift.z - shiftInteger.z;
+//
+//	(*kernelShift)(stream, _size, shiftInteger, *_texObjShift, vol);
+//
+//	//cudaSafeCall(cuStreamSynchronize(stream));
+//	_array.CopyFromDeviceToArrayAsync(stream, vol);
+//	//cudaSafeCall(cuStreamSynchronize(stream));
+//
+//	RotationMatrix rotMatOld(oldPhi, oldPsi, oldTheta);
+//	RotationMatrix rotMatNew(phi, psi, theta);
+//	RotationMatrix rotMat = rotMatNew * rotMatOld;
+//
+//	float3 rotMat0 = make_float3(rotMat(0, 0), rotMat(0, 1), rotMat(0, 2));
+//	float3 rotMat1 = make_float3(rotMat(1, 0), rotMat(1, 1), rotMat(1, 2));
+//	float3 rotMat2 = make_float3(rotMat(2, 0), rotMat(2, 1), rotMat(2, 2));
+//
+//	(*kernelShiftRot3d)(stream, _size, shift, rotMat0, rotMat1, rotMat2, *_texObjRot, vol);
+//}

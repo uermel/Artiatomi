@@ -26,17 +26,26 @@
 
 #include "../Basics/Default.h"
 #include "CorrelationKernel.h"
+#include "SubDeviceKernel.h"
 
 #include <CudaContext.h>
 #include <CudaKernel.h>
 #include <CudaVariables.h>
 
 #include <cufft.h>
-#include <npps.h>
+#include <npp.h>
 
 class Correlator3D
 {
 private:
+	struct userData
+	{
+		float* srcPointer;
+		float* dstPointer;
+	};
+
+	static void Correlator3D::streamCallback(CUstream stream, CUresult error, void* data);
+
 	Cuda::CudaContext* ctx;
 	int size;
 	size_t totalSize;
@@ -50,12 +59,16 @@ private:
 	MulRealCplxFFTShiftKernel* kernelMulRealCplxFFTShift;
 	BinarizeKernel* kernelBinarize;
 	WedgeNormKernel* kernelWedgeNorm;
+	SubDivDeviceKernel* kernelSubDiv;
+	
 
-	Cuda::CudaDeviceVariable* scratchMemory;
+	Cuda::CudaDeviceVariable scratchMemory;
 	Cuda::CudaDeviceVariable sumValue;
 	Cuda::CudaDeviceVariable sumSqrValue;
+	Cuda::CudaDeviceVariable sumSqrValuePart;
+	Cuda::CudaDeviceVariable sumSqrValueRef;
 	Cuda::CudaDeviceVariable nVox;
-	Cuda::CudaDeviceVariable& filter;
+	Cuda::CudaDeviceVariable filter;
 
 	Cuda::CudaDeviceVariable particle;
 	Cuda::CudaDeviceVariable particleFFT;
@@ -63,6 +76,7 @@ private:
 	Cuda::CudaDeviceVariable maskFFT;
 	Cuda::CudaDeviceVariable ref;
 	Cuda::CudaDeviceVariable refFFT;
+	Cuda::CudaPageLockedHostVariable pl_CCFastResult;
 
 	float rDown;
 	float rUp;
@@ -74,12 +88,16 @@ private:
 	cufftHandle planR2C;
 	cufftHandle planC2R;
 
+	NppStreamContext streamCtx;
+	CUstream stream;
+	CUevent ev;
 public:
-	Correlator3D(Cuda::CudaContext* aCtx, int aSize, Cuda::CudaDeviceVariable& aFilter, float aRDown, float aRUp, float aSmooth, bool aUseFilterVolume);
+	Correlator3D(Cuda::CudaContext* aCtx, int aSize, Cuda::CudaDeviceVariable* aFilter, float aRDown, float aRUp, float aSmooth, bool aUseFilterVolume, CUstream aStream);
 	
 	~Correlator3D();
 
 	void FourierFilter(Cuda::CudaDeviceVariable& particle);
+	//void FourierFilter(CUstream stream, Cuda::CudaDeviceVariable& particle);
 
 	void PrepareParticle(Cuda::CudaDeviceVariable& particle, Cuda::CudaDeviceVariable& wedge);
 
@@ -87,7 +105,7 @@ public:
 
 	void GetCC(Cuda::CudaDeviceVariable& mask, Cuda::CudaDeviceVariable& aRef, Cuda::CudaDeviceVariable& wedge, Cuda::CudaDeviceVariable& ccVolOut);
 
-	float GettCCFast(Cuda::CudaDeviceVariable& mask, Cuda::CudaDeviceVariable& particle, Cuda::CudaDeviceVariable& ref, Cuda::CudaDeviceVariable& wedge);
+	void GettCCFast(Cuda::CudaDeviceVariable& mask, Cuda::CudaDeviceVariable& particle, Cuda::CudaDeviceVariable& ref, Cuda::CudaDeviceVariable& wedge, float* result);
 	void PhaseCorrelate(Cuda::CudaDeviceVariable& particle, Cuda::CudaDeviceVariable& mask, Cuda::CudaDeviceVariable& aRef, Cuda::CudaDeviceVariable& wedge, Cuda::CudaDeviceVariable& ccVolOut);
 
 	void MultiplyWedge(Cuda::CudaDeviceVariable& particle, Cuda::CudaDeviceVariable& wedge);

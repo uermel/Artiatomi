@@ -40,6 +40,7 @@ public:
 	Rot3dKernel(CUmodule aModule);
 
 	float operator()(int size, float3 rotMat0, float3 rotMat1, float3 rotMat2, Cuda::CudaTextureObject3D& inVol, Cuda::CudaDeviceVariable& outVol);
+	void operator()(CUstream stream, int size, float3 rotMat0, float3 rotMat1, float3 rotMat2, Cuda::CudaTextureObject3D& inVol, Cuda::CudaDeviceVariable& outVol);
 };
 
 class ShiftRot3dKernel : public Cuda::CudaKernel
@@ -49,6 +50,7 @@ public:
 	ShiftRot3dKernel(CUmodule aModule);
 
 	float operator()(int size, float3 shift, float3 rotMat0, float3 rotMat1, float3 rotMat2, Cuda::CudaTextureObject3D& inVol, Cuda::CudaDeviceVariable& outVol);
+	void operator()(CUstream stream, int size, float3 shift, float3 rotMat0, float3 rotMat1, float3 rotMat2, Cuda::CudaTextureObject3D& inVol, Cuda::CudaDeviceVariable& outVol);
 };
 
 class ShiftKernel : public Cuda::CudaKernel
@@ -58,6 +60,7 @@ public:
 	ShiftKernel(CUmodule aModule);
 
 	float operator()(int size, float3 shift, Cuda::CudaTextureObject3D& inVol, Cuda::CudaDeviceVariable& outVol);
+	void operator()(CUstream stream, int size, float3 shift, Cuda::CudaTextureObject3D& inVol, Cuda::CudaDeviceVariable& outVol);
 };
 
 #endif

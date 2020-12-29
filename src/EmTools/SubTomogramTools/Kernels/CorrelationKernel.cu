@@ -9,7 +9,7 @@
 #define EPS (0.000001f)
 
 extern "C"
-__global__ void fftshiftReal(int size, float* volIn, float* volOut)
+__global__ void fftshiftReal(int size, const float* __restrict__ volIn, float* volOut)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
 	const int y = blockIdx.y * blockDim.y + threadIdx.y;	
@@ -28,7 +28,7 @@ __global__ void fftshiftReal(int size, float* volIn, float* volOut)
 }
 
 extern "C"
-__global__ void energynorm(int size, float* particle, float* partSqr, float* cccMap, float* energyRef, float* nVox)
+__global__ void energynorm(int size, const float* __restrict__ particle, const float* __restrict__ partSqr, float* cccMap, const float* __restrict__ energyRef, const float* __restrict__ nVox)
 {
 	const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;	
@@ -56,7 +56,7 @@ __global__ void energynorm(int size, float* particle, float* partSqr, float* ccc
 
 
 extern "C"
-__global__ void wedgeNorm(int size, float* wedge, float2* part, float maxVal)
+__global__ void wedgeNorm(int size, const float* __restrict__ wedge, float2* part, const float* __restrict__ maxVal)
 {
 	const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -74,9 +74,10 @@ __global__ void wedgeNorm(int size, float* wedge, float2* part, float maxVal)
 	int idxReal = k * size * size + j * size + i;
 
 	float val = wedge[idxReal];
+	float maxv = *maxVal;
 
-	if (val < 0.1f * maxVal)
-		val = 1.0f / (0.1f * maxVal);
+	if (val < 0.1f * maxv)
+		val = 1.0f / (0.1f * maxv);
 	else
 		val = 1.0f / val;
 
@@ -89,7 +90,7 @@ __global__ void wedgeNorm(int size, float* wedge, float2* part, float maxVal)
 
 
 extern "C"
-__global__ void binarize(int length, float* inVol, float* outVol)
+__global__ void binarize(int length, const float* __restrict__ inVol, float* outVol)
 {
 	const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	if (x >= length)
@@ -101,7 +102,7 @@ __global__ void binarize(int length, float* inVol, float* outVol)
 
 
 extern "C"
-__global__ void conv(int length, float2* inVol, float2* outVol)
+__global__ void conv(int length, const float2* __restrict__ inVol, float2* outVol)
 {
 	const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	if (x >= length)
@@ -118,7 +119,7 @@ __global__ void conv(int length, float2* inVol, float2* outVol)
 
 
 extern "C"
-__global__ void correl(int length, float2* inVol, float2* outVol)
+__global__ void correl(int length, const float2* __restrict__ inVol, float2* outVol)
 {
 	const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	if (x >= length)
@@ -135,7 +136,7 @@ __global__ void correl(int length, float2* inVol, float2* outVol)
 
 
 extern "C"
-__global__ void phaseCorrel(int length, float2 * inVol, float2 * outVol)
+__global__ void phaseCorrel(int length, const float2* __restrict__ inVol, float2 * outVol)
 {
 	const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	if (x >= length)
@@ -210,7 +211,7 @@ __global__ void bandpassFFTShift(int size, float2* vol, float rDown, float rUp, 
 
 
 extern "C"
-__global__ void mulRealCplxFFTShift(int size, float* realVol, float2* cplxVol)
+__global__ void mulRealCplxFFTShift(int size, const float* __restrict__ realVol, float2* cplxVol)
 {
 	int x = blockIdx.x * blockDim.x + threadIdx.x;
 	int y = blockIdx.y * blockDim.y + threadIdx.y;	

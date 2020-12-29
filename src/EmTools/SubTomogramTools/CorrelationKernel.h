@@ -38,6 +38,7 @@ public:
 	FftshiftRealKernel(CUmodule aModule);
 
 	float operator()(int size, Cuda::CudaDeviceVariable& inVol, Cuda::CudaDeviceVariable& outVol);
+	void operator()(CUstream stream, int size, Cuda::CudaDeviceVariable& inVol, Cuda::CudaDeviceVariable& outVol);
 };
 
 class EnergynormKernel : public Cuda::CudaKernel
@@ -47,6 +48,7 @@ public:
 	EnergynormKernel(CUmodule aModule);
 
 	float operator()(int size, Cuda::CudaDeviceVariable& particle, Cuda::CudaDeviceVariable& partSqr, Cuda::CudaDeviceVariable& cccMap, Cuda::CudaDeviceVariable& energyRef, Cuda::CudaDeviceVariable& nVox);
+	void operator()(CUstream stream, int size, Cuda::CudaDeviceVariable& particle, Cuda::CudaDeviceVariable& partSqr, Cuda::CudaDeviceVariable& cccMap, Cuda::CudaDeviceVariable& energyRef, Cuda::CudaDeviceVariable& nVox);
 };
 
 class BinarizeKernel : public Cuda::CudaKernel
@@ -56,6 +58,7 @@ public:
 	BinarizeKernel(CUmodule aModule);
 
 	float operator()(int length, Cuda::CudaDeviceVariable& inVol, Cuda::CudaDeviceVariable& outVol);
+	void operator()(CUstream stream, int length, Cuda::CudaDeviceVariable& inVol, Cuda::CudaDeviceVariable& outVol);
 };
 
 class ConvKernel : public Cuda::CudaKernel
@@ -65,6 +68,7 @@ public:
 	ConvKernel(CUmodule aModule);
 
 	float operator()(int length, Cuda::CudaDeviceVariable& inVol, Cuda::CudaDeviceVariable& outVol);
+	void operator()(CUstream stream, int length, Cuda::CudaDeviceVariable& inVol, Cuda::CudaDeviceVariable& outVol);
 };
 
 class CorrelKernel : public Cuda::CudaKernel
@@ -74,6 +78,7 @@ public:
 	CorrelKernel(CUmodule aModule);
 
 	float operator()(int length, Cuda::CudaDeviceVariable& inVol, Cuda::CudaDeviceVariable& outVol);
+	void operator()(CUstream stream, int length, Cuda::CudaDeviceVariable& inVol, Cuda::CudaDeviceVariable& outVol);
 };
 
 class PhaseCorrelKernel : public Cuda::CudaKernel
@@ -83,6 +88,7 @@ public:
 	PhaseCorrelKernel(CUmodule aModule);
 
 	float operator()(int length, Cuda::CudaDeviceVariable& inVol, Cuda::CudaDeviceVariable& outVol);
+	void operator()(CUstream stream, int length, Cuda::CudaDeviceVariable& inVol, Cuda::CudaDeviceVariable& outVol);
 };
 
 class BandpassFFTShiftKernel : public Cuda::CudaKernel
@@ -92,6 +98,7 @@ public:
 	BandpassFFTShiftKernel(CUmodule aModule);
 
 	float operator()(int size, Cuda::CudaDeviceVariable& vol, float rDown, float rUp, float smooth);
+	void operator()(CUstream stream, int size, Cuda::CudaDeviceVariable& vol, float rDown, float rUp, float smooth);
 };
 
 class MulRealCplxFFTShiftKernel : public Cuda::CudaKernel
@@ -101,6 +108,7 @@ public:
 	MulRealCplxFFTShiftKernel(CUmodule aModule);
 
 	float operator()(int size, Cuda::CudaDeviceVariable& realVol, Cuda::CudaDeviceVariable& cplxVol);
+	void operator()(CUstream stream, int size, Cuda::CudaDeviceVariable& realVol, Cuda::CudaDeviceVariable& cplxVol);
 };
 
 class WedgeNormKernel : public Cuda::CudaKernel
@@ -109,7 +117,8 @@ public:
 	WedgeNormKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
 	WedgeNormKernel(CUmodule aModule);
 
-	float operator()(int size, Cuda::CudaDeviceVariable& wedge, Cuda::CudaDeviceVariable& part, float maxVal);
+	float operator()(int size, Cuda::CudaDeviceVariable& wedge, Cuda::CudaDeviceVariable& part, Cuda::CudaDeviceVariable& maxVal);
+	void operator()(CUstream stream, int size, Cuda::CudaDeviceVariable& wedge, Cuda::CudaDeviceVariable& part, Cuda::CudaDeviceVariable& maxVal);
 };
 
 #endif

@@ -18,6 +18,8 @@ __global__ void computeEigenImages(int numberOfVoxels, int numberOfEigenImages, 
 
 	float ev = ccMatrix[particle + (numberOfEigenImages - 1 - eigenImage) * numberOfParticles]; //eigenvectors are in inverse order (small to large eigen value)
 	float vo = volIn[voxel];
-	eigenImages[eigenImage * numberOfVoxels + voxel] += ev * vo;
+	//eigenImages[eigenImage * numberOfVoxels + voxel] += ev * vo;
+	//use atomicAdd in case that another stream adds the same value:
+	atomicAdd(&eigenImages[eigenImage * numberOfVoxels + voxel], ev * vo);
 }
 

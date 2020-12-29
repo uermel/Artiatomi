@@ -73,6 +73,25 @@ float Rot3dKernel::operator()(int size, float3 rotMat0, float3 rotMat1, float3 r
 	return ms;
 }
 
+void Rot3dKernel::operator()(CUstream stream, int size, float3 rotMat0, float3 rotMat1, float3 rotMat2, Cuda::CudaTextureObject3D& inVol, Cuda::CudaDeviceVariable& outVol)
+{
+	CudaKernel::SetComputeSize(size, size, size);
+	CUtexObject tex = inVol.GetTexObject();
+	CUdeviceptr vol_dptr = outVol.GetDevicePtr();
+
+	void* arglist[6];
+
+	arglist[0] = &size;
+	arglist[1] = &rotMat0;
+	arglist[2] = &rotMat1;
+	arglist[3] = &rotMat2;
+	arglist[4] = &tex;
+	arglist[5] = &vol_dptr;
+
+	cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, stream, arglist, NULL));
+
+}
+
 ShiftRot3dKernel::ShiftRot3dKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim)
 	: CudaKernel("shiftRot3d", aModule, aGridDim, aBlockDim, 0)
 {
@@ -124,6 +143,25 @@ float ShiftRot3dKernel::operator()(int size, float3 shift, float3 rotMat0, float
 	return ms;
 }
 
+void ShiftRot3dKernel::operator()(CUstream stream, int size, float3 shift, float3 rotMat0, float3 rotMat1, float3 rotMat2, Cuda::CudaTextureObject3D& inVol, Cuda::CudaDeviceVariable& outVol)
+{
+	CudaKernel::SetComputeSize(size, size, size);
+	CUtexObject tex = inVol.GetTexObject();
+	CUdeviceptr vol_dptr = outVol.GetDevicePtr();
+
+	void* arglist[7];
+
+	arglist[0] = &size;
+	arglist[1] = &shift;
+	arglist[2] = &rotMat0;
+	arglist[3] = &rotMat1;
+	arglist[4] = &rotMat2;
+	arglist[5] = &tex;
+	arglist[6] = &vol_dptr;
+
+	cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, stream, arglist, NULL));
+}
+
 
 
 ShiftKernel::ShiftKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim)
@@ -172,4 +210,20 @@ float ShiftKernel::operator()(int size, float3 shift, Cuda::CudaTextureObject3D&
 	cudaSafeCall(cuEventDestroy(eventEnd));
 
 	return ms;
+}
+
+void ShiftKernel::operator()(CUstream stream, int size, float3 shift, Cuda::CudaTextureObject3D& inVol, Cuda::CudaDeviceVariable& outVol)
+{
+	CudaKernel::SetComputeSize(size, size, size);
+	CUtexObject tex = inVol.GetTexObject();
+	CUdeviceptr vol_dptr = outVol.GetDevicePtr();
+
+	void* arglist[4];
+
+	arglist[0] = &size;
+	arglist[1] = &shift;
+	arglist[2] = &tex;
+	arglist[3] = &vol_dptr;
+
+	cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, stream, arglist, NULL));
 }
