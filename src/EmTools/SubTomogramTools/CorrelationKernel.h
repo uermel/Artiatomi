@@ -121,4 +121,14 @@ public:
 	void operator()(CUstream stream, int size, Cuda::CudaDeviceVariable& wedge, Cuda::CudaDeviceVariable& part, Cuda::CudaDeviceVariable& maxVal);
 };
 
+class NormalizeKernel : public Cuda::CudaKernel
+{
+public:
+	NormalizeKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
+	NormalizeKernel(CUmodule aModule);
+
+	float operator()(int size, Cuda::CudaDeviceVariable& data);
+	void operator()(CUstream stream, int size, Cuda::CudaDeviceVariable& data);
+};
+
 #endif

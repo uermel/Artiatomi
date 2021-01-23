@@ -96,6 +96,7 @@ namespace Configuration
 			bool	ComputeAverageParticle;
 			string	AverageParticleFile;
 			string	ClassFileName;
+			bool	NormalizeAmplitudes;
 
 			
 

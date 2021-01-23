@@ -60,7 +60,7 @@ private:
 	BinarizeKernel* kernelBinarize;
 	WedgeNormKernel* kernelWedgeNorm;
 	SubDivDeviceKernel* kernelSubDiv;
-	
+	NormalizeKernel* kernelNormalize;
 
 	Cuda::CudaDeviceVariable scratchMemory;
 	Cuda::CudaDeviceVariable sumValue;
@@ -105,7 +105,7 @@ public:
 
 	void GetCC(Cuda::CudaDeviceVariable& mask, Cuda::CudaDeviceVariable& aRef, Cuda::CudaDeviceVariable& wedge, Cuda::CudaDeviceVariable& ccVolOut);
 
-	void GettCCFast(Cuda::CudaDeviceVariable& mask, Cuda::CudaDeviceVariable& particle, Cuda::CudaDeviceVariable& ref, Cuda::CudaDeviceVariable& wedge, float* result);
+	void GettCCFast(Cuda::CudaDeviceVariable& mask, Cuda::CudaDeviceVariable& particle, Cuda::CudaDeviceVariable& ref, Cuda::CudaDeviceVariable& wedge, float* result, bool normalizeAmplitudes);
 	void PhaseCorrelate(Cuda::CudaDeviceVariable& particle, Cuda::CudaDeviceVariable& mask, Cuda::CudaDeviceVariable& aRef, Cuda::CudaDeviceVariable& wedge, Cuda::CudaDeviceVariable& ccVolOut);
 
 	void MultiplyWedge(Cuda::CudaDeviceVariable& particle, Cuda::CudaDeviceVariable& wedge);

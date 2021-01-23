@@ -237,3 +237,27 @@ __global__ void mulRealCplxFFTShift(int size, const float* __restrict__ realVol,
 
 	cplxVol[idxCplx] = temp;
 }
+
+
+extern "C"
+__global__ void normalize(int size, float2* data)
+{
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (x >= size)
+		return;
+
+	float2 d = data[x];
+	float2 res;
+	res.x = 0;
+	res.y = 0;
+	float len = sqrtf(d.x * d.x + d.y * d.y);
+
+	if (len > 0)
+	{
+		res.x = d.x / len;
+		res.y = d.y / len;
+	}
+
+	data[x] = res;
+}

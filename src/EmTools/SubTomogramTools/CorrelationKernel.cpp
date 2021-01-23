@@ -606,3 +606,63 @@ void WedgeNormKernel::operator()(CUstream stream, int size, CudaDeviceVariable& 
 
 	cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, stream, arglist, NULL));
 }
+
+
+
+NormalizeKernel::NormalizeKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim)
+	: CudaKernel("normalize", aModule, aGridDim, aBlockDim, 0)
+{
+
+}
+
+NormalizeKernel::NormalizeKernel(CUmodule aModule)
+	: CudaKernel("normalize", aModule, make_dim3(1, 1, 1), make_dim3(32*16, 1, 1), 0)
+{
+
+}
+
+float NormalizeKernel::operator()(int size, CudaDeviceVariable& data)
+{
+	CudaKernel::SetComputeSize(size, 1, 1);
+	CUdeviceptr data_dptr = data.GetDevicePtr();
+
+	void* arglist[2];
+
+	arglist[0] = &size;
+	arglist[1] = &data_dptr;
+
+	float ms;
+
+	CUevent eventStart;
+	CUevent eventEnd;
+	CUstream stream = 0;
+	cudaSafeCall(cuEventCreate(&eventStart, CU_EVENT_BLOCKING_SYNC));
+	cudaSafeCall(cuEventCreate(&eventEnd, CU_EVENT_BLOCKING_SYNC));
+
+	cudaSafeCall(cuEventRecord(eventStart, stream));
+	cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, NULL, arglist, NULL));
+
+	cudaSafeCall(cuCtxSynchronize());
+
+	cudaSafeCall(cuEventRecord(eventEnd, stream));
+	cudaSafeCall(cuEventSynchronize(eventEnd));
+	cudaSafeCall(cuEventElapsedTime(&ms, eventStart, eventEnd));
+
+	cudaSafeCall(cuEventDestroy(eventStart));
+	cudaSafeCall(cuEventDestroy(eventEnd));
+
+	return ms;
+}
+
+void NormalizeKernel::operator()(CUstream stream, int size, CudaDeviceVariable& data)
+{
+	CudaKernel::SetComputeSize(size, 1, 1);
+	CUdeviceptr data_dptr = data.GetDevicePtr();
+
+	void* arglist[2];
+
+	arglist[0] = &size;
+	arglist[1] = &data_dptr;
+
+	cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, stream, arglist, NULL));
+}

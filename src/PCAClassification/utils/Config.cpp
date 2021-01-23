@@ -53,7 +53,8 @@ namespace Configuration
 		ComputeCovVarMatrix(true),
 		ComputeAverageParticle(true),
 		LimitNumberOfParticlesInPCA(false),
-		NumberOfParticlesInPCA(-1)
+		NumberOfParticlesInPCA(-1),
+		NormalizeAmplitudes(false)
 	{
 		while (appEnvp && *appEnvp) {
 			string envEntry = *appEnvp;
@@ -213,6 +214,7 @@ namespace Configuration
 			NumberOfParticlesInPCA = GetInt("NumberOfParticlesInPCA");
 		}
 
+		NormalizeAmplitudes = GetBool("NormalizeAmplitudes", false);
 	}
     Config* Config::config = NULL;
 	Config& Config::GetConfig(string aConfigFile, int argc, char** argv, int mpiPart, char** appEnvp)

@@ -902,7 +902,7 @@ int main(int argc, char* argv[])
 										memcpy(h_pagelockedBuffer[batch].GetHostPtr(), particleBlock2[p2 - pBlock2], d_particleRef[batch].GetSize());
 										d_particleRef[batch].CopyHostToDeviceAsync(streams[batch], h_pagelockedBuffer[batch].GetHostPtr());
 
-										correlators[batch]->GettCCFast(d_mask[batch], d_particle[batch], d_particleRef[batch], d_wedgeMerge[batch], &CCMatrix[p1 + p2 * totalCountPCA]);
+										correlators[batch]->GettCCFast(d_mask[batch], d_particle[batch], d_particleRef[batch], d_wedgeMerge[batch], &CCMatrix[p1 + p2 * totalCountPCA], aConfig.NormalizeAmplitudes);
 										});
 
 								}

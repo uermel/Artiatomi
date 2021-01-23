@@ -99,6 +99,7 @@ Correlator3D::Correlator3D(CudaContext* aCtx, int aSize, CudaDeviceVariable* aFi
 	kernelBinarize = new BinarizeKernel(cuMod);
 	kernelWedgeNorm = new WedgeNormKernel(cuMod);
 	kernelSubDiv = new SubDivDeviceKernel(cuMod2);
+	kernelNormalize = new NormalizeKernel(cuMod);
 
 	cufftSafeCall(cufftSetStream(planR2C, stream));
 	cufftSafeCall(cufftSetStream(planC2R, stream));
@@ -262,7 +263,7 @@ void Correlator3D::GetCC(CudaDeviceVariable& mask, CudaDeviceVariable& aRef, Cud
 	(*kernelFftshiftReal)(stream, size, ref, ccVolOut);
 }
 
-void Correlator3D::GettCCFast(CudaDeviceVariable& aMask, CudaDeviceVariable& aParticle, CudaDeviceVariable& aRef, CudaDeviceVariable& aWedge, float* result)
+void Correlator3D::GettCCFast(CudaDeviceVariable& aMask, CudaDeviceVariable& aParticle, CudaDeviceVariable& aRef, CudaDeviceVariable& aWedge, float* result, bool normalizeAmplitudes)
 {
 
 	/*x = x - mean(mean(mean(x)));
@@ -277,6 +278,12 @@ void Correlator3D::GettCCFast(CudaDeviceVariable& aMask, CudaDeviceVariable& aPa
 
 	cufftSafeCall(cufftExecR2C(planR2C, (float*)aParticle.GetDevicePtr(), (cufftComplex*)particleFFT.GetDevicePtr()));
 	cufftSafeCall(cufftExecR2C(planR2C, (float*)aRef.GetDevicePtr(), (cufftComplex*)refFFT.GetDevicePtr()));
+
+	if (normalizeAmplitudes)
+	{
+		(*kernelNormalize)(stream, size * size * (size / 2 + 1), particleFFT);
+		(*kernelNormalize)(stream, size * size * (size / 2 + 1), refFFT);
+	}
 
 	(*kernelMulRealCplxFFTShift)(stream, size, aWedge, particleFFT);
 	(*kernelMulRealCplxFFTShift)(stream, size, aWedge, refFFT);
