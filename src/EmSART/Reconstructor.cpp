@@ -24,6 +24,7 @@
 #include "Reconstructor.h"
 #include "CudaKernelBinarys.h"
 #include <typeinfo>
+#include "cuda_profiler_api.h"
 
 using namespace std;
 using namespace Cuda;
@@ -40,6 +41,9 @@ KernelModuls::KernelModuls(Cuda::CudaContext* aCuCtx)
 	modBP = aCuCtx->LoadModulePTX(KernelBackProjectionOS, 0, infoOutput, compilerOutput);
 	modCTF = aCuCtx->LoadModulePTX(Kernelctf, 0, infoOutput, compilerOutput);
 	modCTS = aCuCtx->LoadModulePTX(KernelCopyToSquare, 0, infoOutput, compilerOutput);
+	modFPLUT = aCuCtx->LoadModulePTX(KernelFPLUT, 0, infoOutput, compilerOutput);
+    modBPLUT = aCuCtx->LoadModulePTX(KernelBPLUT, 0, infoOutput, compilerOutput);
+    modSplines = aCuCtx->LoadModulePTX(KernelSplines, 0, infoOutput, compilerOutput);
 }
 
 void Reconstructor::MatrixVector3Mul(float4x4 M, float3* v)
@@ -55,7 +59,6 @@ void Reconstructor::MatrixVector3Mul(float3x3& M, float xIn, float yIn, float& x
 {
     xOut = M.m[0].x * xIn + M.m[0].y * yIn + M.m[0].z * 1.f;
     yOut = M.m[1].x * xIn + M.m[1].y * yIn + M.m[1].z * 1.f;
-    //erg.z = M.m[2].x * v->x + M.m[2].y * v->y + M.m[2].z * v->z + 1.f * M.m[2].w;
 }
 
 template<class TVol>
@@ -71,9 +74,6 @@ void Reconstructor::GetDefocusDistances(float & t_in, float & t_out, int index, 
 	float3 volDim = vol->GetDimension();
 	float3 hitPoint;
 	float t;
-//	printf("PosInVol2: %f, %f, %f\n", (MC_bBoxMin.x + (volDim.x * vol->GetVoxelSize().x * 0.5f + vol->GetVoxelSize().x * 0.5f)),
-//		(MC_bBoxMin.y + (volDim.y * vol->GetVoxelSize().y * 0.5f + vol->GetVoxelSize().x * 0.5f)),
-//		(MC_bBoxMin.z + (volDim.z * vol->GetVoxelSize().z * 0.5f + vol->GetVoxelSize().x * 0.5f)));
 
 	t = (c_projNorm.x * (MC_bBoxMin.x + (volDim.x * vol->GetVoxelSize().x * 0.5f)) + 
 		 c_projNorm.y * (MC_bBoxMin.y + (volDim.y * vol->GetVoxelSize().y * 0.5f)) + 
@@ -126,58 +126,6 @@ void Reconstructor::GetDefocusDistances(float & t_in, float & t_out, int index, 
 				if (t < t_in) t_in = t;
 				if (t > t_out) t_out = t;
 			}
-
-	//printf("t_in: %f; t_out: %f\n", t_in, t_out);
-	//t_in = 2*-DIST;
-	//t_out = 2*DIST;
-
-	//for (int x = 0; x <= 1; x++)
-	//	for (int y = 0; y <= 1; y++)
-	//		for (int z = 0; z <= 1; z++)
-	//		{
-	//			//float t;
-
-	//			t = (nvec.x * (MC_bBoxMin.x + x * (MC_bBoxMax.x - MC_bBoxMin.x))
-	//				+ nvec.y * (MC_bBoxMin.y + y * (MC_bBoxMax.y - MC_bBoxMin.y))
-	//				+ nvec.z * (MC_bBoxMin.z + z * (MC_bBoxMax.z - MC_bBoxMin.z)));
-	//			t += (-nvec.x * pos2.x - nvec.y * pos2.y - nvec.z * pos2.z);
-
-	//			if (t < t_in) t_in = t;
-	//			if (t > t_out) t_out = t;
-	//		}
-	////printf("t_in: %f; t_out: %f\n", t_in, t_out);
-
-
-
-	//{
-	//	float xAniso = 2366.25f;
-	//	float yAniso = 4527.75f;
-
-	//	float3 c_source = c_detektor;
-	//	float3 c_uPitch = proj.GetPixelUPitch(index);
-	//	float3 c_vPitch = proj.GetPixelVPitch(index);
-	//	c_source = c_source + (xAniso)* c_uPitch;
-	//	c_source = c_source + (yAniso)* c_vPitch;
-
-	//	//////////// BOX INTERSECTION (partial Volume) /////////////////
-	//	float3 tEntry;
-	//	tEntry.x = (MC_bBoxMin.x - c_source.x) / (c_projNorm.x);
-	//	tEntry.y = (MC_bBoxMin.y - c_source.y) / (c_projNorm.y);
-	//	tEntry.z = (MC_bBoxMin.z - c_source.z) / (c_projNorm.z);
-
-	//	float3 tExit;
-	//	tExit.x = (MC_bBoxMax.x - c_source.x) / (c_projNorm.x);
-	//	tExit.y = (MC_bBoxMax.y - c_source.y) / (c_projNorm.y);
-	//	tExit.z = (MC_bBoxMax.z - c_source.z) / (c_projNorm.z);
-
-
-	//	float3 tmin = fminf(tEntry, tExit);
-	//	float3 tmax = fmaxf(tEntry, tExit);
-
-	//	t_in = fmaxf(fmaxf(tmin.x, tmin.y), tmin.z);
-	//	t_out = fminf(fminf(tmax.x, tmax.y), tmax.z);
-	//	printf("t_in: %f; t_out: %f\n", t_in, t_out);
-	//}
 }
 template void Reconstructor::GetDefocusDistances(float & t_in, float & t_out, int index, Volume<unsigned short>* vol);
 template void Reconstructor::GetDefocusDistances(float & t_in, float & t_out, int index, Volume<float>* vol);
@@ -226,12 +174,33 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 	compKernel(modules.modComp),
 	subEKernel(modules.modComp),
 	cropKernel(modules.modComp),
+	cropslicesKernel(modules.modComp),
 	bpKernel(modules.modBP, aConfig.FP16Volume),
 	convVolKernel(modules.modBP),
 	convVol3DKernel(modules.modBP),
 	ctf(modules.modCTF),
+	ctfs(modules.modCTF),
 	cts(modules.modCTS),
+	//ctss(modules.modCTS),
+	//ctrs(modules.modCTS),
+	r2ss(modules.modCTS),
+    ss2rs(modules.modCTS),
+    rs2ss(modules.modCTS),
+    ss2r(modules.modCTS),
 	dimBordersKernel(modules.modComp),
+	prefilter2DX(modules.modSplines),
+	prefilter2DY(modules.modSplines),
+	bplutKernel(modules.modBPLUT),
+	fplutKernel(modules.modFPLUT),
+	fplutslicedKernel(modules.modFPLUT),
+	fpdistslicedKernel(modules.modFPLUT),
+	osKernel(modules.modBPLUT),
+	bplutbwKernel(modules.modBPLUT),
+	bplutbwcgKernel(modules.modBPLUT),
+	bplutblockKernel(modules.modBPLUT),
+	bplutblocknodivKernel(modules.modBPLUT),
+	bplutvblockslicedKernel(modules.modBPLUT),
+	bplutslicedKernel(modules.modBPLUT),
 #ifdef REFINE_MODE
 	rotKernel(modules.modWBP, aConfig.SizeSubVol),
 	maxShiftWeightedKernel(modules.modWBP),
@@ -247,7 +216,10 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 	squareBorderSizeY(0),
 	squarePointerShift(0),
 	magAnisotropy(GetMagAnistropyMatrix(aConfig.MagAnisotropyAmount, aConfig.MagAnisotropyAngleInDeg, (float)proj.GetWidth(), (float)proj.GetHeight())),
-	magAnisotropyInv(GetMagAnistropyMatrix(1.0f / aConfig.MagAnisotropyAmount, aConfig.MagAnisotropyAngleInDeg, (float)proj.GetWidth(), (float)proj.GetHeight()))
+	magAnisotropyInv(GetMagAnistropyMatrix(1.0f / aConfig.MagAnisotropyAmount, aConfig.MagAnisotropyAngleInDeg, (float)proj.GetWidth(), (float)proj.GetHeight())),
+	LUT_d(CU_AD_FORMAT_FLOAT, aConfig.LUTSize, aConfig.LUTSize, 1),
+	osproj_arr(CU_AD_FORMAT_FLOAT, aProj.GetWidth()*aConfig.OverSampling, aProj.GetHeight()*aConfig.OverSampling, 1),
+	surfProj()
 {
 	//Set kernel work dimensions for 2D images:
 	fpKernel.SetComputeSize(proj.GetWidth(), proj.GetHeight(), 1);
@@ -267,6 +239,7 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 	maxShiftKernel.SetComputeSize(proj.GetMaxDimension(), proj.GetMaxDimension(), 1);
 	convVolKernel.SetComputeSize(config.RecDimensions.x, config.RecDimensions.y, 1);
 	dimBordersKernel.SetComputeSize(proj.GetWidth(), proj.GetHeight(), 1);
+	osKernel.SetComputeSize(proj.GetWidth(), proj.GetHeight(), 1);
 
 	//Alloc device variables
 	realprojUS_d.Alloc(proj.GetWidth() * sizeof(int), proj.GetHeight(), sizeof(int));
@@ -274,6 +247,19 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 	realproj_d.Alloc(proj.GetWidth() * sizeof(float), proj.GetHeight(), sizeof(float));
 	dist_d.Alloc(proj.GetWidth() * sizeof(float), proj.GetHeight(), sizeof(float));
 	filterImage_d.Alloc(proj.GetWidth() * sizeof(float), proj.GetHeight(), sizeof(float));
+
+	LUT_d_0.Alloc(config.LUTSize * sizeof(float), config.LUTSize, sizeof(float));
+    LUT_d_0.Memset(0);
+	texLUT.Bind(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, &LUT_d, CU_AD_FORMAT_FLOAT, 1);
+    LUTcenter = (float)config.LUTSize / 2.f;
+
+    osproj_d_0.Alloc(proj.GetWidth() * config.OverSampling * sizeof(float), proj.GetHeight() * config.OverSampling, sizeof(float));
+    osproj_d_0.Memset(0);
+
+    osproj_v.Alloc(proj.GetWidth() * config.OverSampling * sizeof(float), proj.GetHeight() * config.OverSampling, sizeof(float));
+    osproj_v.Memset(0);
+
+    //surfProj.Bind(&osproj_v, CU_AD_FORMAT_FLOAT, 1);
 
 #ifdef REFINE_MODE
 	maxShiftWeightedKernel.SetComputeSize(proj.GetMaxDimension(), proj.GetMaxDimension(), 1);
@@ -338,6 +324,7 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 	else
 	{
 		texImage.Bind(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, &proj_d, CU_AD_FORMAT_FLOAT, 1);
+        texOS.Bind(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_POINT, 0, &osproj_v, CU_AD_FORMAT_FLOAT, 1);
 		//CudaTextureLinearPitched2D::Bind(&bpKernel, "tex", CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP,
 		//	CU_TR_FILTER_MODE_POINT, 0, &proj_d, CU_AD_FORMAT_FLOAT, 1);
 	}
@@ -393,6 +380,7 @@ Reconstructor::Reconstructor(Configuration::Config & aConfig,
 
 	MPIBuffer = new float[proj.GetWidth() * proj.GetHeight()];
 	SetConstantValues(ctf, proj, 0, config.Cs, config.Voltage);
+    SetConstantValues(ctfs, proj, 0, config.Cs, config.Voltage);
 
 	ResetProjectionsDevice();
 }
@@ -563,6 +551,312 @@ void Reconstructor::ForwardProjectionNoCTF(Volume<TVol>* vol, CudaTextureObject3
 }
 template void Reconstructor::ForwardProjectionNoCTF(Volume<unsigned short>* vol, CudaTextureObject3D& tevVol, int index, bool volumeIsEmpty, bool noSync);
 template void Reconstructor::ForwardProjectionNoCTF(Volume<float>* vol, CudaTextureObject3D& tevVol, int index, bool volumeIsEmpty, bool noSync);
+
+template<class TVol>
+void Reconstructor::ForwardProjectionLUTNoCTF(Volume<TVol>* vol, CudaSurfaceObject3D& surface, int stackIdx, bool volumeIsEmpty, int iter, bool noSync)
+{
+    float runtime;
+    int x = proj.GetWidth();
+    int y = proj.GetHeight();
+
+    //float LUTcenter = (float)config.LUTSize/2.f;
+    
+    if (volumeIsEmpty) // Volume is empty, FP not necessary (1st projection)
+    {
+        // Thickness map
+        SetConstantValues(fpdistslicedKernel,
+                          *vol,
+                          proj,
+                          stackIdx,
+                          mpi_part,
+                          magAnisotropy,
+                          magAnisotropyInv,
+                          1.f / config.LUTStep,
+                          LUTcenter,
+                          config.support,
+                          config.OverSampling,
+                          (*sliceNumbers)[stackIdx],
+                          (*entryPoints)[stackIdx],
+                          sliceThickness);
+
+        runtime = fpdistslicedKernel(proj.GetWidth(),
+                                     proj.GetHeight(),
+                                     config.Lambda,
+                                     config.OverSampling,
+                                     dist_d,
+                                     texLUT,
+                                     surface,
+                                     0,
+                                     9999999999999.0f,
+                                     vol);
+    } 
+    else // Volume is not empty, do FP also
+    {
+        printf("\n FORWARD PROJECTION ==============================================\n");
+
+        SetConstantValues(fplutslicedKernel,
+                          *vol,
+                          proj,
+                          stackIdx,
+                          mpi_part,
+                          magAnisotropy,
+                          magAnisotropyInv,
+                          1.f / config.LUTStep,
+                          LUTcenter,
+                          config.support,
+                          config.OverSampling,
+                          (*sliceNumbers)[stackIdx],
+                          (*entryPoints)[stackIdx],
+                          sliceThickness);
+
+        runtime = fplutslicedKernel(proj.GetWidth(),
+                                    proj.GetHeight(),
+                                    config.Lambda,
+                                    config.OverSampling,
+                                    CTFbuffer_realRect,
+                                    texLUT,
+                                    surface,
+                                    0,
+                                    9999999999999.0f,
+                                    vol);
+
+        {
+            auto fwdresult = new float[proj.GetWidth() * proj.GetHeight() * maxSliceNumber];
+            CTFbuffer_realRect.CopyDeviceToHost(fwdresult,
+                                                proj.GetWidth() * proj.GetHeight() * maxSliceNumber * sizeof(float));
+
+            stringstream ss;
+            ss << "forward_proj_before_crop_" << stackIdx << "_" << iter << ".em";
+            emwrite(ss.str(), fwdresult, proj.GetWidth(), proj.GetHeight(),
+                    maxSliceNumber);
+            delete[] fwdresult;
+        }
+        //float defocusAngle = defocus.GetAstigmatismAngle(stackIdx) + (float)(proj.GetImageRotationToCompensate((uint)stackIdx) / M_PI * 180.0);
+        
+        // Crop
+        int2 pA, pB, pC, pD;
+        pA.x = 0;
+        pA.y = proj.GetHeight() - 1;
+        pB.x = proj.GetWidth() - 1;
+        pB.y = proj.GetHeight() - 1;
+        pC.x = 0;
+        pC.y = 0;
+        pD.x = proj.GetWidth() - 1;
+        pD.y = 0;
+
+//        for (int i=0; i < (*sliceNumbers).size(); i++) {
+//            printf("\nFORWARD Slicenum: %d %d\n", (*sliceNumbers)[stackIdx], i);
+//        }
+
+
+
+        cropslicesKernel.SetComputeSize(make_dim3(proj.GetWidth(), proj.GetHeight(), (*sliceNumbers)[stackIdx]));
+        cropslicesKernel(CTFbuffer_realRect,
+                         proj.GetWidth(),
+                         proj.GetHeight(),
+                         (*sliceNumbers)[stackIdx],
+                         config.CutLength,
+                         config.DimLength,
+                         pA,
+                         pB,
+                         pC,
+                         pD);
+
+        {
+            auto fwdresult = new float[proj.GetWidth() * proj.GetHeight() * maxSliceNumber];
+            CTFbuffer_realRect.CopyDeviceToHost(fwdresult,
+                                                proj.GetWidth() * proj.GetHeight() * maxSliceNumber * sizeof(float));
+
+            stringstream ss;
+            ss << "forward_proj_after_crop_" << stackIdx << "_" << iter << ".em";
+            emwrite(ss.str(), fwdresult, proj.GetWidth(), proj.GetHeight(),
+                    maxSliceNumber);
+
+            delete[] fwdresult;
+        }
+
+        // Copy to sliced stack
+        rs2ss.SetComputeSize(make_dim3(proj.GetMaxDimension(), proj.GetMaxDimension(), (*sliceNumbers)[stackIdx]));
+        rs2ss(CTFbuffer_realRect,
+              proj.GetWidth(),
+              proj.GetHeight(),
+              proj.GetMaxDimension(),
+              CTFbuffer_realSquare,
+              squareBorderSizeX,
+              squareBorderSizeY,
+              false,
+              true,
+              (*sliceNumbers)[stackIdx]);
+
+        {
+            auto fwdsquare = new float[proj.GetMaxDimension() * proj.GetMaxDimension() * maxSliceNumber];
+
+            CTFbuffer_realSquare.CopyDeviceToHost(fwdsquare,
+                                                  proj.GetMaxDimension() * proj.GetMaxDimension() * maxSliceNumber *
+                                                  sizeof(float));
+
+            stringstream ss;
+            ss << "forward_proj_aftercopy_" << stackIdx << "_" << iter << ".em";
+            emwrite(ss.str(), fwdsquare, proj.GetMaxDimension(), proj.GetMaxDimension(),
+                    maxSliceNumber);
+
+            delete[] fwdsquare;
+        }
+
+        // Back To Proj
+        ss2r.SetComputeSize(make_dim3(proj.GetMaxDimension(), proj.GetMaxDimension(), (*sliceNumbers)[stackIdx]));
+        ss2r(CTFbuffer_realSquare,
+             proj.GetMaxDimension(),
+             proj_d,
+             squareBorderSizeX,
+             squareBorderSizeY,
+             false,
+             true,
+             (*sliceNumbers)[stackIdx]);
+
+        // Thickness map
+        SetConstantValues(fpdistslicedKernel,
+                          *vol,
+                          proj,
+                          stackIdx,
+                          mpi_part,
+                          magAnisotropy,
+                          magAnisotropyInv,
+                          1.f / config.LUTStep,
+                          LUTcenter,
+                          config.support,
+                          config.OverSampling,
+                          (*sliceNumbers)[stackIdx],
+                          (*entryPoints)[stackIdx],
+                          sliceThickness);
+
+        runtime = fpdistslicedKernel(proj.GetWidth(),
+                                     proj.GetHeight(),
+                                     config.Lambda,
+                                     config.OverSampling,
+                                     dist_d,
+                                     texLUT,
+                                     surface,
+                                     0,
+                                     9999999999999.0f,
+                                     vol);
+
+    } 
+//        float3 volDim = vol->GetSubVolumeDimension(mpi_part);
+//        fplutKernel.SetComputeSize((int)volDim.x, (int)volDim.y, (int)volDim.z);
+//        int LUTcenter = floor(config.LUTSize/2)+1;
+//        SetConstantValues(fplutKernel, *vol, proj, index, mpi_part, magAnisotropy, magAnisotropyInv);
+//        runtime = fplutKernel(proj.GetWidth(),
+//                              proj.GetHeight(),
+//                              proj_d,
+//                              dist_d,
+//                              texLUT,
+//                              texVol,
+//                              0.f,
+//                              999999999999.f,
+//                              config.support,
+//                              1.f/config.LUTStep,
+//                              LUTcenter);
+//
+//#ifdef USE_MPI
+//        if (!noSync)
+//		{
+//			if (mpi_part == 0)
+//			{
+//				for (int mpi = 1; mpi < mpi_size; mpi++)
+//				{
+//					MPI_Recv(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+//					realprojUS_d.CopyHostToDevice(MPIBuffer);
+//					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)proj_d.GetDevicePtr(), (int)proj_d.GetPitch(), roiAll));
+//					MPI_Recv(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+//					realprojUS_d.CopyHostToDevice(MPIBuffer);
+//					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
+//				}
+//#endif
+//
+//        // To avoid aliasing artifacts low pass filter to Nyquist of tomogram or Projection fourier filter, whichever is lower.
+//        if ((config.VoxelSize.x > 1) && (config.LimitToNyquist)) // assume cubic voxel sizes
+//        {
+//            int2 pA, pB, pC, pD;
+//            pA.x = 0;
+//            pA.y = proj.GetHeight() - 1;
+//            pB.x = proj.GetWidth() - 1;
+//            pB.y = proj.GetHeight() - 1;
+//            pC.x = 0;
+//            pC.y = 0;
+//            pD.x = proj.GetWidth() - 1;
+//            pD.y = 0;
+//
+//            cropKernel(proj_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
+//
+//            cts(proj_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, true);
+//
+//            fft_d.Memset(0);
+//            cufftSafeCall(cufftExecR2C(handleR2C, (cufftReal*)projSquare_d.GetDevicePtr(), (cufftComplex*)fft_d.GetDevicePtr()));
+//
+//            // Set the low pass filter to nyquist of the Tomogram
+//            float lp = (float)proj.GetMaxDimension() / config.VoxelSize.x - 20.f;
+//            float lps = 20.f;
+//            // Use the low pass from the config if it's lower and filter is not skipped
+//            if (!config.SkipFilter) {
+//                if (lp > (float) config.fourFilterLP) {
+//                    lp = (float) config.fourFilterLP;
+//                    lps = (float) config.fourFilterLPS;
+//                }
+//            }
+//
+//            int size = proj.GetMaxDimension();
+//
+//            fourFilterKernel(fft_d, roiFFT.width * sizeof(Npp32fc), size, lp, 0, lps, 0);
+//
+//
+//            cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
+//
+//            nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float), (float)(proj.GetMaxDimension() * proj.GetMaxDimension()),
+//                                         (Npp32f*)proj_d.GetDevicePtr(), (int)proj_d.GetPitch(), roiAll));
+//
+//
+//            cropKernel(proj_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
+//        }
+//#ifdef USE_MPI
+//        }
+//			else
+//			{
+//				proj_d.CopyDeviceToHost(MPIBuffer);
+//				MPI_Send(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+//				dist_d.CopyDeviceToHost(MPIBuffer);
+//				MPI_Send(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+//			}
+//		}
+//#endif
+//    }
+//    else
+//    {
+//        SetConstantValues(volTravLenKernel, *vol, proj, index, mpi_part, magAnisotropy, magAnisotropyInv);
+//
+//        runtime = volTravLenKernel(proj.GetWidth(), proj.GetHeight(), dist_d);
+//#ifdef USE_MPI
+//        if (!noSync)
+//		{
+//			if (mpi_part == 0)
+//			{
+//				for (int mpi = 1; mpi < mpi_size; mpi++)
+//				{
+//					MPI_Recv(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+//					realprojUS_d.CopyHostToDevice(MPIBuffer);
+//					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
+//				}
+//			}
+//			else
+//			{
+//				dist_d.CopyDeviceToHost(MPIBuffer);
+//				MPI_Send(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+//			}
+//		}
+//#endif
+//    }
+}
+template void Reconstructor::ForwardProjectionLUTNoCTF(Volume<float>* vol, CudaSurfaceObject3D& tevVol, int index, bool volumeIsEmpty, int iter, bool noSync);
 
 
 template<class TVol>
@@ -809,7 +1103,6 @@ void Reconstructor::ForwardProjectionNoCTFROI(Volume<TVol>* vol, CudaTextureObje
 					nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float), (float)(proj.GetMaxDimension() * proj.GetMaxDimension()),
 						(Npp32f*)proj_d.GetDevicePtr(), (int)proj_d.GetPitch(), roiAll));
 
-
 					cropKernel(proj_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
 				}
 #ifdef USE_MPI
@@ -854,6 +1147,267 @@ void Reconstructor::ForwardProjectionNoCTFROI(Volume<TVol>* vol, CudaTextureObje
 template void Reconstructor::ForwardProjectionNoCTFROI(Volume<unsigned short>* vol, CudaTextureObject3D& tevVol, int index, bool volumeIsEmpty, int2 roiMin, int2 roiMax, bool noSync);
 template void Reconstructor::ForwardProjectionNoCTFROI(Volume<float>* vol, CudaTextureObject3D& tevVol, int index, bool volumeIsEmpty, int2 roiMin, int2 roiMax, bool noSync);
 
+void Reconstructor::GetCTFSlices(Volume<float>* vol, int index, int& sliceNumber, vector<float>& minDefocus, vector<float>& maxDefocus, vector<float>& defocusOffsets, float& entry, float& thick){
+
+    if (config.CtfMode == Configuration::Config::CTFM_NO){
+        sliceNumber = 1;
+        minDefocus.push_back(0);
+        maxDefocus.push_back(0);
+        defocusOffsets.push_back(0);
+        entry = 0;
+        thick = -DIST;
+        return;
+    }
+    else {
+        // Get geometry
+        float3 c_projNorm = proj.GetNormalVector(index);
+        float3 c_detektor = proj.GetPosition(index);
+        float3 MC_bBoxMin;
+        float3 MC_bBoxMax;
+        MC_bBoxMin = vol->GetVolumeBBoxMin();
+        MC_bBoxMax = vol->GetVolumeBBoxMax();
+        float3 volDim = vol->GetDimension();
+        float3 hitPoint;
+        float t;
+        float tiltAngle = (markers(MFI_TiltAngle, index, 0) + config.AddTiltAngle) / 180.0f * (float) M_PI;
+
+        // Ray from center of volume to projection
+        t = (c_projNorm.x * (MC_bBoxMin.x + (volDim.x * vol->GetVoxelSize().x * 0.5f)) +
+             c_projNorm.y * (MC_bBoxMin.y + (volDim.y * vol->GetVoxelSize().y * 0.5f)) +
+             c_projNorm.z * (MC_bBoxMin.z + (volDim.z * vol->GetVoxelSize().z * 0.5f)));
+        t += (-c_projNorm.x * c_detektor.x - c_projNorm.y * c_detektor.y - c_projNorm.z * c_detektor.z);
+        t = abs(t);
+
+        // Hit point in 3D (volume frame)
+        hitPoint.x = t * (-c_projNorm.x) + (MC_bBoxMin.x + (volDim.x * vol->GetVoxelSize().x * 0.5f));
+        hitPoint.y = t * (-c_projNorm.y) + (MC_bBoxMin.y + (volDim.y * vol->GetVoxelSize().y * 0.5f));
+        hitPoint.z = t * (-c_projNorm.z) + (MC_bBoxMin.z + (volDim.z * vol->GetVoxelSize().z * 0.5f));
+
+        // Hit point in 2D (projection frame)
+        float4x4 c_DetectorMatrix;
+        proj.GetDetectorMatrix(index, (float *) &c_DetectorMatrix, 1);
+        MatrixVector3Mul(c_DetectorMatrix, &hitPoint);
+        float hitX = round(hitPoint.x);
+        float hitY = round(hitPoint.y);
+        float3 pos = c_detektor + hitX * proj.GetPixelUPitch(index) + hitY * proj.GetPixelVPitch(index);
+
+        // Points outside volume
+        float t_in = 2 * - DIST;
+        float t_out = 2 * DIST;
+
+        // Entry/Exit points volume
+        for (int x = 0; x <= 1; x++) {
+            for (int y = 0; y <= 1; y++) {
+                for (int z = 0; z <= 1; z++) {
+
+                    t = (c_projNorm.x * (MC_bBoxMin.x + (float) x * (MC_bBoxMax.x - MC_bBoxMin.x))
+                         + c_projNorm.y * (MC_bBoxMin.y + (float) y * (MC_bBoxMax.y - MC_bBoxMin.y))
+                         + c_projNorm.z * (MC_bBoxMin.z + (float) z * (MC_bBoxMax.z - MC_bBoxMin.z)));
+                    t += (-c_projNorm.x * pos.x - c_projNorm.y * pos.y - c_projNorm.z * pos.z);
+
+                    if (t < t_in) t_in = t;
+                    if (t > t_out) t_out = t;
+                }
+            }
+        }
+
+        // Now compute the number of slices
+        float apix = proj.GetPixelSize();
+        float c_sliceThickness = config.CTFSliceThickness / apix;
+        int c_sliceNumber = (int) ceilf((t_out - t_in) / c_sliceThickness);
+
+        printf("slice_number: %i\n", c_sliceNumber);
+
+        // Entry point/thickness in nm
+        float entryNM = (t_in + DIST) * apix;
+        entry = t_in + DIST;
+        float thickness = config.CTFSliceThickness;
+        thick = config.CTFSliceThickness / proj.GetPixelSize();
+
+        //vector<float> defocusMin;
+        //vector<float> defocusMax;
+
+        // Measured defocus (assumed correct at center of volume)
+        float detectedDefocusMin = defocus.GetMinDefocus(index);
+        float detectedDefocusMax = defocus.GetMaxDefocus(index);
+
+        for (int sliceIdx = 0; sliceIdx < c_sliceNumber; sliceIdx++) {
+            float offset = 0.f;
+
+            if (config.IgnoreZShiftForCTF) {
+                offset = entryNM + (float) sliceIdx * thickness + thickness / 2.f;
+                //distanceTo0 = (round(distanceTo0 * proj.GetPixelSize() * config.CTFSliceThickness) / config.CTFSliceThickness) + config.CTFSliceThickness / 2.0f;
+            } else {
+                offset = entryNM + (float) sliceIdx * thickness + thickness / 2.f -
+                         (config.VolumeShift.z * proj.GetPixelSize() * cosf(tiltAngle));
+                //distanceTo0 = (round(distanceTo0 * proj.GetPixelSize() * config.CTFSliceThickness) / config.CTFSliceThickness) + config.CTFSliceThickness / 2.0f - (config.VolumeShift.z * proj.GetPixelSize() * cosf(tiltAngle)); //in nm
+            }
+
+            printf("offset: %f\n", offset);
+
+            minDefocus.push_back(detectedDefocusMin + offset);
+            maxDefocus.push_back(detectedDefocusMax + offset);
+            defocusOffsets.push_back(offset);
+        }
+
+        sliceNumber = c_sliceNumber;
+    }
+}
+
+void Reconstructor::PlanCTFCorrection(Volume<float>* vol, int goodProjNumber, int fullProjNumber, const int* indexList)
+{
+    if (sliceNumbers == nullptr){
+        sliceNumbers = new vector<int>(fullProjNumber);
+    }
+
+    if (entryPoints == nullptr){
+        entryPoints = new vector<float>(fullProjNumber);
+    }
+
+    if (minDefs == nullptr){
+        minDefs = new vector<vector<float>>(fullProjNumber);
+    }
+
+    if (maxDefs == nullptr){
+        maxDefs = new vector<vector<float>>(fullProjNumber);
+    }
+
+    if (defOffsets == nullptr){
+        defOffsets = new vector<vector<float>>(fullProjNumber);
+    }
+
+    if (FFThandlesR2C == nullptr){
+        FFThandlesR2C = new vector<cufftHandle>(fullProjNumber);
+    }
+
+    if (FFThandlesC2R == nullptr){
+        FFThandlesC2R = new vector<cufftHandle>(fullProjNumber);
+    }
+
+    int inputSize[2] = {proj.GetMaxDimension(), proj.GetMaxDimension()};
+    //int inputSizeC2R[2] = {proj.GetMaxDimension(), proj.GetMaxDimension()};
+//    int* inembed = NULL;//{proj.GetMaxDimension(), proj.GetMaxDimension()};
+//    int istride = 0;//1;
+//    int idist = 0;//proj.GetMaxDimension()*proj.GetMaxDimension();
+//    int* onembed = NULL;//{(proj.GetMaxDimension() / 2 + 1), proj.GetMaxDimension()};
+//    int ostride = 0;//1;
+//    int odist = 0;//(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension();
+
+    // Advanced Data layout cuFFT
+    int inembedR2C[2] = {proj.GetMaxDimension(), proj.GetMaxDimension()};
+    int istrideR2C = 1;
+    int idistR2C = proj.GetMaxDimension()*proj.GetMaxDimension();
+    int onembedR2C[2] = {proj.GetMaxDimension(), (proj.GetMaxDimension() / 2 + 1)};
+    int ostrideR2C = 1;
+    int odistR2C = (proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension();
+
+    //int inembedC2R[2] = {proj.GetMaxDimension(), (proj.GetMaxDimension() / 2 + 1)};
+    //int istrideC2R = 1;
+    //int idistC2R = (proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension();
+    //int onembedC2R[2] = {proj.GetMaxDimension(), proj.GetMaxDimension()};
+    //int ostrideC2R = 1;
+    //int odistC2R = proj.GetMaxDimension()*proj.GetMaxDimension();
+
+
+    printf("\nhere\n");
+    for (int projIdx=0; projIdx<goodProjNumber; projIdx++){
+        int stackIdx = indexList[projIdx];
+
+        GetCTFSlices(vol, stackIdx, (*sliceNumbers)[stackIdx], (*minDefs)[stackIdx], (*maxDefs)[stackIdx], (*defOffsets)[stackIdx], (*entryPoints)[stackIdx], sliceThickness);
+
+        //printf("inputSize: %i %i\n", inputSizeR2C[0], inputSizeR2C[1]);
+        //printf("inembed: %i %i", inputSize[0], inputSize[1]);
+        printf("istride: %i\n", istrideR2C);
+        printf("idist: %i\n", idistR2C);
+        //printf("onembed: %i %i", inputSize[0], inputSize[1]);
+        printf("ostride: %i\n", ostrideR2C);
+        printf("odist: %i\n", odistR2C);
+        printf("batchsize: %i\n", (*sliceNumbers)[stackIdx]);
+
+//        cufftSafeCall(cufftPlanMany(&(*FFThandlesR2C)[stackIdx], 2,
+//                                        inputSize,
+//                                        inembedR2C,
+//                                        istrideR2C,
+//                                        idistR2C,
+//                                        onembedR2C,
+//                                        ostrideR2C,
+//                                        odistR2C,
+//                                        CUFFT_R2C,
+//                                        (*sliceNumbers)[stackIdx]));
+        printf("stackIdx: %i", stackIdx);
+
+//        cufftSafeCall(cufftPlanMany(&(*FFThandlesC2R)[stackIdx], 2,
+//                                    inputSize,
+//                                    onembedR2C,
+//                                    ostrideR2C,
+//                                    odistR2C,
+//                                    inembedR2C,
+//                                    istrideR2C,
+//                                    idistR2C,
+//                                    CUFFT_C2R,
+//                                    (*sliceNumbers)[stackIdx]));
+    }
+
+    maxSliceNumber = *max_element(std::begin((*sliceNumbers)), std::end((*sliceNumbers)));
+
+    CTFbuffer_realSquare.Alloc(proj.GetMaxDimension()*proj.GetMaxDimension()*maxSliceNumber*sizeof(float));
+    CTFbuffer_realRect.Alloc(proj.GetWidth()*proj.GetHeight()*maxSliceNumber*sizeof(float));
+    CTFbuffer_comp.Alloc((proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber * sizeof(cuComplex));
+
+    ctfs.AllocOffsets(maxSliceNumber);
+
+    cufftSafeCall(cufftPlanMany(&FFThandleR2Call, 2,
+                                inputSize,
+                                inembedR2C,
+                                istrideR2C,
+                                idistR2C,
+                                onembedR2C,
+                                ostrideR2C,
+                                odistR2C,
+                                CUFFT_R2C,
+                                maxSliceNumber));
+
+    cufftSafeCall(cufftPlanMany(&FFThandleC2Rall, 2,
+                                inputSize,
+                                onembedR2C,
+                                ostrideR2C,
+                                odistR2C,
+                                inembedR2C,
+                                istrideR2C,
+                                idistR2C,
+                                CUFFT_C2R,
+                                maxSliceNumber));
+    
+//    //auto testimg = new float[128*128*13];
+//    auto testimg = new EmFile("/home/uermel/utz_functions/spline/testimg_ctf.em");
+//    testimg->OpenAndRead();
+//
+//    CTFbuffer_realSquare.CopyHostToDevice(testimg->GetData());
+//
+//    cufftSafeCall(cufftExecR2C((*FFThandlesR2C)[20], (cufftReal*) CTFbuffer_realSquare.GetDevicePtr(), (cufftComplex*) CTFbuffer_comp.GetDevicePtr()));
+//
+//    auto result = new cuComplex[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber];
+//    auto result_real = new float[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber];
+//    auto result_imag = new float[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber];
+//
+//    CTFbuffer_comp.CopyDeviceToHost(result);
+//
+//    for (int i = 0; i < ((proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber); i++){
+//        result_real[i] = result[i].x;
+//        result_imag[i] = result[i].y;
+//    }
+//
+//    emwrite("batchCTF_real.em", result_real, (proj.GetMaxDimension() / 2 + 1), proj.GetMaxDimension(), maxSliceNumber);
+//    emwrite("batchCTF_imag.em", result_imag, (proj.GetMaxDimension() / 2 + 1), proj.GetMaxDimension(), maxSliceNumber);
+//
+//    cufftSafeCall(cufftExecC2R((*FFThandlesC2R)[20], (cufftComplex*) CTFbuffer_comp.GetDevicePtr(), (cufftReal*) CTFbuffer_realRect.GetDevicePtr()));
+//
+//    auto bwdresult = new float[proj.GetMaxDimension() * proj.GetMaxDimension() * maxSliceNumber];
+//
+//    CTFbuffer_realRect.CopyDeviceToHost(bwdresult, proj.GetWidth()*proj.GetHeight()*maxSliceNumber*sizeof(float));
+//
+//    emwrite("batchCTF_real_bwd.em", bwdresult, proj.GetMaxDimension(), proj.GetMaxDimension(), maxSliceNumber);
+}
 
 template<class TVol>
 void Reconstructor::ForwardProjectionCTFROI(Volume<TVol>* vol, CudaTextureObject3D& texVol, int index, bool volumeIsEmpty, int2 roiMin, int2 roiMax, bool noSync)
@@ -1067,6 +1621,270 @@ void Reconstructor::BackProjectionNoCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObje
 template void Reconstructor::BackProjectionNoCTF(Volume<unsigned short>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
 template void Reconstructor::BackProjectionNoCTF(Volume<float>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
 
+template<class TVol>
+void Reconstructor::BackProjectionLUTNoCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int stackIdx, float SIRTCount, int type)
+{
+    printf("\n BACK PROJECTION ==============================================\n");
+
+    float3 volDim = vol->GetSubVolumeDimension(mpi_part);
+    bplutKernel.SetComputeSize((int)volDim.x, (int)volDim.y, (int)volDim.z);
+
+//    {
+//        auto img = new float[proj.GetWidth()*proj.GetHeight()];
+//        CopyProjectionToHost(img);
+//        stringstream DP;
+//        DP << "before_filter" <<".em";
+//        emwrite(DP.str(), img, proj.GetWidth(),
+//                proj.GetHeight());
+//        delete[] img;
+//    }
+//
+    prefilter2DX(proj_d, proj.GetWidth(), proj.GetHeight());
+    prefilter2DY(proj_d, proj.GetWidth(), proj.GetHeight());
+//
+//    {
+//        auto img = new float[proj.GetWidth()*proj.GetHeight()];
+//        CopyProjectionToHost(img);
+//        stringstream DP;
+//        DP << "after_filter" <<".em";
+//        emwrite(DP.str(), img, proj.GetWidth(),
+//                proj.GetHeight());
+//        delete[] img;
+//    }
+
+    //osKernel(proj.GetWidth(), proj.GetHeight(), config.OverSampling, texImage, osproj_v);
+
+    {
+        auto img = new float[osproj_d_0.GetWidth()*osproj_d_0.GetHeight()];
+        //osproj_d.CopyFromArrayToHost(img);
+        osproj_v.CopyDeviceToHost(img);
+        stringstream DP;
+        DP << "upsampled" <<".em";
+        emwrite(DP.str(), img, osproj_d_0.GetWidth(),
+                osproj_d_0.GetHeight());
+        delete[] img;
+    }
+
+    if (config.WBP_NoSART)
+    {
+        magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)stackIdx) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
+        magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)stackIdx) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
+    }
+
+    // Find area shaded by volume, cut and dim borders
+    int2 pA, pB, pC, pD;
+    float2 hitA, hitB, hitC, hitD;
+    proj.ComputeHitPoints(*vol, stackIdx, pA, pB, pC, pD);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pA.x, (float)pA.y, hitA.x, hitA.y);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pB.x, (float)pB.y, hitB.x, hitB.y);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pC.x, (float)pC.y, hitC.x, hitC.y);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pD.x, (float)pD.y, hitD.x, hitD.y);
+    pA.x = (int)hitA.x; pA.y = (int)hitA.y;
+    pB.x = (int)hitB.x; pB.y = (int)hitB.y;
+    pC.x = (int)hitC.x; pC.y = (int)hitC.y;
+    pD.x = (int)hitD.x; pD.y = (int)hitD.y;
+    cropKernel(proj_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
+
+    // Copy to sliced stack
+    r2ss.SetComputeSize(make_dim3(proj.GetMaxDimension(), proj.GetMaxDimension(), (*sliceNumbers)[stackIdx]));
+    r2ss(proj_d,
+         proj.GetMaxDimension(),
+         CTFbuffer_realSquare,
+         squareBorderSizeX,
+         squareBorderSizeY,
+         false,
+         true,
+         (*sliceNumbers)[stackIdx]);
+
+    {
+        auto fwdsquare = new float[proj.GetMaxDimension() * proj.GetMaxDimension() * maxSliceNumber];
+
+        CTFbuffer_realSquare.CopyDeviceToHost(fwdsquare,
+                                              proj.GetMaxDimension() * proj.GetMaxDimension() * maxSliceNumber *
+                                              sizeof(float));
+
+        stringstream ss;
+        ss << "back_proj_aftercopy_" << stackIdx << "_" << type << ".em";
+        emwrite(ss.str(), fwdsquare, proj.GetMaxDimension(), proj.GetMaxDimension(),
+                maxSliceNumber);
+
+        delete[] fwdsquare;
+    }
+
+    // Back to proj
+    ss2rs.SetComputeSize(make_dim3(proj.GetMaxDimension(), proj.GetMaxDimension(), (*sliceNumbers)[stackIdx]));
+    ss2rs(CTFbuffer_realSquare,
+          proj.GetWidth(),
+          proj.GetHeight(),
+          proj.GetMaxDimension(),
+          CTFbuffer_realRect,
+          squareBorderSizeX,
+          squareBorderSizeY,
+          false,
+          true,
+          (*sliceNumbers)[stackIdx]);
+
+    {
+        auto fwdresult = new float[proj.GetWidth() * proj.GetHeight() * maxSliceNumber];
+        CTFbuffer_realRect.CopyDeviceToHost(fwdresult,
+                                            proj.GetWidth() * proj.GetHeight() * maxSliceNumber * sizeof(float));
+
+        stringstream ss;
+        ss << "back_proj_rectslice_" << stackIdx << "_" << type << ".em";
+        emwrite(ss.str(), fwdresult, proj.GetWidth(), proj.GetHeight(),
+                maxSliceNumber);
+
+        delete[] fwdresult;
+    }
+
+    // Prepare and execute Backprojection
+    //int LUTcenter = (int)floorf(config.LUTSize/2.f)+1;
+
+    SetConstantValues(bplutslicedKernel,
+                      *vol,
+                      proj,
+                      stackIdx,
+                      mpi_part,
+                      magAnisotropy,
+                      magAnisotropyInv,
+                      1.f / config.LUTStep,
+                      LUTcenter,
+                      config.support,
+                      config.OverSampling,
+                      (*sliceNumbers)[stackIdx],
+                      (*entryPoints)[stackIdx],
+                      sliceThickness);
+
+    float runtime = bplutslicedKernel(proj.GetWidth(),
+                                proj.GetHeight(),
+                                config.Lambda / SIRTCount,
+                                config.OverSampling,
+                                CTFbuffer_realRect,
+                                texLUT,
+                                surface,
+                                0,
+                                9999999999999.0f,
+                                vol);
+
+
+//    if (type == 0) {
+//        SetConstantValues(bplutKernel, *vol, proj, proj_index, mpi_part, magAnisotropy, magAnisotropyInv);
+//        float runtime = bplutKernel(proj.GetWidth(),
+//                                    proj.GetHeight(),
+//                                    config.Lambda / SIRTCount,
+//                                    config.OverSampling,
+//                                    osproj_v,
+//                                    texLUT,
+//                                    surface,
+//                                    0,
+//                                    9999999999999.0f,
+//                                    config.support,
+//                                    1.f / config.LUTStep,
+//                                    LUTcenter);
+//    }
+//
+//    if (type == 1) {
+//        SetConstantValues(bplutbwKernel, *vol, proj, proj_index, mpi_part, magAnisotropy, magAnisotropyInv);
+//        float runtime = bplutbwKernel(proj.GetWidth(),
+//                                proj.GetHeight(),
+//                                config.Lambda / SIRTCount,
+//                                config.OverSampling,
+//                                osproj_v,
+//                                texLUT,
+//                                surface,
+//                                0,
+//                                9999999999999.0f,
+//                                config.support,
+//                                1.f / config.LUTStep,
+//                                LUTcenter,
+//                                vol);
+//    }
+//
+//    if (type == 2){
+//        SetConstantValues(bplutbwcgKernel, *vol, proj, proj_index, mpi_part, magAnisotropy, magAnisotropyInv);
+//        float runtime = bplutbwcgKernel(proj.GetWidth(),
+//                                      proj.GetHeight(),
+//                                      config.Lambda / SIRTCount,
+//                                      config.OverSampling,
+//                                      osproj_v,
+//                                      texLUT,
+//                                      surface,
+//                                      0,
+//                                      9999999999999.0f,
+//                                      config.support,
+//                                      1.f / config.LUTStep,
+//                                      LUTcenter,
+//                                      vol);
+//    }
+//
+//    if (type == 4){
+//        SetConstantValues(bplutblockKernel, *vol, proj, proj_index, mpi_part, magAnisotropy, magAnisotropyInv);
+//        float runtime = bplutblockKernel(proj.GetWidth(),
+//                                        proj.GetHeight(),
+//                                        config.Lambda / SIRTCount,
+//                                        config.OverSampling,
+//                                        osproj_v,
+//                                        texLUT,
+//                                        surface,
+//                                        0,
+//                                        9999999999999.0f,
+//                                        config.support,
+//                                        1.f / config.LUTStep,
+//                                        LUTcenter,
+//                                        vol);
+//    }
+//
+//    if (type == 5){
+//        SetConstantValues(bplutblocknodivKernel,
+//                          *vol,
+//                          proj,
+//                          proj_index,
+//                          mpi_part,
+//                          magAnisotropy,
+//                          magAnisotropyInv,
+//                          1.f / config.LUTStep,
+//                          LUTcenter,
+//                          config.support,
+//                          config.OverSampling);
+//
+//        float runtime = bplutblocknodivKernel(proj.GetWidth(),
+//                                         proj.GetHeight(),
+//                                         config.Lambda / SIRTCount,
+//                                         config.OverSampling,
+//                                         osproj_v,
+//                                         texLUT,
+//                                         surface,
+//                                         0,
+//                                         9999999999999.0f,
+//                                         //config.support,
+//                                         //1.f / config.LUTStep,
+//                                         //LUTcenter,
+//                                         vol);
+//        CTFbuffer_realSquare.Memset(0);
+//        ctss.SetComputeSize(make_dim3(proj.GetMaxDimension(), proj.GetMaxDimension(), (*sliceNumbers)[proj_index]));
+//        ctss(proj_d,
+//             proj.GetMaxDimension(),
+//             CTFbuffer_realSquare,
+//             squareBorderSizeX,
+//             squareBorderSizeY,
+//             false,
+//             true,
+//             (*sliceNumbers)[proj_index]);
+//
+//        auto project = new float[proj.GetMaxDimension() * proj.GetMaxDimension()];
+//        auto bwdresult = new float[proj.GetMaxDimension() * proj.GetMaxDimension() * maxSliceNumber];
+//
+//        proj_d.CopyDeviceToHost(project);
+//        CTFbuffer_realSquare.CopyDeviceToHost(bwdresult, proj.GetMaxDimension()*proj.GetMaxDimension()*maxSliceNumber*sizeof(float));
+//
+//        emwrite("actual_proj_square.em", bwdresult, proj.GetMaxDimension(), proj.GetMaxDimension(), maxSliceNumber);
+//        emwrite("singleproj.em", project, proj.GetMaxDimension(), proj.GetMaxDimension());
+//
+//        delete[] bwdresult;
+//        delete[] project;
+
+}
+template void Reconstructor::BackProjectionLUTNoCTF(Volume<float>* vol, Cuda::CudaSurfaceObject3D& surface, int stackIdx, float SIRTCount, int type);
 
 #ifdef SUBVOLREC_MODE
 template<class TVol>
@@ -1101,6 +1919,348 @@ void Reconstructor::BackProjectionNoCTF(Volume<TVol>* vol, vector<Volume<TVol>*>
 template void Reconstructor::BackProjectionNoCTF(Volume<unsigned short>* vol, vector<Volume<unsigned short>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, int proj_index);
 template void Reconstructor::BackProjectionNoCTF(Volume<float>* vol, vector<Volume<float>*>& subVolumes, vector<float2>& vecExtraShifts, vector<CudaArray3D*>& vecArrays, int proj_index);
 #endif
+
+template<class TVol>
+void Reconstructor::BackProjectionLUTCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int stackIdx, float SIRTCount, int type)
+{
+    float3 volDim = vol->GetSubVolumeDimension(mpi_part);
+    bpKernel.SetComputeSize((int)volDim.x, (int)volDim.y, (int)volDim.z);
+    float runtime;
+    int x = proj.GetWidth();
+    int y = proj.GetHeight();
+
+    prefilter2DX(proj_d, proj.GetWidth(), proj.GetHeight());
+    prefilter2DY(proj_d, proj.GetWidth(), proj.GetHeight());
+
+    if (config.WBP_NoSART)
+    {
+        magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)stackIdx) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
+        magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)stackIdx) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
+    }
+
+    if (mpi_part == 0)
+        printf("\n");
+
+#ifdef DEBUG_IMAGES
+    {
+        auto fwdresult = new float[proj.GetWidth() * proj.GetHeight()];
+        proj_d.CopyDeviceToHost(fwdresult);
+
+        stringstream ss;
+        ss << "back_proj_before_crop_" << stackIdx << "_" << type << ".em";
+        emwrite(ss.str(), fwdresult, proj.GetWidth(), proj.GetHeight());
+
+        delete[] fwdresult;
+    }
+#endif
+
+    // Find area shaded by volume, cut and dim borders
+    int2 pA, pB, pC, pD;
+    float2 hitA, hitB, hitC, hitD;
+    proj.ComputeHitPoints(*vol, stackIdx, pA, pB, pC, pD);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pA.x, (float)pA.y, hitA.x, hitA.y);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pB.x, (float)pB.y, hitB.x, hitB.y);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pC.x, (float)pC.y, hitC.x, hitC.y);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pD.x, (float)pD.y, hitD.x, hitD.y);
+    pA.x = (int)hitA.x; pA.y = (int)hitA.y;
+    pB.x = (int)hitB.x; pB.y = (int)hitB.y;
+    pC.x = (int)hitC.x; pC.y = (int)hitC.y;
+    pD.x = (int)hitD.x; pD.y = (int)hitD.y;
+    cropKernel(proj_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
+
+#ifdef DEBUG_IMAGES
+    {
+        auto fwdresult = new float[proj.GetWidth() * proj.GetHeight()];
+        proj_d.CopyDeviceToHost(fwdresult);
+
+        stringstream ss;
+        ss << "back_proj_after_crop_" << stackIdx << "_" << type << ".em";
+        emwrite(ss.str(), fwdresult, proj.GetWidth(), proj.GetHeight());
+
+        delete[] fwdresult;
+    }
+#endif
+    // Copy to sliced stack
+    r2ss.SetComputeSize(make_dim3(proj.GetMaxDimension(), proj.GetMaxDimension(), (*sliceNumbers)[stackIdx]));
+    r2ss(proj_d,
+         proj.GetMaxDimension(),
+         CTFbuffer_realSquare,
+         squareBorderSizeX,
+         squareBorderSizeY,
+         false,
+         true,
+         (*sliceNumbers)[stackIdx]);
+#ifdef DEBUG_IMAGES
+    {
+        auto fwdsquare = new float[proj.GetMaxDimension() * proj.GetMaxDimension() * maxSliceNumber];
+
+        CTFbuffer_realSquare.CopyDeviceToHost(fwdsquare,
+                                              proj.GetMaxDimension() * proj.GetMaxDimension() * maxSliceNumber *
+                                              sizeof(float));
+
+        stringstream ss;
+        ss << "back_proj_square_before_ctf_" << stackIdx << "_" << type << ".em";
+        emwrite(ss.str(), fwdsquare, proj.GetMaxDimension(), proj.GetMaxDimension(),
+                maxSliceNumber);
+
+        delete[] fwdsquare;
+    }
+#endif
+    // Batched FFT
+    //cufftSafeCall(cufftExecR2C((*FFThandlesR2C)[stackIdx], (cufftReal*) CTFbuffer_realSquare.GetDevicePtr(), (cufftComplex*) CTFbuffer_comp.GetDevicePtr()));
+    cufftSafeCall(cufftExecR2C(FFThandleR2Call, (cufftReal*) CTFbuffer_realSquare.GetDevicePtr(), (cufftComplex*) CTFbuffer_comp.GetDevicePtr()));
+
+#ifdef DEBUG_IMAGES
+    {
+        auto result = new cuComplex[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber];
+        auto result_real = new float[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber];
+        auto result_imag = new float[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber];
+
+        CTFbuffer_comp.CopyDeviceToHost(result);
+
+        for (int i = 0; i < ((proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber); i++) {
+            result_real[i] = result[i].x;
+            result_imag[i] = result[i].y;
+        }
+
+        stringstream ss1;
+        ss1 << "back_proj_batchCTF_real_beforeCTF_" << stackIdx << "_" << type << ".em";
+
+        stringstream ss2;
+        ss2 << "back_proj_batchCTF_imag_beforeCTF_" << stackIdx << "_" << type << ".em";
+
+        emwrite(ss1.str(), result_real, (proj.GetMaxDimension() / 2 + 1),
+                proj.GetMaxDimension(), maxSliceNumber);
+        emwrite(ss2.str(), result_imag, (proj.GetMaxDimension() / 2 + 1),
+                proj.GetMaxDimension(), maxSliceNumber);
+
+        delete[] result;
+        delete[] result_real;
+        delete[] result_imag;
+    }
+#endif
+
+    // Sliced CTF
+    float defocusAngle = defocus.GetAstigmatismAngle(stackIdx) + (float)(proj.GetImageRotationToCompensate((uint)stackIdx) / M_PI * 180.0);
+    ctfs.SetComputeSize(make_dim3(proj.GetMaxDimension()/2+1, proj.GetMaxDimension(), (*sliceNumbers)[stackIdx]));
+    ctfs(CTFbuffer_comp,
+         proj.GetMaxDimension()/2+1,
+         proj.GetMaxDimension(),
+         (*sliceNumbers)[stackIdx],
+         defocus.GetMinDefocus(stackIdx),
+         defocus.GetMaxDefocus(stackIdx),
+         (*defOffsets)[stackIdx],
+         defocusAngle,
+         false,
+         config.PhaseFlipOnly,
+         config.WienerFilterNoiseLevel,
+         (proj.GetMaxDimension() / 2 + 1) * sizeof(float2),
+         config.CTFBetaFac);
+
+#ifdef DEBUG_IMAGES
+    {
+        auto result = new cuComplex[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber];
+        auto result_real = new float[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber];
+        auto result_imag = new float[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber];
+
+        CTFbuffer_comp.CopyDeviceToHost(result);
+
+        for (int i = 0; i < ((proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber); i++) {
+            result_real[i] = result[i].x;
+            result_imag[i] = result[i].y;
+        }
+
+        stringstream ss1;
+        ss1 << "back_proj_batchCTF_real_afterCTF_" << stackIdx << "_" << type << ".em";
+
+        stringstream ss2;
+        ss2 << "back_proj_batchCTF_imag_afterCTF_" << stackIdx << "_" << type << ".em";
+
+        emwrite(ss1.str(), result_real, (proj.GetMaxDimension() / 2 + 1),
+                proj.GetMaxDimension(), maxSliceNumber);
+        emwrite(ss2.str(), result_imag, (proj.GetMaxDimension() / 2 + 1),
+                proj.GetMaxDimension(), maxSliceNumber);
+
+        delete[] result;
+        delete[] result_real;
+        delete[] result_imag;
+    }
+#endif
+
+    // Batched IFFT
+    //cufftSafeCall(cufftExecC2R((*FFThandlesC2R)[stackIdx], (cufftComplex*) CTFbuffer_comp.GetDevicePtr(), (cufftReal*) CTFbuffer_realSquare.GetDevicePtr()));
+    cufftSafeCall(cufftExecC2R(FFThandleC2Rall, (cufftComplex*) CTFbuffer_comp.GetDevicePtr(), (cufftReal*) CTFbuffer_realSquare.GetDevicePtr()));
+
+    // Divide for FFT
+    nppSafeCall(nppsDivC_32f_I((proj.GetMaxDimension()*proj.GetMaxDimension()),
+                               (Npp32f*) CTFbuffer_realSquare.GetDevicePtr(),
+                               (proj.GetMaxDimension()*proj.GetMaxDimension()*(*sliceNumbers)[stackIdx])));
+
+#ifdef DEBUG_IMAGES
+    {
+        auto fwdsquare = new float[proj.GetMaxDimension() * proj.GetMaxDimension() * maxSliceNumber];
+
+        CTFbuffer_realSquare.CopyDeviceToHost(fwdsquare,
+                                              proj.GetMaxDimension() * proj.GetMaxDimension() * maxSliceNumber *
+                                              sizeof(float));
+
+        stringstream ss;
+        ss << "back_proj_square_after_ctf_" << stackIdx << "_" << type << ".em";
+        emwrite(ss.str(), fwdsquare, proj.GetMaxDimension(), proj.GetMaxDimension(),
+                maxSliceNumber);
+
+        delete[] fwdsquare;
+    }
+#endif
+
+    // Back To Proj
+    ss2rs.SetComputeSize(make_dim3(proj.GetMaxDimension(), proj.GetMaxDimension(), (*sliceNumbers)[stackIdx]));
+    ss2rs(CTFbuffer_realSquare,
+         proj.GetWidth(),
+         proj.GetHeight(),
+         proj.GetMaxDimension(),
+         CTFbuffer_realRect,
+         squareBorderSizeX,
+         squareBorderSizeY,
+         false,
+         true,
+         (*sliceNumbers)[stackIdx]);
+
+#ifdef DEBUG_IMAGES
+    {
+        auto fwdresult = new float[proj.GetWidth() * proj.GetHeight() * maxSliceNumber];
+        CTFbuffer_realRect.CopyDeviceToHost(fwdresult,
+                                            proj.GetWidth() * proj.GetHeight() * maxSliceNumber * sizeof(float));
+
+        stringstream ss;
+        ss << "back_proj_rect_after_ctf_" << stackIdx << "_" << type << ".em";
+        emwrite(ss.str(), fwdresult, proj.GetWidth(), proj.GetHeight(),
+                maxSliceNumber);
+
+        delete[] fwdresult;
+    }
+#endif
+
+    // Crop again
+    cropslicesKernel.SetComputeSize(make_dim3(proj.GetWidth(), proj.GetHeight(), (*sliceNumbers)[stackIdx]));
+    cropslicesKernel(CTFbuffer_realRect,
+                     proj.GetWidth(),
+                     proj.GetHeight(),
+                     (*sliceNumbers)[stackIdx],
+                     config.CutLength,
+                     config.DimLength,
+                     pA,
+                     pB,
+                     pC,
+                     pD);
+
+#ifdef DEBUG_IMAGES
+    {
+        auto fwdresult = new float[proj.GetWidth() * proj.GetHeight() * maxSliceNumber];
+        CTFbuffer_realRect.CopyDeviceToHost(fwdresult,
+                                            proj.GetWidth() * proj.GetHeight() * maxSliceNumber * sizeof(float));
+
+        stringstream ss;
+        ss << "back_proj_rect_after_crop_" << stackIdx << "_" << type << ".em";
+        emwrite(ss.str(), fwdresult, proj.GetWidth(), proj.GetHeight(),
+                maxSliceNumber);
+
+        delete[] fwdresult;
+    }
+#endif
+
+    //int LUTcenter = (int)floor((float)config.LUTSize/2.f)+1;
+
+//    if (type == 4) {
+//        SetConstantValues(bplutvblockslicedKernel,
+//                          *vol,
+//                          proj,
+//                          stackIdx,
+//                          mpi_part,
+//                          magAnisotropy,
+//                          magAnisotropyInv,
+//                          1.f / config.LUTStep,
+//                          LUTcenter,
+//                          config.support,
+//                          config.OverSampling,
+//                          (*sliceNumbers)[stackIdx],
+//                          (*entryPoints)[stackIdx],
+//                          sliceThickness);
+//
+//        float runtime = bplutvblockslicedKernel(proj.GetWidth(),
+//                                              proj.GetHeight(),
+//                                              config.Lambda / SIRTCount,
+//                                              config.OverSampling,
+//                                              CTFbuffer_realRect,
+//                                              texLUT,
+//                                              surface,
+//                                              0,
+//                                              9999999999999.0f,
+//                                              vol);
+//    }
+
+    //if (type == 5) {
+    SetConstantValues(bplutslicedKernel,
+                      *vol,
+                      proj,
+                      stackIdx,
+                      mpi_part,
+                      magAnisotropy,
+                      magAnisotropyInv,
+                      1.f / config.LUTStep,
+                      LUTcenter,
+                      config.support,
+                      config.OverSampling,
+                      (*sliceNumbers)[stackIdx],
+                      (*entryPoints)[stackIdx],
+                      sliceThickness);
+
+    runtime = bplutslicedKernel(proj.GetWidth(),
+                                proj.GetHeight(),
+                                config.Lambda / SIRTCount,
+                                config.OverSampling,
+                                CTFbuffer_realRect,
+                                texLUT,
+                                surface,
+                                0,
+                                9999999999999.0f,
+                                vol);
+    //}
+
+
+//    for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize())
+//    {
+//        SetConstantValues(bpKernel, *vol, proj, proj_index, mpi_part, magAnisotropy, magAnisotropyInv);
+//
+//
+//        float defocusAngle = defocus.GetAstigmatismAngle(proj_index) + (float)(proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0);
+//        float defocusMin;
+//        float defocusMax;
+//        GetDefocusMinMax(ray, proj_index, defocusMin, defocusMax);
+//        float tiltAngle = (markers(MFI_TiltAngle, proj_index, 0) + config.AddTiltAngle) / 180.0f * (float)M_PI;
+//
+//        if (mpi_part == 0)
+//        {
+//            printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b BP Defocus: %-8d nm", (int)defocusMin);
+//            fflush(stdout);
+//        }
+//
+//        cts(proj_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, true);
+//        cufftSafeCall(cufftExecR2C(handleR2C, (cufftReal*)projSquare_d.GetDevicePtr(), (cufftComplex*)fft_d.GetDevicePtr()));
+//
+//        ctf(fft_d, defocusMin, defocusMax, defocusAngle, false, config.PhaseFlipOnly, config.WienerFilterNoiseLevel, (proj.GetMaxDimension() / 2 + 1) * sizeof(float2), config.CTFBetaFac);
+//
+//        cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
+//        nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float), (float)(proj.GetMaxDimension() * proj.GetMaxDimension()),
+//                                     (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
+//
+//        cropKernel(dist_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
+//
+//        runtime = bpKernel(x, y, config.Lambda / SIRTcount, config.OverSampling, 1.0f / (float)(config.OverSampling), texImage, surface, ray, ray + config.CTFSliceThickness / proj.GetPixelSize());
+//    }
+}
+//template void Reconstructor::BackProjectionLUTCTF(Volume<unsigned short>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount, int type);
+template void Reconstructor::BackProjectionLUTCTF(Volume<float>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount, int type);
 
 template<class TVol>
 void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTcount)
@@ -1646,7 +2806,7 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 		normVal, (Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), roiAll));
 
 
-	//When doing SART we compute mean and std on the filtered image
+	// When doing SART we compute mean and std on the filtered image
 	if (!config.WBP_NoSART)
 	{
 		NppiSize roiForMean;
@@ -1690,14 +2850,15 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 		if (config.ProjectionNormalization == Configuration::Config::PNM_NONE)
 		{
 			std_hf = 1;
-			//meanValue = 0;
-			//printf("I DID NAAAHHT.\n");
+            mean_hf = 0;
+			printf("I DID NAAAHHT.\n");
 		}
         //mean_hf = 0.f;
 
 		nppSafeCall(nppiSubC_32f_C1R((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), mean_hf,
 			(Npp32f*)realproj_d.GetDevicePtr(), (int)realproj_d.GetPitch(), roiAll));
 		nppSafeCall(nppiDivC_32f_C1IR(-std_hf, (Npp32f*)realproj_d.GetDevicePtr(), (int)realproj_d.GetPitch(), roiAll));
+
 		realproj_d.CopyDeviceToHost(img_h);
 
 
@@ -1717,18 +2878,24 @@ void Reconstructor::Compare(Volume<TVol>* vol, char* originalImage, int index)
 {
 	if (mpi_part == 0)
 	{
-		float z_Direction = proj.GetNormalVector(index).z;
-		float z_VolMinZ = vol->GetVolumeBBoxMin().z;
-		float z_VolMaxZ = vol->GetVolumeBBoxMax().z;
-		float volumeTraversalLength = fabs((DIST - z_VolMinZ) / z_Direction - (DIST - z_VolMaxZ) / z_Direction);
+		//float z_Direction = proj.GetNormalVector(index).z;
+		//float z_VolMinZ = vol->GetVolumeBBoxMin().z;
+		//float z_VolMaxZ = vol->GetVolumeBBoxMax().z;
+		//float volumeTraversalLength = fabs((DIST - z_VolMinZ) / z_Direction - (DIST - z_VolMaxZ) / z_Direction);
+
+		nppSafeCall(nppsMax_32f((Npp32f*)dist_d.GetDevicePtr(),
+                                    proj.GetWidth()*proj.GetHeight(),
+                                    (Npp32f*) meanval.GetDevicePtr(),
+                                    (Npp8u*) meanbuffer.GetDevicePtr()));
+
+		float volumeTraversalLength = 0.f;
+		meanval.CopyDeviceToHost(&volumeTraversalLength);
 
         realproj_d.CopyHostToDevice(originalImage);
 
 		//nppiSet_32f_C1R(1.0f, (float*)dist_d.GetDevicePtr(), dist_d.GetPitch(), roiAll);
 
 		float runtime = compKernel(realproj_d, proj_d, dist_d, volumeTraversalLength, config.Crop, config.CropDim, config.ProjectionScaleFactor);
-		/*proj_d.CopyDeviceToHost(MPIBuffer);
-		writeBMP(string("Comp.bmp"), MPIBuffer, proj.GetWidth(), proj.GetHeight());*/
 	}
 }
 template void Reconstructor::Compare(Volume<unsigned short>* vol, char* originalImage, int index);
@@ -1759,6 +2926,512 @@ void Reconstructor::ForwardProjection(Volume<TVol>* vol, CudaTextureObject3D& te
 template void Reconstructor::ForwardProjection(Volume<unsigned short>* vol, CudaTextureObject3D& texVol, int index, bool volumeIsEmpty, bool noSync);
 template void Reconstructor::ForwardProjection(Volume<float>* vol, CudaTextureObject3D& texVol, int index, bool volumeIsEmpty, bool noSync);
 
+template<class TVol>
+void Reconstructor::ForwardProjectionLUT(Volume<TVol>* vol, CudaSurfaceObject3D& texVol, int index, bool volumeIsEmpty, int iter, bool noSync)
+{
+    if (config.CtfMode == Configuration::Config::CTFM_YES)
+    {
+        ForwardProjectionLUTCTF(vol, texVol, index, volumeIsEmpty, iter, noSync);
+        //ForwardProjectionLUTNoCTF(vol, texVol, index, volumeIsEmpty, noSync);
+    }
+    else
+    {
+        ForwardProjectionLUTNoCTF(vol, texVol, index, volumeIsEmpty, iter, noSync);
+    }
+}
+template void Reconstructor::ForwardProjectionLUT(Volume<float>* vol, CudaSurfaceObject3D& surface, int index, bool volumeIsEmpty, int iter, bool noSync);
+
+
+template<typename TVol>
+void Reconstructor::ForwardProjectionLUTCTF(Volume<TVol>* vol,
+                                            Cuda::CudaSurfaceObject3D& surface,
+                                            int stackIdx,
+                                            bool volumeIsEmpty,
+                                            int iter,
+                                            bool noSync)
+{
+    float runtime;
+    int x = proj.GetWidth();
+    int y = proj.GetHeight();
+
+    //if (mpi_part == 0)
+    //	printf("\n");
+    //float LUTcenter =(float)config.LUTSize/2.f;
+    
+    if (volumeIsEmpty) // Volume is empty, FP not necessary (1st projection)
+    {
+        // Thickness map
+        SetConstantValues(fpdistslicedKernel,
+                          *vol,
+                          proj,
+                          stackIdx,
+                          mpi_part,
+                          magAnisotropy,
+                          magAnisotropyInv,
+                          1.f / config.LUTStep,
+                          LUTcenter,
+                          config.support,
+                          config.OverSampling,
+                          (*sliceNumbers)[stackIdx],
+                          (*entryPoints)[stackIdx],
+                          sliceThickness);
+
+        runtime = fpdistslicedKernel(proj.GetWidth(),
+                                     proj.GetHeight(),
+                                     config.Lambda,
+                                     config.OverSampling,
+                                     dist_d,
+                                     texLUT,
+                                     surface,
+                                     0,
+                                     9999999999999.0f,
+                                     vol);
+    } else // Volume is not empty, do FP also
+    {
+        SetConstantValues(fplutslicedKernel,
+                          *vol,
+                          proj,
+                          stackIdx,
+                          mpi_part,
+                          magAnisotropy,
+                          magAnisotropyInv,
+                          1.f / config.LUTStep,
+                          LUTcenter,
+                          config.support,
+                          config.OverSampling,
+                          (*sliceNumbers)[stackIdx],
+                          (*entryPoints)[stackIdx],
+                          sliceThickness);
+
+        runtime = fplutslicedKernel(proj.GetWidth(),
+                                    proj.GetHeight(),
+                                    config.Lambda,
+                                    config.OverSampling,
+                                    CTFbuffer_realRect,
+                                    texLUT,
+                                    surface,
+                                    0,
+                                    9999999999999.0f,
+                                    vol);
+#ifdef DEBUG_IMAGES
+        {
+            auto fwdresult = new float[proj.GetWidth() * proj.GetHeight() * maxSliceNumber];
+            CTFbuffer_realRect.CopyDeviceToHost(fwdresult,
+                                                proj.GetWidth() * proj.GetHeight() * maxSliceNumber * sizeof(float));
+
+            stringstream ss;
+            ss << "forward_proj_before_crop_" << stackIdx << "_" << iter << ".em";
+            emwrite(ss.str(), fwdresult, proj.GetWidth(), proj.GetHeight(),
+                    maxSliceNumber);
+            delete[] fwdresult;
+        }
+#endif
+
+        float defocusAngle = defocus.GetAstigmatismAngle(stackIdx) + (float)(proj.GetImageRotationToCompensate((uint)stackIdx) / M_PI * 180.0);
+
+        int2 pA, pB, pC, pD;
+        pA.x = 0;
+        pA.y = proj.GetHeight() - 1;
+        pB.x = proj.GetWidth() - 1;
+        pB.y = proj.GetHeight() - 1;
+        pC.x = 0;
+        pC.y = 0;
+        pD.x = proj.GetWidth() - 1;
+        pD.y = 0;
+
+//        // Find area shaded by volume, cut and dim borders
+//        int2 pA, pB, pC, pD;
+//        float2 hitA, hitB, hitC, hitD;
+//        proj.ComputeHitPoints(*vol, stackIdx, pA, pB, pC, pD);
+//        MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pA.x, (float)pA.y, hitA.x, hitA.y);
+//        MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pB.x, (float)pB.y, hitB.x, hitB.y);
+//        MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pC.x, (float)pC.y, hitC.x, hitC.y);
+//        MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pD.x, (float)pD.y, hitD.x, hitD.y);
+//        pA.x = (int)hitA.x; pA.y = (int)hitA.y;
+//        pB.x = (int)hitB.x; pB.y = (int)hitB.y;
+//        pC.x = (int)hitC.x; pC.y = (int)hitC.y;
+//        pD.x = (int)hitD.x; pD.y = (int)hitD.y;
+
+        //pA = make_int2(50, 50);
+        //pB = make_int2(50, 60);
+        //pC = make_int2(60, 50);
+        //pD = make_int2(60, 60);
+
+        printf("%i %i %i %i %i %i %i %i", pA.x, pA.y, pB.x, pB.y, pC.x, pC.y, pD.x, pD.y);
+
+        //cropKernel(dist_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
+        cropslicesKernel.SetComputeSize(make_dim3(proj.GetWidth(), proj.GetHeight(), (*sliceNumbers)[stackIdx]));
+        cropslicesKernel(CTFbuffer_realRect,
+                         proj.GetWidth(),
+                         proj.GetHeight(),
+                         (*sliceNumbers)[stackIdx],
+                         config.CutLength,
+                         config.DimLength,
+                         pA,
+                         pB,
+                         pC,
+                         pD);
+
+#ifdef DEBUG_IMAGES
+        {
+            auto fwdresult = new float[proj.GetWidth() * proj.GetHeight() * maxSliceNumber];
+            CTFbuffer_realRect.CopyDeviceToHost(fwdresult,
+                                                proj.GetWidth() * proj.GetHeight() * maxSliceNumber * sizeof(float));
+
+            stringstream ss;
+            ss << "forward_proj_after_crop_" << stackIdx << "_" << iter << ".em";
+            emwrite(ss.str(), fwdresult, proj.GetWidth(), proj.GetHeight(),
+                    maxSliceNumber);
+
+            delete[] fwdresult;
+        }
+#endif
+
+        // Copy to sliced stack
+        rs2ss.SetComputeSize(make_dim3(proj.GetMaxDimension(), proj.GetMaxDimension(), (*sliceNumbers)[stackIdx]));
+        rs2ss(CTFbuffer_realRect,
+              proj.GetWidth(),
+              proj.GetHeight(),
+              proj.GetMaxDimension(),
+              CTFbuffer_realSquare,
+              squareBorderSizeX,
+              squareBorderSizeY,
+              false,
+              true,
+              (*sliceNumbers)[stackIdx]);
+#ifdef DEBUG_IMAGES
+        {
+            auto fwdsquare = new float[proj.GetMaxDimension() * proj.GetMaxDimension() * maxSliceNumber];
+
+            CTFbuffer_realSquare.CopyDeviceToHost(fwdsquare,
+                                                  proj.GetMaxDimension() * proj.GetMaxDimension() * maxSliceNumber *
+                                                  sizeof(float));
+
+            stringstream ss;
+            ss << "forward_proj_aftercopy_" << stackIdx << "_" << iter << ".em";
+            emwrite(ss.str(), fwdsquare, proj.GetMaxDimension(), proj.GetMaxDimension(),
+                    maxSliceNumber);
+
+            delete[] fwdsquare;
+        }
+#endif
+        // Batched FFT
+        //cufftSafeCall(cufftExecR2C((*FFThandlesR2C)[stackIdx], (cufftReal*) CTFbuffer_realSquare.GetDevicePtr(), (cufftComplex*) CTFbuffer_comp.GetDevicePtr()));
+        cufftSafeCall(cufftExecR2C(FFThandleR2Call, (cufftReal*) CTFbuffer_realSquare.GetDevicePtr(), (cufftComplex*) CTFbuffer_comp.GetDevicePtr()));
+
+#ifdef DEBUG_IMAGES
+        {
+            auto result = new cuComplex[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber];
+            auto result_real = new float[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber];
+            auto result_imag = new float[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber];
+
+            CTFbuffer_comp.CopyDeviceToHost(result);
+
+            for (int i = 0; i < ((proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber); i++) {
+                result_real[i] = result[i].x;
+                result_imag[i] = result[i].y;
+            }
+
+            stringstream ss1;
+            ss1 << "forward_proj_batchCTF_real_beforeCTF_" << stackIdx << "_" << iter << ".em";
+
+            stringstream ss2;
+            ss2 << "forward_proj_batchCTF_imag_beforeCTF_" << stackIdx << "_" << iter << ".em";
+
+            emwrite(ss1.str(), result_real, (proj.GetMaxDimension() / 2 + 1),
+                    proj.GetMaxDimension(), maxSliceNumber);
+            emwrite(ss2.str(), result_imag, (proj.GetMaxDimension() / 2 + 1),
+                    proj.GetMaxDimension(), maxSliceNumber);
+
+            delete[] result;
+            delete[] result_real;
+            delete[] result_imag;
+        }
+#endif
+
+        // Sliced CTF
+        ctfs.SetComputeSize(make_dim3(proj.GetMaxDimension()/2+1, proj.GetMaxDimension(), (*sliceNumbers)[stackIdx]));
+        ctfs(CTFbuffer_comp,
+             proj.GetMaxDimension()/2+1,
+             proj.GetMaxDimension(),
+             (*sliceNumbers)[stackIdx],
+             defocus.GetMinDefocus(stackIdx),
+             defocus.GetMaxDefocus(stackIdx),
+             (*defOffsets)[stackIdx],
+             defocusAngle,
+             true,
+             config.PhaseFlipOnly,
+             config.WienerFilterNoiseLevel,
+             (proj.GetMaxDimension() / 2 + 1) * sizeof(float2),
+             config.CTFBetaFac);
+
+        //auto result = new cuComplex[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber];
+        //auto result_real = new float[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber];
+        //auto result_imag = new float[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber];
+#ifdef DEBUG_IMAGES
+        {
+            auto result = new cuComplex[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber];
+            auto result_real = new float[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber];
+            auto result_imag = new float[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber];
+
+            CTFbuffer_comp.CopyDeviceToHost(result);
+
+            for (int i = 0; i < ((proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension() * maxSliceNumber); i++) {
+                result_real[i] = result[i].x;
+                result_imag[i] = result[i].y;
+            }
+
+            stringstream ss1;
+            ss1 << "forward_proj_batchCTF_real_afterCTF_" << stackIdx << "_" << iter << ".em";
+
+            stringstream ss2;
+            ss2 << "forward_proj_batchCTF_imag_afterCTF_" << stackIdx << "_" << iter << ".em";
+
+            emwrite(ss1.str(), result_real, (proj.GetMaxDimension() / 2 + 1),
+                    proj.GetMaxDimension(), maxSliceNumber);
+            emwrite(ss2.str(), result_imag, (proj.GetMaxDimension() / 2 + 1),
+                    proj.GetMaxDimension(), maxSliceNumber);
+
+            delete[] result;
+            delete[] result_real;
+            delete[] result_imag;
+        }
+#endif
+        // Batched IFFT
+        //cufftSafeCall(cufftExecC2R((*FFThandlesC2R)[stackIdx], (cufftComplex*) CTFbuffer_comp.GetDevicePtr(), (cufftReal*) CTFbuffer_realSquare.GetDevicePtr()));
+        cufftSafeCall(cufftExecC2R(FFThandleC2Rall, (cufftComplex*) CTFbuffer_comp.GetDevicePtr(), (cufftReal*) CTFbuffer_realSquare.GetDevicePtr()));
+
+        // Divide for FFT
+        nppSafeCall(nppsDivC_32f_I((proj.GetMaxDimension()*proj.GetMaxDimension()),
+                                       (Npp32f*) CTFbuffer_realSquare.GetDevicePtr(),
+                                       (proj.GetMaxDimension()*proj.GetMaxDimension()*(*sliceNumbers)[stackIdx])));
+
+#ifdef DEBUG_IMAGES
+        {
+            auto fwdsquare = new float[proj.GetMaxDimension() * proj.GetMaxDimension() * maxSliceNumber];
+
+            CTFbuffer_realSquare.CopyDeviceToHost(fwdsquare,
+                                                  proj.GetMaxDimension() * proj.GetMaxDimension() * maxSliceNumber *
+                                                  sizeof(float));
+
+            stringstream ss;
+            ss << "forward_proj_after_ctf_" << stackIdx << "_" << iter << ".em";
+            emwrite(ss.str(), fwdsquare, proj.GetMaxDimension(), proj.GetMaxDimension(),
+                    maxSliceNumber);
+
+            delete[] fwdsquare;
+        }
+#endif
+
+        // Back To Proj
+        ss2r.SetComputeSize(make_dim3(proj.GetMaxDimension(), proj.GetMaxDimension(), (*sliceNumbers)[stackIdx]));
+        ss2r(CTFbuffer_realSquare,
+             proj.GetMaxDimension(),
+             proj_d,
+             squareBorderSizeX,
+             squareBorderSizeY,
+             false,
+             true,
+             (*sliceNumbers)[stackIdx]);
+
+#ifdef DEBUG_IMAGES
+        {
+            auto resproj = new float[proj.GetHeight() * proj.GetWidth()];
+
+            proj_d.CopyDeviceToHost(resproj);
+
+            stringstream ss;
+            ss << "forward_proj_rect_after_ctf_" << stackIdx << "_" << iter << ".em";
+            emwrite(ss.str(), resproj, proj.GetWidth(), proj.GetHeight());
+
+            delete[] resproj;
+        }
+#endif
+
+        SetConstantValues(fpdistslicedKernel,
+                          *vol,
+                          proj,
+                          stackIdx,
+                          mpi_part,
+                          magAnisotropy,
+                          magAnisotropyInv,
+                          1.f / config.LUTStep,
+                          LUTcenter,
+                          config.support,
+                          config.OverSampling,
+                          (*sliceNumbers)[stackIdx],
+                          (*entryPoints)[stackIdx],
+                          sliceThickness);
+
+        runtime = fpdistslicedKernel(proj.GetWidth(),
+                                    proj.GetHeight(),
+                                    config.Lambda,
+                                    config.OverSampling,
+                                    dist_d,
+                                    texLUT,
+                                    surface,
+                                    0,
+                                    9999999999999.0f,
+                                    vol);
+
+        //auto resdist =  new float[proj.GetHeight()*proj.GetWidth()];
+
+        //dist_d.CopyDeviceToHost(resdist);
+
+        //emwrite("forward_proj_dist.em", resdist, proj.GetWidth(), proj.GetHeight());
+
+        //delete[] resdist;
+//        for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize())
+//        {
+//            dist_d.Memset(0);
+//
+//            float defocusAngle = defocus.GetAstigmatismAngle(index) + (float)(proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0);
+//            float defocusMin;
+//            float defocusMax;
+//            GetDefocusMinMax(ray, index, defocusMin, defocusMax);
+//
+//            if (mpi_part == 0)
+//            {
+//                printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b FP Defocus: %-8d nm", (int)defocusMin);
+//                fflush(stdout);
+//            }
+//            //printf("\n");
+//            runtime = slicerKernel(x, y, dist_d, ray, ray + config.CTFSliceThickness / proj.GetPixelSize(), texVol);
+//
+//#ifdef USE_MPI
+//            if (!noSync)
+//			{
+//				if (mpi_part == 0)
+//				{
+//					for (int mpi = 1; mpi < mpi_size; mpi++)
+//					{
+//						MPI_Recv(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+//						realprojUS_d.CopyHostToDevice(MPIBuffer);
+//						nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
+//					}
+//				}
+//				else
+//				{
+//					dist_d.CopyDeviceToHost(MPIBuffer);
+//					MPI_Send(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+//				}
+//			}
+//#endif
+//            //CTF filtering is only done on GPU 0!
+//            if (mpi_part == 0)
+//            {
+//                /*dist_d.CopyDeviceToHost(MPIBuffer);
+//                writeBMP(string("VorCTF.bmp"), MPIBuffer, proj.GetWidth(), proj.GetHeight());*/
+//
+//                int2 pA, pB, pC, pD;
+//                pA.x = 0;
+//                pA.y = proj.GetHeight() - 1;
+//                pB.x = proj.GetWidth() - 1;
+//                pB.y = proj.GetHeight() - 1;
+//                pC.x = 0;
+//                pC.y = 0;
+//                pD.x = proj.GetWidth() - 1;
+//                pD.y = 0;
+//
+//                cropKernel(dist_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
+//
+//                cts(dist_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, true);
+//
+//                fft_d.Memset(0);
+//                cufftSafeCall(cufftExecR2C(handleR2C, (cufftReal*)projSquare_d.GetDevicePtr(), (cufftComplex*)fft_d.GetDevicePtr()));
+//
+//                ctf(fft_d, defocusMin, defocusMax, defocusAngle, true, config.PhaseFlipOnly, config.WienerFilterNoiseLevel, (proj.GetMaxDimension() / 2 + 1) * sizeof(float2), config.CTFBetaFac);
+//
+//                // To avoid aliasing artifacts low pass filter to Nyquist of Tomogram or Projection fourier filter, whichever is lower.
+//                if ((config.VoxelSize.x > 1) && (config.LimitToNyquist)) // assume cubic voxel sizes
+//                {
+//                    // Set the low pass filter to nyquist of the Tomogram
+//                    float lp = (float)proj.GetMaxDimension() / config.VoxelSize.x - 20.f;
+//                    float lps = 20.f;
+//                    // Use the low pass from the config if it's lower
+//                    if (!config.SkipFilter) {
+//                        if (lp > (float) config.fourFilterLP) {
+//                            lp = (float) config.fourFilterLP;
+//                            lps = (float) config.fourFilterLPS;
+//                        }
+//                    }
+//
+//                    int size = proj.GetMaxDimension();
+//
+//                    fourFilterKernel(fft_d, roiFFT.width * sizeof(Npp32fc), size, lp, 0, lps, 0);
+//                }
+//
+//                cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
+//
+//                nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float), (float)(proj.GetMaxDimension() * proj.GetMaxDimension()),
+//                                             (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
+//
+//
+//                cropKernel(dist_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
+//                nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), (Npp32f*)proj_d.GetDevicePtr(), (int)proj_d.GetPitch(), roiAll));
+//            }
+//        }
+//        /*proj_d.CopyDeviceToHost(MPIBuffer);
+//        writeBMP(string("Proj.bmp"), MPIBuffer, proj.GetWidth(), proj.GetHeight());*/
+//        //Get Volume traversal lengths
+//        dist_d.Memset(0);
+//        runtime = volTravLenKernel(x, y, dist_d);
+//
+//#ifdef USE_MPI
+//        if (!noSync)
+//		{
+//			if (mpi_part == 0)
+//			{
+//				for (int mpi = 1; mpi < mpi_size; mpi++)
+//				{
+//					MPI_Recv(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+//					realprojUS_d.CopyHostToDevice(MPIBuffer);
+//					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
+//				}
+//				/*proj_d.CopyDeviceToHost(MPIBuffer);
+//				printf("\n");
+//				writeBMP(string("proj3.bmp"), MPIBuffer, proj.GetWidth(), proj.GetHeight());
+//				printf("\n");
+//				dist_d.CopyDeviceToHost(MPIBuffer);
+//				writeBMP(string("dist.bmp"), MPIBuffer, proj.GetWidth(), proj.GetHeight());*/
+//			}
+//			else
+//			{
+//				dist_d.CopyDeviceToHost(MPIBuffer);
+//				MPI_Send(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+//			}
+//		}
+//#endif
+
+    }
+
+
+
+//        //Forward projection is not done in WBP --> no need to adapt magAnisotropy
+//        SetConstantValues(volTravLenKernel, *vol, proj, stackIdx, mpi_part, magAnisotropy, magAnisotropyInv);
+//
+//        runtime = volTravLenKernel(proj.GetWidth(), proj.GetHeight(), dist_d);
+//#ifdef USE_MPI
+//        if (!noSync)
+//		{
+//			if (mpi_part == 0)
+//			{
+//				for (int mpi = 1; mpi < mpi_size; mpi++)
+//				{
+//					MPI_Recv(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+//					realprojUS_d.CopyHostToDevice(MPIBuffer);
+//					nppSafeCall(nppiAdd_32f_C1IR((Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), (Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
+//				}
+//			}
+//			else
+//			{
+//				dist_d.CopyDeviceToHost(MPIBuffer);
+//				MPI_Send(MPIBuffer, proj.GetWidth() * proj.GetHeight(), MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+//			}
+//		}
+//#endif
+
+}
 
 template<class TVol>
 void Reconstructor::PrintGeometry(Volume<TVol>* vol, int index)
@@ -1916,6 +3589,21 @@ void Reconstructor::BackProjection(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D&
 template void Reconstructor::BackProjection(Volume<unsigned short>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
 template void Reconstructor::BackProjection(Volume<float>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
 
+template<class TVol>
+void Reconstructor::BackProjectionLUT(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount, int type)
+{
+    if (config.CtfMode == Configuration::Config::CTFM_YES)
+    {
+        BackProjectionLUTCTF(vol, surface, proj_index, SIRTCount, type);
+        //BackProjectionLUTNoCTF(vol, surface, proj_index, SIRTCount, type);
+    }
+    else
+    {
+        BackProjectionLUTNoCTF(vol, surface, proj_index, SIRTCount, type);
+    }
+}
+template void Reconstructor::BackProjectionLUT(Volume<float>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount, int type);
+
 
 #ifdef SUBVOLREC_MODE
 template<class TVol>
@@ -2021,6 +3709,13 @@ void Reconstructor::ResetProjectionsDevice()
 {
 	proj_d.Memset(0);
 	dist_d.Memset(0);
+	osproj_v.Memset(0);
+	LUT_d.CopyFromDeviceToArray(LUT_d_0);
+
+	CTFbuffer_realRect.Memset(0);
+	CTFbuffer_realSquare.Memset(0);
+	CTFbuffer_comp.Memset(0);
+    //osproj_d.CopyFromDeviceToArray(osproj_d_0);
 }
 
 void Reconstructor::CopyProjectionToHost(float * buffer)
@@ -2041,6 +3736,11 @@ void Reconstructor::CopyRealProjectionToHost(float * buffer)
 void Reconstructor::CopyProjectionToDevice(float * buffer)
 {
 	proj_d.CopyHostToDevice(buffer);
+}
+
+void Reconstructor::CopyLUTToDevice(float * buffer)
+{
+    LUT_d.CopyFromHostToArray(buffer);
 }
 
 void Reconstructor::CopyDistanceImageToDevice(float * buffer)

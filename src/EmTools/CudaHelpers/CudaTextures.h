@@ -464,17 +464,33 @@ namespace Cuda
 		CUDA_RESOURCE_VIEW_DESC mResViewDesc;
 
 		CudaPitchedDeviceVariable* mData; //CUDA Array where the texture data is stored
+		CudaArray2D* mArray;
 		bool mCleanUp; //Indicates if the cuda array was created by the object itself
 
 	public:
 		CudaTextureObject2D(CUaddress_mode aAddressMode0, CUaddress_mode aAddressMode1,
-			CUfilter_mode aFilterMode, uint aTexRefSetFlag, CudaPitchedDeviceVariable* aArray, CUarray_format aDataFormat, uint aNumChannels);
+			                CUfilter_mode aFilterMode, uint aTexRefSetFlag, CudaPitchedDeviceVariable* aArray, CUarray_format aDataFormat, uint aNumChannels);
+		CudaTextureObject2D(CUaddress_mode aAddressMode0, CUaddress_mode aAddressMode1,
+                            CUfilter_mode aFilterMode, uint aTexRefSetFlag, CudaArray2D* aArray, CUarray_format aDataFormat, uint aNumChannels);
 		CudaTextureObject2D();
 
 		~CudaTextureObject2D();
 
-		void Bind(CUaddress_mode aAddressMode0, CUaddress_mode aAddressMode1,
-			CUfilter_mode aFilterMode, uint aTexRefSetFlag, CudaPitchedDeviceVariable* aArray, CUarray_format aDataFormat, uint aNumChannels);
+		void Bind(CUaddress_mode aAddressMode0,
+                  CUaddress_mode aAddressMode1,
+			      CUfilter_mode aFilterMode,
+			      uint aTexRefSetFlag,
+			      CudaPitchedDeviceVariable* aArray,
+			      CUarray_format aDataFormat,
+			      uint aNumChannels);
+
+        void Bind(CUaddress_mode aAddressMode0,
+                  CUaddress_mode aAddressMode1,
+                  CUfilter_mode aFilterMode,
+                  uint aTexRefSetFlag,
+                  CudaArray2D* aArray,
+                  CUarray_format aDataFormat,
+                  uint aNumChannels);
 
 		CudaPitchedDeviceVariable* GetData();
 

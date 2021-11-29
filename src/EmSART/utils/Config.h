@@ -28,7 +28,7 @@
 #include <map>
 #include <list>
 #include "ConfigExceptions.h"
-#include "../Kernels.h"
+#include "../kernels/kernels.h"
 #include <MotiveListe.h>
 
 using namespace std;
@@ -146,6 +146,10 @@ namespace Configuration
 			bool	PhaseFlipOnly;
 			float	WienerFilterNoiseLevel;
             bool LimitToNyquist;
+            string LUTFile;
+            int LUTSize;
+            float LUTStep;
+            float support;
 			
 #ifdef REFINE_MODE
 			int SizeSubVol;

@@ -67,9 +67,10 @@ void compare(int proj_x, int proj_y, size_t stride, float* real_raw, float* virt
     float distYA = 1.0f;
     float distYB = 1.0f;
 
-	if (val >= 1.0f)
+	if (val >= 0)
 	{
-		error = ((*(((float*)((char*)real_raw + stride * y)) + x)) - ((*(((float*)((char*)virtual_raw + stride * y)) + x) / projValScale) / val * realLength )) / realLength * projValScale;
+		//error = ((*(((float*)((char*)real_raw + stride * y)) + x)) - ((*(((float*)((char*)virtual_raw + stride * y)) + x) / projValScale) / val * realLength )) / realLength * projValScale;
+        error = ((*(((float*)((char*)real_raw + stride * y)) + x)) - ((*(((float*)((char*)virtual_raw + stride * y)) + x)))) / realLength;
 	}
 	else
 	{
@@ -334,6 +335,71 @@ void cropBorder(int proj_x, int proj_y, size_t stride, float* image, float2 cutL
 
 
 	*(((float*)((char*)image + stride * y)) + x) *= distX * distY;
+}
+
+extern "C"
+__global__
+void cropBorderSlices(int proj_x,
+                      int proj_y,
+                      int sliceNumber,
+                      float* image,
+                      float2 cutLength,
+                      float2 dimLength,
+                      int2 p1,
+                      int2 p2,
+                      int2 p3,
+                      int2 p4)
+{
+    // integer pixel coordinates
+    const int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    if (x >= proj_x || y >= proj_y || z >= sliceNumber)
+        return;
+
+    float distX = 0.0f;
+    float distY = 0.0f;
+
+    if ( (p2.x - p1.x)*(y - p1.y) - (p2.y - p1.y)*(x - p1.x) < 0
+         && (p3.x - p4.x)*(y - p4.y) - (p3.y - p4.y)*(x - p4.x) < 0
+         && (p1.x - p3.x)*(y - p3.y) - (p1.y - p3.y)*(x - p3.x) < 0
+         && (p4.x - p2.x)*(y - p2.y) - (p4.y - p2.y)*(x - p2.x) < 0)
+    {
+        distX = 1;
+        distY = 1;
+
+        float minDistX = 3 * proj_x;
+        float minDistY = 3 * proj_y;
+        minDistX = fminf(minDistX, GetDistance(p1, p2, x, y));
+        minDistX = fminf(minDistX, GetDistance(p4, p3, x, y));
+        minDistX = fminf(minDistX, x);
+        minDistX = fminf(minDistX, proj_x - x - 1);
+
+        minDistY = fminf(minDistY, GetDistance(p3, p1, x, y));
+        minDistY = fminf(minDistY, GetDistance(p2, p4, x, y));
+        minDistY = fminf(minDistY, y);
+        minDistY = fminf(minDistY, proj_y - y - 1);
+
+
+        if (minDistX < cutLength.x + dimLength.x)
+        {
+            float w = (minDistX - cutLength.x) / dimLength.x;
+            if (w < 0) w = 0;
+            distX = 1.0f - expf(-(w * w * 9.0f));
+        }
+
+        if (minDistY < cutLength.y + dimLength.y)
+        {
+            float w = (minDistY - cutLength.y) / dimLength.y;
+            if (w < 0) w = 0;
+            distY = 1.0f - expf(-(w * w * 9.0f));
+        }
+    }
+
+
+    //*(((float*)((char*)image + stride * y)) + x) *= distX * distY;
+    image[z * proj_x * proj_y + y * proj_x + x] *= distX * distY;
 }
 
 #endif

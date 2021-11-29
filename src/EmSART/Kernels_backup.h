@@ -45,6 +45,33 @@ public:
 	float operator()(int x, int y, Cuda::CudaPitchedDeviceVariable& projection, Cuda::CudaPitchedDeviceVariable& distMap, Cuda::CudaTextureObject3D& texObj, int2 roiMin, int2 roiMax);
 };
 
+class FPLUTKernel : public Cuda::CudaKernel
+{
+public:
+    FPLUTKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
+    FPLUTKernel(CUmodule aModule);
+
+    float operator()(int x,
+                     int y,
+                     Cuda::CudaPitchedDeviceVariable& projection,
+                     Cuda::CudaPitchedDeviceVariable& distMap,
+                     Cuda::CudaTextureObject2D& LUT,
+                     Cuda::CudaSurfaceObject3D& volume,
+                     float tmin,
+                     float tmax);
+    float operator()(int x,
+                     int y,
+                     Cuda::CudaPitchedDeviceVariable& projection,
+                     Cuda::CudaPitchedDeviceVariable& distMap,
+                     Cuda::CudaTextureObject2D& LUT,
+                     Cuda::CudaSurfaceObject3D& volume,
+                     float tmin,
+                     float tmax,
+                     int2 roiMin,
+                     int2 roiMax);
+};
+
+
 class SlicerKernel : public Cuda::CudaKernel
 {
 public:
@@ -99,6 +126,22 @@ public:
 	BPKernel(CUmodule aModule, bool fp16);
 
     float operator()(int proj_x, int proj_y, float lambda, int maxOverSample, float maxOverSampleInv, Cuda::CudaTextureObject2D& img, Cuda::CudaSurfaceObject3D& surf,float distMin, float distMax);
+};
+
+class BPLUTKernel : public Cuda::CudaKernel
+{
+public:
+    BPLUTKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim, bool fp16);
+    BPLUTKernel(CUmodule aModule, bool fp16);
+
+    float operator()(int proj_x,
+                     int proj_y,
+                     float lambda,
+                     float maxOverSample,
+                     Cuda::CudaTextureObject2D& projection,
+                     Cuda::CudaSurfaceObject3D& volume,
+                     float distMin,
+                     float distMax);
 };
 
 class CTFKernel : public Cuda::CudaKernel

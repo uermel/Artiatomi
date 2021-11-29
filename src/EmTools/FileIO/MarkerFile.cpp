@@ -28,7 +28,7 @@
 #include <algorithm>
 
 #define MARKERFILE_X_DIMENSION 10
-#define INVALID_MARKER_POSITION -1
+#define INVALID_MARKER_POSITION -0.0001
 
 MarkerFile::MarkerFile(string aFileName, int aRefMarker)
 	: EmFile(aFileName), mMagAnisotropyAmount(1), mMagAnisotropyAngle(0), mMagAnisotropy(Matrix<float>(3,3)), mRefMarker(aRefMarker)

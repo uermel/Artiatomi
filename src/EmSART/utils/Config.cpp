@@ -415,6 +415,11 @@ namespace Configuration
 		IgnoreZShiftForCTF = GetBool("IgnoreZShiftForCTF", false);
 		CTFSliceThickness = GetFloat("CTFSliceThickness", 50.0f);
         LimitToNyquist = GetBool("LimitToNyquist", true);
+
+        LUTFile = GetString("LUTfile");
+        LUTSize = GetInt("LUTSize");
+        LUTStep = GetFloat("LUTStep");
+        support = GetFloat("Support");
 		
 #ifdef REFINE_MODE
 		SizeSubVol = GetInt("SizeSubVol");

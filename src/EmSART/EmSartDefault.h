@@ -81,6 +81,14 @@ inline dim3 make_dim3(uint3 val)
 	return ret;
 }
 
+typedef struct {
+    float3 m[3];
+} float3x3;
+
+typedef struct {
+    float4 m[4];
+} float4x4;
+
 //inline float3 make_float3(uint3 val)
 //{
 //	float3 ret;

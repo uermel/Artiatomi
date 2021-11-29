@@ -31,7 +31,7 @@
 #include "EmSartDefault.h"
 #include "Projection.h"
 #include "Volume.h"
-#include "Kernels.h"
+#include "kernels/kernels.h"
 #include <CudaArrays.h>
 #include <CudaContext.h>
 #include <CudaTextures.h>
@@ -68,16 +68,18 @@ public:
 	CUmodule modBP;
 	CUmodule modCTF;
 	CUmodule modCTS;
-
+    CUmodule modFPLUT;
+    CUmodule modBPLUT;
+    CUmodule modSplines;
 };
 
-typedef struct {
-    float3 m[3];
-} float3x3;
-
-typedef struct {
-	float4 m[4];
-} float4x4;
+//typedef struct {
+//    float3 m[3];
+//} float3x3;
+//
+//typedef struct {
+//	float4 m[4];
+//} float4x4;
 
 class Reconstructor
 {
@@ -89,17 +91,38 @@ private:
 	SubEKernel subEKernel;
 	WbpWeightingKernel wbp;
 	CropBorderKernel cropKernel;
+	CropSlicesKernel cropslicesKernel;
 	BPKernel bpKernel;
 	ConvVolKernel convVolKernel;
 	ConvVol3DKernel convVol3DKernel;
 	CTFKernel ctf;
+	CTFSlicedKernel ctfs;
 	CopyToSquareKernel cts;
+	//CopyToSquareSlicesKernel ctss;
+	//CopyToRectSlicesKernel ctrs;
+	RectToSqrSlice r2ss;
+	SqrSliceToRectSliceKernel ss2rs;
+	RectSliceToSqrSliceKernel rs2ss;
+	SqrSliceToRectKernel ss2r;
 	FourFilterKernel fourFilterKernel;
 	DoseWeightingKernel doseWeightingKernel;
 	ConjKernel conjKernel;
 	PCKernel pcKernel;
 	MaxShiftKernel maxShiftKernel;
 	DimBordersKernel dimBordersKernel;
+	SplinePrefilter2DX prefilter2DX;
+	SplinePrefilter2DY prefilter2DY;
+	FPLUTKernel fplutKernel;
+	FPLUTSlicedKernel fplutslicedKernel;
+	FPDistSlicedKernel fpdistslicedKernel;
+	BPLUTKernel bplutKernel;
+	BPLUTBWKernel bplutbwKernel;
+	BPLUTBWCGKernel bplutbwcgKernel;
+	BPLUTBlockKernel bplutblockKernel;
+	BPLUTBlockNoDivKernel bplutblocknodivKernel;
+	BPLUTVBlockSlicedKernel bplutvblockslicedKernel;
+	BPLUTSlicedKernel bplutslicedKernel;
+	OversampleKernel osKernel;
 #ifdef REFINE_MODE
 	MaxShiftWeightedKernel maxShiftWeightedKernel;
 	FindPeakKernel findPeakKernel;
@@ -115,6 +138,7 @@ private:
 
 	Cuda::CudaPitchedDeviceVariable realprojUS_d;
 	Cuda::CudaPitchedDeviceVariable proj_d;
+    //Cuda::CudaPitchedDeviceVariable osproj_d;
 	Cuda::CudaPitchedDeviceVariable realproj_d;
 	Cuda::CudaPitchedDeviceVariable dist_d;
 	Cuda::CudaPitchedDeviceVariable filterImage_d;
@@ -126,7 +150,17 @@ private:
 	Cuda::CudaPitchedDeviceVariable badPixelMask_d;
 	Cuda::CudaPitchedDeviceVariable volTemp_d;
 
+    Cuda::CudaPitchedDeviceVariable LUT_d_0;
+    Cuda::CudaArray2D LUT_d;
+
+    Cuda::CudaPitchedDeviceVariable osproj_d_0;
+    Cuda::CudaPitchedDeviceVariable osproj_v;
+    Cuda::CudaArray2D osproj_arr;
+    Cuda::CudaSurfaceObject2D surfProj;
+
 	Cuda::CudaTextureObject2D		texImage;
+    Cuda::CudaTextureObject2D		texLUT;
+    Cuda::CudaTextureObject2D       texOS;
 
 	cufftHandle handleR2C;
 	cufftHandle handleC2R;
@@ -157,12 +191,35 @@ private:
 	Matrix<float> magAnisotropy;
 	Matrix<float> magAnisotropyInv;
 
+	float LUTcenter = 0;
+	int maxSliceNumber = 0;
+	float sliceThickness = 999999999999.0f;
+	vector<int>* sliceNumbers = nullptr;
+	vector<float>* entryPoints = nullptr;
+	vector<vector<float>>* minDefs = nullptr;
+	vector<vector<float>>* maxDefs = nullptr;
+    vector<vector<float>>* defOffsets = nullptr;
+	vector<cufftHandle>* FFThandlesR2C = nullptr;
+    vector<cufftHandle>* FFThandlesC2R = nullptr;
+
+    cufftHandle FFThandleR2Call;
+    cufftHandle FFThandleC2Rall;
+
+	Cuda::CudaDeviceVariable CTFbuffer_realSquare;
+    Cuda::CudaDeviceVariable CTFbuffer_realRect;
+	Cuda::CudaDeviceVariable CTFbuffer_comp;
+
 	template<typename TVol>
 	void ForwardProjectionCTF(Volume<TVol>* vol, Cuda::CudaTextureObject3D& tevVol, int index, bool volumeIsEmpty, bool noSync);
 	template<typename TVol>
 	void ForwardProjectionNoCTF(Volume<TVol>* vol, Cuda::CudaTextureObject3D& tevVol, int index, bool volumeIsEmpty, bool noSync);
 
-	template<typename TVol>
+    template<typename TVol>
+    void ForwardProjectionLUTCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int index, bool volumeIsEmpty, int iter, bool noSync);
+    template<typename TVol>
+    void ForwardProjectionLUTNoCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& tevVol, int index, bool volumeIsEmpty, int iter, bool noSync);
+
+    template<typename TVol>
 	void ForwardProjectionCTFROI(Volume<TVol>* vol, Cuda::CudaTextureObject3D& tevVol, int index, bool volumeIsEmpty, int2 roiMin, int2 roiMax, bool noSync);
 	template<typename TVol>
 	void ForwardProjectionNoCTFROI(Volume<TVol>* vol, Cuda::CudaTextureObject3D& tevVol, int index, bool volumeIsEmpty, int2 roiMin, int2 roiMax, bool noSync);
@@ -171,6 +228,11 @@ private:
 	void BackProjectionNoCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
 	template<typename TVol>
 	void BackProjectionCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
+
+    template<typename TVol>
+    void BackProjectionLUTNoCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount, int type);
+    template<typename TVol>
+    void BackProjectionLUTCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount, int type);
 
 #ifdef SUBVOLREC_MODE
 	template<typename TVol>
@@ -184,6 +246,10 @@ private:
 
 	void GetDefocusMinMax(float ray, int index, float& defocusMin, float& defocusMax);
 
+	void GetCTFSlices(Volume<float>* vol, int index, int& sliceNumber, vector<float>& minDefocus, vector<float>& maxDefocus, vector<float>& defocusOffsets, float& entry, float& thick);
+
+
+
 public:
 	Reconstructor(Configuration::Config& aConfig, Projection& aProj, ProjectionSource* aProjectionSource,
 		 MarkerFile& aMarkers, CtfFile& aDefocus, KernelModuls& modules, int aMpi_part, int aMpi_size);
@@ -196,13 +262,18 @@ public:
 	//img_h can be of any supported type. After the call, the type is float! Make sure the array is large enough!
 	void PrepareProjection(void* img_h, int proj_index, float& meanValue, float& StdValue, int& BadPixels);
 
+    void PlanCTFCorrection(Volume<float>* vol, int goodProjNumber, int fullProjNumber, const int* indexList);
+
 	template<typename TVol>
 	void PrintGeometry(Volume<TVol>* vol, int index);
 
 	template<typename TVol>
 	void ForwardProjection(Volume<TVol>* vol, Cuda::CudaTextureObject3D& texVol, int index, bool volumeIsEmpty, bool noSync = false);
 
-	template<typename TVol>
+    template<typename TVol>
+    void ForwardProjectionLUT(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& texVol, int index, bool volumeIsEmpty, int iter, bool noSync = false);
+
+    template<typename TVol>
 	void ForwardProjectionROI(Volume<TVol>* vol, Cuda::CudaTextureObject3D& texVol, int index, bool volumeIsEmpty, int2 roiMin, int2 roiMax, bool noSync = false);
 
 	template<typename TVol>
@@ -216,7 +287,9 @@ public:
 	//Assumes image to back project stored in proj_d. SIRTCount is overridable to config-file!
 	template<typename TVol>
 	void BackProjection(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
-	
+
+    template<typename TVol>
+    void BackProjectionLUT(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount, int type);
 #ifdef SUBVOLREC_MODE
 	//Assumes image to back project stored in proj_d.
 	template<typename TVol>
@@ -238,6 +311,7 @@ public:
 	void CopyDistanceImageToHost(float* buffer);//For Debugging...
 	void CopyRealProjectionToHost(float* buffer);//For Debugging...
 	void CopyProjectionToDevice(float* buffer);
+	void CopyLUTToDevice(float* buffer);
 	void CopyDistanceImageToDevice(float* buffer);//For Debugging...
 	void CopyRealProjectionToDevice(float* buffer);//For Debugging...
 	void MPIBroadcast(float** buffers, int bufferCount);

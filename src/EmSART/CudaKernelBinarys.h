@@ -31,5 +31,8 @@
 #include "cuda_kernels/ForwardProjectionRayMarcher_TL.cu.h"
 #include "cuda_kernels/ForwardProjectionSlicer.cu.h"
 #include "cuda_kernels/wbpWeighting.cu.h"
+#include "cuda_kernels/ForwardProjectionLUT.cu.h"
+#include "cuda_kernels/BackProjectionLUT.cu.h"
+#include "cuda_kernels/splines.cu.h"
 
 #endif

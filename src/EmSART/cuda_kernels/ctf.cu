@@ -163,4 +163,112 @@ void ctf(cuComplex* ctf, size_t stride, float defocusMin, float defocusMax, floa
 	*(((cuComplex*)((char*)ctf + stride * y)) + x) = res;
 }
 
+extern "C"
+__global__
+void ctfSliced(cuComplex* ctf,
+               int ctf_x,
+               int ctf_y,
+               int sliceNumber,
+               //int maxsize,
+               float defocusMin,
+               float defocusMax,
+               float* offsets,
+               float angle,
+               bool applyForFP,
+               bool phaseFlipOnly,
+               float WienerFilterNoiseLevel,
+               float4 betaFac)
+{
+    //compute x,y indiced
+    unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+//    if (x >= c_pixelcount/2 + 1) return;
+//    if (y >= c_pixelcount) return;
+//    if (z >= sliceNumber) return;
+    if (x >= ctf_x) return;
+    if (y >= ctf_y) return;
+    if (z >= sliceNumber) return;
+
+
+    float xpos = x;
+    float ypos = y;
+    if (ypos > c_pixelcount * 0.5f)
+        ypos = (c_pixelcount - ypos) * -1.0f;
+
+    float alpha;
+    if (xpos == 0)
+        alpha = (M_PI * 0.5f);
+    else
+        alpha = (atan2(ypos , xpos));
+
+    float beta = ((alpha - angle));
+
+    //printf("offset: %f\n", offsets[z]);
+
+    float def0 = defocusMin + offsets[z];
+    float def1 = defocusMax + offsets[z];
+
+    float defocus = def0 + (1 - cos(2*beta)) * (def1 - def0) * 0.5f;
+
+    float length = sqrtf(xpos * xpos + ypos * ypos);
+
+    length *= c_freqStepSize;
+
+    float o = expf(-14.238829f * (c_openingAngle * c_openingAngle * ((Cs * lambda * lambda * length * length * length - defocus * length) * (Cs * lambda * lambda * length * length * length - defocus * length))));
+    float p = expf(-((0.943359f * lambda * length * length * H) * (0.943359f * lambda * length * length * H)));
+    float q = (a1 * expf(-b1 * (length * length)) + a2 * expf(-b2 * (length * length))) / 2.431f;
+
+    float m = -PhaseShift + (M_PI / 2.0f) * (Cs * lambda * lambda * lambda * length * length * length * length - 2 * defocus * lambda * length * length);
+    float n = c_phaseContrast * sinf(m) + c_ampContrast * cosf(m);
+
+    cuComplex res = ctf[z * ctf_y * ctf_x + y * ctf_x + x];//*(((cuComplex*)((char*)ctf + stride * y)) + x);
+
+    if (applyForFP && sqrtf(xpos * xpos + ypos * ypos) > betaFac.x && !phaseFlipOnly)// && length < 317382812)
+    {
+        length = length / 100000000.0f;
+        float coeff1 = betaFac.y;
+        float coeff2 = betaFac.z;
+        float coeff3 = betaFac.w;
+        float expfun = expf((-coeff1 * length - coeff2 * length * length - coeff3 * length * length * length));
+        expfun = max(expfun, 0.01f);
+        float val = n * expfun;
+        if (abs(val) < 0.0001f && val >=0 ) val = 0.0001f;
+        if (abs(val) < 0.0001f && val < 0 ) val = -0.0001f;
+
+
+        res.x = res.x * -val;
+        res.y = res.y * -val;
+    }
+
+    if (!applyForFP && sqrtf(xpos * xpos + ypos * ypos) > betaFac.x && !phaseFlipOnly)// && length < 317382812)
+    {
+        length = length / 100000000.0f;
+        float coeff1 = betaFac.y;
+        float coeff2 = betaFac.z;
+        float coeff3 = betaFac.w;
+        float expfun = expf((-coeff1 * length - coeff2 * length * length - coeff3 * length * length * length));
+        expfun = max(expfun, WienerFilterNoiseLevel);
+        float val = n * expfun;
+
+        res.x = res.x * -val / (val * val + WienerFilterNoiseLevel);
+        res.y = res.y * -val / (val * val + WienerFilterNoiseLevel);
+        //res.x = val;
+        //res.y = val;
+    }
+
+    if (phaseFlipOnly)
+    {
+        if (n >= 0)
+        {
+            res.x = -res.x;
+            res.y = -res.y;
+        }
+    }
+
+    //*(((cuComplex*)((char*)ctf + stride * y)) + x) = res;
+    ctf[z * ctf_y * ctf_x + y * ctf_x + x] = res;
+}
+
 #endif

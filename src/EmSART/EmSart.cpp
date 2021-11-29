@@ -43,6 +43,8 @@
 #include <algorithm>
 #include "utils/SimpleLogger.h"
 #include "Reconstructor.h"
+#include "kernels/kernels.h"
+
 
 using namespace std;
 using namespace Cuda;
@@ -405,12 +407,14 @@ int main(int argc, char* argv[])
 		}
 
 		CudaArray3D vol_Array(arrayFormat, (int)volSize.x, (int)volSize.y, (int)volSize.z, 1, 2);
+        CudaArray3D out_Array(arrayFormat, (int)volSize.x, (int)volSize.y, (int)volSize.z, 1, 2);
 		CudaTextureObject3D texObj(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, &vol_Array);
 		CudaSurfaceObject3D surfObj(&vol_Array);
+        CudaSurfaceObject3D surfObj_out(&out_Array);
 
         if (mpi_part == 0) printf("Copy volume to device ... ");
 
-        bool volumeIsEmpty = true;
+        bool volumeIsEmpty = false;
 
 		if (aConfig.FP16Volume)
 		{
@@ -454,7 +458,7 @@ int main(int argc, char* argv[])
 			printf("\b \n\n");
 
 		}
-		
+
 		Reconstructor reconstructor(aConfig, proj, projSource, markers, *defocus, modules, mpi_part, mpi_size);
 
 
@@ -556,10 +560,41 @@ int main(int argc, char* argv[])
             memset(SIRTBuffer[i], 0, size * 4);
         }
 
+        // Lookup table
+        auto LUTBuffer = new float*[projSource->GetProjectionCount()];
+        auto LUTstack = new EmFile(aConfig.LUTFile);
+        LUTstack->OpenAndRead();
+        // Pointer arithmetic
+        for (int i = 0; i < projSource->GetProjectionCount(); i++)
+        {
+            //int index = indexList[i];
+            uint pos = i * aConfig.LUTSize * aConfig.LUTSize;
+            LUTBuffer[i] = (float*)LUTstack->GetData() + pos;
+
+            {
+                stringstream DP;
+                DP << "real_" << i <<".em";
+                emwrite(DP.str(), (float*)projSource->GetProjection(i), proj.GetWidth(),
+                        proj.GetHeight());
+            }
+        }
+
+//        {
+//            stringstream DP;
+//            DP << "LUT_" << 20  <<".em";
+//            emwrite(DP.str(), LUTBuffer[20], aConfig.LUTSize,
+//                    aConfig.LUTSize);
+//        }
+
+        reconstructor.PlanCTFCorrection(vol, markers.GetProjectionCount(), projSource->GetProjectionCount(), indexList);
+
+        //vol->LoadFromFile(aConfig.OutVolumeFile, mpi_part);
+        //vol_Array.CopyFromHostToArray(vol->GetPtrToSubVolume(mpi_part));
+
         if (mpi_part == 0)printf("\n\nStart reconstruction ...\n\n");
 		fflush(stdout);
         start = clock();
-		
+
         for (int iter = 0; iter < aConfig.Iterations; iter++)
         {			
 			for (int SIRTstep = 0; SIRTstep < (projCount + SIRTcount - 1) / SIRTcount; SIRTstep++)
@@ -580,35 +615,53 @@ int main(int argc, char* argv[])
 
 
 						reconstructor.ResetProjectionsDevice();
+                        reconstructor.CopyLUTToDevice(LUTBuffer[index]);
+
+
 						if (aConfig.FP16Volume)
 						{
 							reconstructor.ForwardProjection(volFP16, texObj, index, volumeIsEmpty);
-							//float* test = new float[proj.GetWidth() * proj.GetHeight()];
-							//reconstructor.CopyDistanceImageToHost(test);
-							//emwrite("testDist.em", test, proj.GetWidth(), proj.GetHeight());
-							//reconstructor.CopyProjectionToHost(test);
-							//emwrite("testProj.em", test, proj.GetWidth(), proj.GetHeight());/**/
 							if (mpi_part == 0)
 							{
 								reconstructor.Compare(volFP16, projSource->GetProjection(index), index);
 							}
-							//reconstructor.CopyProjectionToHost(test);
-							//emwrite("testComp.em", test, proj.GetWidth(), proj.GetHeight());/**/
 						}
 						else
 						{
-							reconstructor.ForwardProjection(vol, texObj, index, volumeIsEmpty);
+							reconstructor.ForwardProjectionLUT(vol, surfObj, index, volumeIsEmpty, iter);
 							if (mpi_part == 0)
 							{
-								/*float* test = new float[proj.GetWidth() * proj.GetHeight()];
-								reconstructor.CopyDistanceImageToHost(test);
-								emwrite("testDist.em", test, proj.GetWidth(), proj.GetHeight());
-								reconstructor.CopyProjectionToHost(test);
-								emwrite("testProj.em", test, proj.GetWidth(), proj.GetHeight());*/
+                                {
+                                    auto img = new float[proj.GetWidth()*proj.GetHeight()];
+                                    reconstructor.CopyProjectionToHost(img);
+                                    stringstream DP;
+                                    DP << "forward_" << index << "_" << iter <<".em";
+                                    emwrite(DP.str(), img, proj.GetWidth(),
+                                            proj.GetHeight());
+                                    delete[] img;
+                                }
+
+                                {
+                                    auto img = new float[proj.GetWidth()*proj.GetHeight()];
+                                    reconstructor.CopyDistanceImageToHost(img);
+                                    stringstream DP;
+                                    DP << "distance_" << index << "_" << iter <<".em";
+                                    emwrite(DP.str(), img, proj.GetWidth(),
+                                            proj.GetHeight());
+                                    delete[] img;
+                                }
+
 								reconstructor.Compare(vol, projSource->GetProjection(index), index);
-								/*reconstructor.CopyProjectionToHost(test);
-								emwrite("testComp.em", test, proj.GetWidth(), proj.GetHeight());
-								delete[] test;*/
+
+                                {
+                                    auto img = new float[proj.GetWidth()*proj.GetHeight()];
+                                    reconstructor.CopyProjectionToHost(img);
+                                    stringstream DP;
+                                    DP << "comp_" << index << "_" << iter <<".em";
+                                    emwrite(DP.str(), img, proj.GetWidth(),
+                                            proj.GetHeight());
+                                    delete[] img;
+                                }
 							}
 						}
 						if (mpi_part == 0)
@@ -629,6 +682,7 @@ int main(int argc, char* argv[])
 			
 				//As compare step or file loading in WBP happens only on node 0, spread the content to all other nodes:
 				reconstructor.MPIBroadcast(SIRTBuffer, SIRTcount);
+
 
                 for (int i = 0; i < SIRTcount; i++)
                 {
@@ -652,20 +706,212 @@ int main(int argc, char* argv[])
 					}
 					else
 					{
-						reconstructor.BackProjection(vol, surfObj, index, (float)SIRTcount);
+//                        {
+//                            auto img = new float[proj.GetWidth()*proj.GetHeight()];
+//                            reconstructor.CopyProjectionToHost(img);
+//                            stringstream DP;
+//                            DP << "before_bp_" << index << "_" << iter <<".em";
+//                            emwrite(DP.str(), img, proj.GetWidth(),
+//                                    proj.GetHeight());
+//                            delete[] img;
+//                        }
+//                        reconstructor.BackProjection(vol, surfObj, index, (float)SIRTcount);
+//
+//                        {
+//                            auto img = new float[vol->GetSubVolumeSizeInVoxels(0)];
+//                            vol_Array.CopyFromArrayToHost(img);
+//                            stringstream DP;
+//                            DP << "volume_" << 3 <<".em";
+//                            emwrite(DP.str(), img, vol->GetDimension().x,
+//                                    vol->GetDimension().y, vol->GetDimension().z);
+//                            delete[] img;
+//                        }
+//
+//                        vol_Array.CopyFromHostToArray(vol->GetPtrToSubVolume(mpi_part));
+//                        reconstructor.CopyProjectionToDevice(SIRTBuffer[i]);
+//
+//
+//
+//						reconstructor.BackProjectionLUT(vol, surfObj, index, (float)SIRTcount, 0);
+//
+//                        {
+//                            auto img = new float[vol->GetSubVolumeSizeInVoxels(0)];
+//                            vol_Array.CopyFromArrayToHost(img);
+//                            stringstream DP;
+//                            DP << "volume_" << 0 <<".em";
+//                            emwrite(DP.str(), img, vol->GetDimension().x,
+//                                    vol->GetDimension().y, vol->GetDimension().z);
+//                            delete[] img;
+//                        }
+//
+//                        vol_Array.CopyFromHostToArray(vol->GetPtrToSubVolume(mpi_part));
+//                        reconstructor.CopyProjectionToDevice(SIRTBuffer[i]);
+//
+//                        reconstructor.BackProjectionLUT(vol, surfObj, index, (float)SIRTcount, 1);
+//
+//                        {
+//                            auto img = new float[vol->GetSubVolumeSizeInVoxels(0)];
+//                            vol_Array.CopyFromArrayToHost(img);
+//                            stringstream DP;
+//                            DP << "volume_" << 1 <<".em";
+//                            emwrite(DP.str(), img, vol->GetDimension().x,
+//                                    vol->GetDimension().y, vol->GetDimension().z);
+//                            delete[] img;
+//                        }
+//
+//                        vol_Array.CopyFromHostToArray(vol->GetPtrToSubVolume(mpi_part));
+//                        reconstructor.CopyProjectionToDevice(SIRTBuffer[i]);
+//
+//                        reconstructor.BackProjectionLUT(vol, surfObj, index, (float)SIRTcount, 2);
+//
+//                        {
+//                            auto img = new float[vol->GetSubVolumeSizeInVoxels(0)];
+//                            vol_Array.CopyFromArrayToHost(img);
+//                            stringstream DP;
+//                            DP << "volume_" << 2 <<".em";
+//                            emwrite(DP.str(), img, vol->GetDimension().x,
+//                                    vol->GetDimension().y, vol->GetDimension().z);
+//                            delete[] img;
+//                        }
+//
+//                        vol_Array.CopyFromHostToArray(vol->GetPtrToSubVolume(mpi_part));
+//                        reconstructor.CopyProjectionToDevice(SIRTBuffer[i]);
+//
+//                        reconstructor.BackProjectionLUT(vol, surfObj, index, (float)SIRTcount, 4);
+//
+//                        {
+//                            auto img = new float[vol->GetSubVolumeSizeInVoxels(0)];
+//                            vol_Array.CopyFromArrayToHost(img);
+//                            stringstream DP;
+//                            DP << "volume_" << 4 <<".em";
+//                            emwrite(DP.str(), img, vol->GetDimension().x,
+//                                    vol->GetDimension().y, vol->GetDimension().z);
+//                            delete[] img;
+//                        }
+//
+//                        vol_Array.CopyFromHostToArray(vol->GetPtrToSubVolume(mpi_part));
+                        reconstructor.CopyProjectionToDevice(SIRTBuffer[i]);
+
+//                        {
+//                            stringstream DP;
+//                            DP << "realproj.em";
+//                            emwrite(DP.str(), SIRTBuffer[i], proj.GetWidth(), proj.GetHeight());
+//                        }
+
+                        //reconstructor.PlanCTFCorrection(vol, 1, 41, indexList);
+                        reconstructor.BackProjectionLUT(vol, surfObj, index, (float)SIRTcount, iter);
+
+//                        {
+//                            auto img = new float[vol->GetSubVolumeSizeInVoxels(0)];
+//                            vol_Array.CopyFromArrayToHost(img);
+//                            stringstream DP;
+//                            DP << "volume_" << 5 <<".em";
+//                            emwrite(DP.str(), img, vol->GetDimension().x,
+//                                    vol->GetDimension().y, vol->GetDimension().z);
+//                            delete[] img;
+//                        }
+
+
 					}
                 }
             }
         }
+
+//        reconstructor.ResetProjectionsDevice();
+//        reconstructor.CopyLUTToDevice(LUTBuffer[20]);
+//
+//        reconstructor.ForwardProjectionLUT(vol, surfObj, 20, volumeIsEmpty, 2);
+//        reconstructor.Compare(vol, projSource->GetProjection(20), 20);
+//        {
+//            auto img = new float[proj.GetWidth()*proj.GetHeight()];
+//            reconstructor.CopyProjectionToHost(img);
+//            stringstream DP;
+//            DP << "COMPARISON_AFTER_0.em";
+//            emwrite(DP.str(), img, proj.GetWidth(),
+//                    proj.GetHeight());
+//            delete[] img;
+//        }
+//        reconstructor.BackProjectionLUT(vol, surfObj, 20, (float)SIRTcount, 2);
+//
+//
+//        reconstructor.ResetProjectionsDevice();
+//        reconstructor.CopyLUTToDevice(LUTBuffer[20]);
+//
+//        reconstructor.ForwardProjectionLUT(vol, surfObj, 20, volumeIsEmpty, 2);
+//        reconstructor.Compare(vol, projSource->GetProjection(20), 20);
+//        {
+//            auto img = new float[proj.GetWidth()*proj.GetHeight()];
+//            reconstructor.CopyProjectionToHost(img);
+//            stringstream DP;
+//            DP << "COMPARISON_AFTER_1.em";
+//            emwrite(DP.str(), img, proj.GetWidth(),
+//                    proj.GetHeight());
+//            delete[] img;
+//        }
+//        reconstructor.BackProjectionLUT(vol, surfObj, 20, (float)SIRTcount, 2);
+//
+//        reconstructor.ResetProjectionsDevice();
+//        reconstructor.CopyLUTToDevice(LUTBuffer[20]);
+//
+//        reconstructor.ForwardProjectionLUT(vol, surfObj, 20, volumeIsEmpty, 2);
+//        reconstructor.Compare(vol, projSource->GetProjection(20), 20);
+//        {
+//            auto img = new float[proj.GetWidth()*proj.GetHeight()];
+//            reconstructor.CopyProjectionToHost(img);
+//            stringstream DP;
+//            DP << "COMPARISON_AFTER_2.em";
+//            emwrite(DP.str(), img, proj.GetWidth(),
+//                    proj.GetHeight());
+//            delete[] img;
+//        }
+//        reconstructor.BackProjectionLUT(vol, surfObj, 20, (float)SIRTcount, 2);
+//
+//        reconstructor.ResetProjectionsDevice();
+//        reconstructor.CopyLUTToDevice(LUTBuffer[20]);
+//
+//        reconstructor.ForwardProjectionLUT(vol, surfObj, 20, volumeIsEmpty, 2);
+//        reconstructor.Compare(vol, projSource->GetProjection(20), 20);
+//        {
+//            auto img = new float[proj.GetWidth()*proj.GetHeight()];
+//            reconstructor.CopyProjectionToHost(img);
+//            stringstream DP;
+//            DP << "COMPARISON_AFTER_3.em";
+//            emwrite(DP.str(), img, proj.GetWidth(),
+//                    proj.GetHeight());
+//            delete[] img;
+//        }
+//        reconstructor.BackProjectionLUT(vol, surfObj, 20, (float)SIRTcount, 2);
+//
+//        reconstructor.ResetProjectionsDevice();
+//        reconstructor.CopyLUTToDevice(LUTBuffer[20]);
+//
+//        reconstructor.ForwardProjectionLUT(vol, surfObj, 20, volumeIsEmpty, 2);
+//        reconstructor.Compare(vol, projSource->GetProjection(20), 20);
+//        {
+//            auto img = new float[proj.GetWidth()*proj.GetHeight()];
+//            reconstructor.CopyProjectionToHost(img);
+//            stringstream DP;
+//            DP << "COMPARISON_AFTER_4.em";
+//            emwrite(DP.str(), img, proj.GetWidth(),
+//                    proj.GetHeight());
+//            delete[] img;
+//        }
+//        reconstructor.BackProjectionLUT(vol, surfObj, 20, (float)SIRTcount, 2);
+
+
+        CubicResampleKernel resample(modules.modFPLUT);
+        resample.SetComputeSize((int)volSize.x, (int)volSize.y, (int)volSize.z);
+        resample(texObj, surfObj_out, vol);
+        //vol_Array.Co
 
 		if (!(aConfig.FP16Volume && !aConfig.WriteVolumeAsFP16))
 		{
 			if (mpi_part == 0) printf("\n\nCopying Data back to host ... ");fflush(stdout);
 
 			if (aConfig.FP16Volume)
-				vol_Array.CopyFromArrayToHost(volFP16->GetPtrToSubVolume(mpi_part));
+				out_Array.CopyFromArrayToHost(volFP16->GetPtrToSubVolume(mpi_part));
 			else
-				vol_Array.CopyFromArrayToHost(vol->GetPtrToSubVolume(mpi_part));
+                vol_Array.CopyFromArrayToHost(vol->GetPtrToSubVolume(mpi_part));
 
 			if (mpi_part == 0) printf("Done\n");
 		}

@@ -33,6 +33,18 @@ __device__ __constant__ float c_zShiftForPartialVolume;
 __device__ __constant__ float3x3 c_magAniso;
 __device__ __constant__ float3x3 c_magAnisoInv;
 
+// Splines
+__device__ __constant__ float c_supporthalf;
+__device__ __constant__ float c_LUTstepinv;
+__device__ __constant__ float c_LUTcenter;
+__device__ __constant__ int c_oversampleFactor;
+__device__ __constant__ int2 c_blockSupportSize;
+__device__ __constant__ float c_voxelSupportSize;
+__device__ __constant__ float c_voxelSupportHalf;
+__device__ __constant__ float c_entry;
+__device__ __constant__ float c_sliceThickness;
+__device__ __constant__ int c_sliceNumber;
+
 // transform vector by matrix
 __device__
 void MatrixVector3Mul(float3x3& M, float xIn, float yIn, float& xOut, float& yOut)

@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.13)
-set(CMAKE_CUDA_COMPILER /usr/local/cuda-10.1/bin/nvcc)
+set(CMAKE_CUDA_COMPILER /usr/local/cuda-10.2/bin/nvcc)
 project(Artiatomi LANGUAGES CUDA CXX)
 
 set(CMAKE_BUILD_TYPE Debug)
 
-set(CUDA_COMPILE_OPTIONS --use_fast_math)
+set(CUDA_COMPILE_OPTIONS --use_fast_math -lineinfo)
 #set(CUDA_COMPILE_OPTIONS -g -G -lineinfo) #to debug kernels
 
 
@@ -19,7 +19,7 @@ set(ISA_PATH "src/ImageStackAlignator" CACHE PATH "Path to ImageStackAlignator s
 set(STA_PATH "src/SubTomogramAverageMPI" CACHE PATH "Path to SubTomogramAverageMPI source.")
 
 if(UNIX)
-	set(CUDA_PATH "/usr/local/cuda-10.1" CACHE PATH "Path to CUDA root")
+	set(CUDA_PATH "/usr/local/cuda-10.2" CACHE PATH "Path to CUDA root")
 endif()
 
 if(WIN32)
@@ -52,7 +52,7 @@ set(CUDA_LIBS ${CUDA_CUDA_LIBRARY}
 				${CUDA_LIBRARIES})
 
 #set(CUDA_LIBS ${CUDA_LIBRARIES})
-set(BIN2C_EXEC /usr/local/cuda-10.1/bin/bin2c) #in cuda toolkit binary path
+set(BIN2C_EXEC /usr/local/cuda-10.2/bin/bin2c) #in cuda toolkit binary path
 ######################### CUDA #############################
 if (UNIX)
 	set(OpenCL_INCLUDE_DIR "/usr/local/cuda/include")
@@ -476,7 +476,7 @@ set(EMSARTCOMMON_SRC
         ${THREADING_SRC}
 		${CUDA_HELPERS_SRC}
 		
-        ${EMSART_PATH}/Kernels.cpp
+        #${EMSART_PATH}/Kernels.cpp
         ${EMSART_PATH}/Projection.cpp
         ${EMSART_PATH}/Volume.cpp
         ${EMSART_PATH}/Reconstructor.cpp
@@ -561,17 +561,93 @@ add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/wbpWei
 add_custom_target(wbp_ptx_header ALL
         DEPENDS ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/wbpWeighting.cu.h ${EMSART_PATH}/cuda_kernels/wbpWeighting.cu
         SOURCES ${EMSART_PATH}/cuda_kernels/wbpWeighting.cu)
-		
+
+
+cuda_compile_ptx(FPLUT_PTX_FILES ${EMSART_PATH}/cuda_kernels/ForwardProjectionLUT.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ForwardProjectionLUT.cu.h
+		COMMAND ${BIN2C_EXEC} -p 0 --const --name KernelFPLUT ${FPLUT_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ForwardProjectionLUT.cu.h DEPENDS ${FPLUT_PTX_FILES})
+add_custom_target(FPLUT_PTX_HEADER ALL
+		DEPENDS ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/ForwardProjectionLUT.cu.h ${EMSART_PATH}/cuda_kernels/ForwardProjectionLUT.cu
+		SOURCES ${EMSART_PATH}/cuda_kernels/ForwardProjectionLUT.cu)
+
+cuda_compile_ptx(BPLUT_PTX_FILES ${EMSART_PATH}/cuda_kernels/BackProjectionLUT.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/BackProjectionLUT.cu.h
+		COMMAND ${BIN2C_EXEC} -p 0 --const --name KernelBPLUT ${BPLUT_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/BackProjectionLUT.cu.h DEPENDS ${BPLUT_PTX_FILES})
+add_custom_target(BPLUT_PTX_HEADER ALL
+		DEPENDS ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/BackProjectionLUT.cu.h ${EMSART_PATH}/cuda_kernels/BackProjectionLUT.cu
+		SOURCES ${EMSART_PATH}/cuda_kernels/BackProjectionLUT.cu)
+
+cuda_compile_ptx(SPLINES_PTX_FILES ${EMSART_PATH}/cuda_kernels/splines.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/splines.cu.h
+		COMMAND ${BIN2C_EXEC} -p 0 --const --name KernelSplines ${SPLINES_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/splines.cu.h DEPENDS ${SPLINES_PTX_FILES})
+add_custom_target(SPLINES_PTX_HEADER ALL
+		DEPENDS ${CMAKE_SOURCE_DIR}/${EMSART_PATH}/cuda_kernels/splines.cu.h ${EMSART_PATH}/cuda_kernels/splines.cu
+		SOURCES ${EMSART_PATH}/cuda_kernels/splines.cu)
 ######################################################################
+
+######################### EmSART Kernels ################################
+set(EMSART_KERNELS_SRC
+		${EMSART_PATH}/kernels/BPKernel.cpp
+		${EMSART_PATH}/kernels/FPKernel.cpp
+		${EMSART_PATH}/kernels/PCKernel.cpp
+		${EMSART_PATH}/kernels/CTFKernel.cpp
+		${EMSART_PATH}/kernels/CTFSlicedKernel.cpp
+		${EMSART_PATH}/kernels/RotKernel.cpp
+		${EMSART_PATH}/kernels/CompKernel.cpp
+		${EMSART_PATH}/kernels/ConjKernel.cpp
+		${EMSART_PATH}/kernels/SubEKernel.cpp
+		${EMSART_PATH}/kernels/BPLUTKernel.cpp
+		${EMSART_PATH}/kernels/BPLUTBWKernel.cpp
+		${EMSART_PATH}/kernels/BPLUTBWCGKernel.cpp
+		${EMSART_PATH}/kernels/BPLUTBlockKernel.cpp
+		${EMSART_PATH}/kernels/BPLUTBlockNoDivKernel.cpp
+		${EMSART_PATH}/kernels/BPLUTVBlockSlicedKernel.cpp
+		${EMSART_PATH}/kernels/BPLUTSlicedKernel.cpp
+		${EMSART_PATH}/kernels/FPLUTKernel.cpp
+		${EMSART_PATH}/kernels/FPLUTSlicedKernel.cpp
+		${EMSART_PATH}/kernels/FPDistSlicedKernel.cpp
+		${EMSART_PATH}/kernels/SlicerKernel.cpp
+		${EMSART_PATH}/kernels/ConvVolKernel.cpp
+		${EMSART_PATH}/kernels/FindPeakKernel.cpp
+		${EMSART_PATH}/kernels/MaxShiftKernel.cpp
+		${EMSART_PATH}/kernels/ApplyMaskKernel.cpp
+		${EMSART_PATH}/kernels/ConvVol3DKernel.cpp
+		${EMSART_PATH}/kernels/CropBorderKernel.cpp
+		${EMSART_PATH}/kernels/DimBordersKernel.cpp
+		${EMSART_PATH}/kernels/FourFilterKernel.cpp
+		${EMSART_PATH}/kernels/CopyToSquareKernel.cpp
+		#${EMSART_PATH}/kernels/CopyToSquareSlicesKernel.cpp
+		#${EMSART_PATH}/kernels/CopyToRectSlicesKernel.cpp
+		${EMSART_PATH}/kernels/WbpWeightingKernel.cpp
+		${EMSART_PATH}/kernels/DoseWeightingKernel.cpp
+		${EMSART_PATH}/kernels/RestoreVolumeKernel.cpp
+		${EMSART_PATH}/kernels/SphericalMaskKernel.cpp
+		${EMSART_PATH}/kernels/SplinePrefilter.cpp
+		${EMSART_PATH}/kernels/VolTravLengthKernel.cpp
+		${EMSART_PATH}/kernels/MaxShiftWeightedKernel.cpp
+		${EMSART_PATH}/kernels/CubicResampleKernel.cpp
+		${EMSART_PATH}/kernels/OversampleKernel.cpp
+		${EMSART_PATH}/kernels/RectToSqrSlice.cpp
+		${EMSART_PATH}/kernels/RectSliceToSqrSliceKernel.cpp
+		${EMSART_PATH}/kernels/SqrSliceToRectSliceKernel.cpp
+		${EMSART_PATH}/kernels/SqrSliceToRectKernel.cpp
+		${EMSART_PATH}/kernels/CropSlicesKernel.cpp)
+
+set(EMSART_KERNELS_INC
+		${EMSART_PATH}/kernels/
+		)
+######################### EmSART Kernels ################################
 
 ######################### EmSART #####################################
 set(EMSART_SRC
         ${EMSARTCOMMON_SRC}
+		${EMSART_KERNELS_SRC}
         ${EMSART_PATH}/EmSart.cpp
         )
 		
 set(EMSART_INC
         ${EMSARTCOMMON_INC}
+		${EMSART_KERNELS_INC}
         )
 		
 set(EMSART_LIB
@@ -589,12 +665,15 @@ add_dependencies(EmSART fpd_ptx_header)
 add_dependencies(EmSART ctf_ptx_header)		
 add_dependencies(EmSART cts_ptx_header)		
 add_dependencies(EmSART compare_ptx_header)	
-add_dependencies(EmSART wbp_ptx_header)	
+add_dependencies(EmSART wbp_ptx_header)
+add_dependencies(EmSART FPLUT_PTX_HEADER)
+add_dependencies(EmSART BPLUT_PTX_HEADER)
+add_dependencies(EmSART SPLINES_PTX_HEADER)
 
 
 target_include_directories(EmSART PUBLIC ${EMSART_INC})
 target_link_libraries(EmSART ${EMSART_LIB})
-target_compile_definitions(EmSART PUBLIC NO_OPENCL USE_MPI)
+target_compile_definitions(EmSART PUBLIC NO_OPENCL)
 target_compile_options(EmSART PUBLIC -fpermissive)
 ######################### EmSART #####################################
 
@@ -794,8 +873,5 @@ target_link_libraries(AddParticles ${ADDPARTICLES_LIB})
 target_compile_definitions(AddParticles PUBLIC NO_OPENCL USE_MPI)
 target_compile_options(AddParticles PUBLIC -fpermissive)
 ######################### AddParticles ########################
-
-
-
 
 

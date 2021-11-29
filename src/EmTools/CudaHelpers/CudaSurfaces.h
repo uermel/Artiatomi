@@ -15,6 +15,36 @@
 
 namespace Cuda
 {
+    class CudaSurfaceObject2D
+    {
+    private:
+        CUsurfObject mSurfObj;
+        CUDA_RESOURCE_DESC mResDesc;
+        CUDA_RESOURCE_VIEW_DESC mResViewDesc;
+
+        CudaPitchedDeviceVariable* mData;
+        CudaArray2D* mArray; //CUDA Array where the surface data is stored
+        bool mCleanUp; //Indicates if the cuda array was created by the object itself
+
+    public:
+        explicit CudaSurfaceObject2D(CudaArray2D* aArray);
+        CudaSurfaceObject2D(CudaPitchedDeviceVariable* aVariable,
+                            CUarray_format aDataFormat,
+                            uint aNumChannels);
+        CudaSurfaceObject2D();
+
+        void Bind(CudaArray2D* aArray);
+        void Bind(CudaPitchedDeviceVariable* aVariable,
+                  CUarray_format aDataFormat,
+                  uint aNumChannels);
+
+        ~CudaSurfaceObject2D();
+
+        CudaArray2D* GetArray();
+
+        CUsurfObject GetSurfObject();
+    };
+
     class CudaSurfaceObject3D
     {
     private:
