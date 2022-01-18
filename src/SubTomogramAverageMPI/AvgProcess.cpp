@@ -162,11 +162,11 @@ void AvgProcess::planAngularSampling(float aPhiAngIter,
         }
     }
 
-    printf("ANGLES Planned: \n");
-    for (int trpIdx = 0; trpIdx < angleList.size(); trpIdx++)
-    {
-        printf("phi: %f psi: %f theta: %f\n", angleList[trpIdx][0], angleList[trpIdx][1], angleList[trpIdx][2]);
-    }
+//    printf("ANGLES Planned: \n");
+//    for (int trpIdx = 0; trpIdx < angleList.size(); trpIdx++)
+//    {
+//        printf("phi: %f psi: %f theta: %f\n", angleList[trpIdx][0], angleList[trpIdx][1], angleList[trpIdx][2]);
+//    }
 }
 
 void AvgProcess::setAngularSampling(const float* customAngles,
