@@ -984,9 +984,31 @@ int main(int argc, char* argv[])
 						emwrite("testSum.em", sum, size, size, size);*/
 
 
-						AvgProcess p(size, 0, ctx, sum, nowedge, nowedge, 1, 0, 5, 3, aConfig.BinarizeMask, aConfig.RotateMaskCC, false, aConfig.LinearInterpolation);
+						AvgProcess p(size,
+                                     0,
+                                     ctx,
+                                     sum,
+                                     nowedge,
+                                     nowedge,
+                                     aConfig.BinarizeMask,
+                                     aConfig.RotateMaskCC,
+                                     false,
+                                     aConfig.LinearInterpolation);
 
-						maxVals_t v = p.execute(part, nowedge, NULL, 0, 0, 0, (float)aConfig.HighPass, (float)aConfig.LowPass, (float)aConfig.Sigma, make_float3(0, 0, 0), aConfig.CouplePhiToPsi, false, 0);
+                        p.planAngularSampling(1, 0, 5, 3, aConfig.CouplePhiToPsi);
+
+						maxVals_t v = p.execute(part,
+                                                nowedge,
+                                                NULL,
+                                                0,
+                                                0,
+                                                0,
+                                                (float)aConfig.HighPass,
+                                                (float)aConfig.LowPass,
+                                                (float)aConfig.Sigma,
+                                                make_float3(0, 0, 0),
+                                                false,
+                                                0);
 						int sx, sy, sz;
 						v.getXYZ(size, sx, sy, sz);
 

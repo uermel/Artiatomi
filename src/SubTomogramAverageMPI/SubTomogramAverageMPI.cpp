@@ -259,6 +259,10 @@ bool checkIfClassIsToAverage(vector<int>& classes, int aClass)
 
 int main(int argc, char* argv[])
 {
+    /////////////////////////////////////
+    /// MPI Setup START
+    /////////////////////////////////////
+
 	int mpi_part = 0;
 
 	int mpi_size = 1;
@@ -395,44 +399,18 @@ int main(int argc, char* argv[])
 
 	MPI_Barrier(MPI_COMM_WORLD);
 #endif
+    /////////////////////////////////////
+    /// MPI Setup END
+    /////////////////////////////////////
+
+
+    /////////////////////////////////////
+    /// Avg Setup START
+    /////////////////////////////////////
 
 	Configuration::Config aConfig = Configuration::Config::GetConfig("average.cfg", argc, argv, mpi_part, NULL);
 
 	CudaContext* ctx = CudaContext::CreateInstance(aConfig.CudaDeviceIDs[mpi_part], CU_CTX_SCHED_SPIN);
-
-/*
-	int s = 128;
-	float2* particle = new float2[s * s * s];
-	
-
-
-	for (int z = 0; z < s; z++)
-	{
-		for (int y = 64; y < s; y++)
-		{
-			for (int x = 64; x < s; x++)
-			{
-				int dz = (z - s / 2);
-				int dy = (y - s / 2);
-				int dx = (x - s / 2);
-
-				float d = sqrt(dx * dx + dy * dy + dz * dz);
-
-				d = round(d);
-				float res = s / (d + 1) * aConfig.PixelSize;
-
-				float value = expf(-aConfig.BFactor / (4.0f * res * res));
-
-				size_t idx = z * s * s + y * s + x;
-				float2 pixel = particle[idx];
-				pixel.x *= value;
-				pixel.y *= value;
-				particle[idx] = pixel;
-			}
-		}
-	}
-*/
-
 
 	for (int iter = aConfig.StartIteration; iter < aConfig.EndIteration; iter++)
 	{
@@ -539,11 +517,13 @@ int main(int argc, char* argv[])
 				cout << "filter OK" << endl;
 		}
 
+        /////////////////////////////////////
+        /// Avg Setup END
+        /////////////////////////////////////
+
 		////////////////////////////////////
 		/// Run Average on motl fragment ///
 		////////////////////////////////////
-
-
 
 		std::cout << "Context OK" << std::endl;
 		int size = ref.DimX;
@@ -598,6 +578,27 @@ int main(int argc, char* argv[])
 			}
 		}
 
+        // Custom Angles
+        EMFile* customAngleFile = nullptr;
+        float* customAngleList = nullptr;
+        int customAngleNum = 0;
+        if (aConfig.UseCustomAngles)
+        {
+            customAngleFile = new EMFile(aConfig.CustomAngleList);
+            customAngleFile->OpenAndRead();
+            customAngleFile->ReadHeaderInfo();
+
+            customAngleNum = customAngleFile->DimY;
+            printf("DimX: %i\n", customAngleFile->DimX);
+            printf("DimY: %i\n", customAngleFile->DimY);
+            printf("DimZ: %i\n", customAngleFile->DimZ);
+
+
+            customAngleList = (float*)customAngleFile->GetData();
+
+            printf("DATA: %f\n", customAngleList[0]);
+        }
+
 		std::cout << "Start avergaing... (part size: " << size << ")" << std::endl;
 
 		if (!onlySumUp)
@@ -615,7 +616,32 @@ int main(int argc, char* argv[])
 				multiref.ReadHeaderInfo();
 				cout << "multiref OK" << endl;
 				
-				aps.push_back(new AvgProcess(size, 0, ctx, (float*)(mask.GetData()), (float*)(multiref.GetData()), (float*)(ccmask.GetData()), aConfig.PhiAngIter, aConfig.PhiAngIncr, aConfig.AngIter, aConfig.AngIncr, aConfig.BinarizeMask, aConfig.RotateMaskCC, aConfig.UseFilterVolume, aConfig.LinearInterpolation));
+				aps.push_back(new AvgProcess(size,
+                                             0,
+                                             ctx,
+                                             (float*)(mask.GetData()),
+                                             (float*)(multiref.GetData()),
+                                             (float*)(ccmask.GetData()),
+                                             aConfig.BinarizeMask,
+                                             aConfig.RotateMaskCC,
+                                             aConfig.UseFilterVolume,
+                                             aConfig.LinearInterpolation));
+
+                // Set or plan angular sampling
+                if (aConfig.UseCustomAngles)
+                {
+                    aps[ref]->setAngularSampling(customAngleList,
+                                                 customAngleNum);
+                }
+                else
+                {
+                    aps[ref]->planAngularSampling(aConfig.PhiAngIter,
+                                                  aConfig.PhiAngIncr,
+                                                  aConfig.AngIter,
+                                                  aConfig.AngIncr,
+                                                  aConfig.CouplePhiToPsi);
+                }
+
 			}
 			
 			int motCount = partCount;
@@ -665,11 +691,33 @@ int main(int argc, char* argv[])
 					maxVals_t temp;
 					if (aConfig.Correlation == Configuration::CM_CrossCorrelation)
 					{
-						temp = aps[ref]->execute((float*)part.GetData(), (float*)wedges[wedgeIdx]->GetData(), filterData, mot.phi, mot.psi, mot.theta, (float)aConfig.HighPass, (float)aConfig.LowPass, (float)aConfig.Sigma, make_float3(mot.x_Shift, mot.y_Shift, mot.z_Shift), aConfig.CouplePhiToPsi, aConfig.ComputeCCValOnly, oldIndex);
+						temp = aps[ref]->execute((float*)part.GetData(),
+                                                 (float*)wedges[wedgeIdx]->GetData(),
+                                                 filterData,
+                                                 mot.phi,
+                                                 mot.psi,
+                                                 mot.theta,
+                                                 (float)aConfig.HighPass,
+                                                 (float)aConfig.LowPass,
+                                                 (float)aConfig.Sigma,
+                                                 make_float3(mot.x_Shift, mot.y_Shift, mot.z_Shift),
+                                                 aConfig.ComputeCCValOnly,
+                                                 oldIndex);
 					}
 					else if (aConfig.Correlation == Configuration::CM_PhaseCorrelation)
 					{
-						temp = aps[ref]->executePhaseCorrelation((float*)part.GetData(), (float*)wedges[wedgeIdx]->GetData(), filterData, mot.phi, mot.psi, mot.theta, (float)aConfig.HighPass, (float)aConfig.LowPass, (float)aConfig.Sigma, make_float3(mot.x_Shift, mot.y_Shift, mot.z_Shift), aConfig.CouplePhiToPsi, aConfig.ComputeCCValOnly, oldIndex, aConfig.CertaintyMaxDistance);
+						temp = aps[ref]->executePhaseCorrelation((float*)part.GetData(),
+                                                                 (float*)wedges[wedgeIdx]->GetData(),
+                                                                 filterData,
+                                                                 mot.phi,
+                                                                 mot.psi,
+                                                                 mot.theta,
+                                                                 (float)aConfig.HighPass,
+                                                                 (float)aConfig.LowPass,
+                                                                 (float)aConfig.Sigma,
+                                                                 make_float3(mot.x_Shift, mot.y_Shift, mot.z_Shift),
+                                                                 aConfig.ComputeCCValOnly, oldIndex,
+                                                                 aConfig.CertaintyMaxDistance);
 					}
 
 					//cout << temp.ccVal << endl;
@@ -726,7 +774,32 @@ int main(int argc, char* argv[])
 		}
 		else
 		{
-			AvgProcess p(size, 0, ctx, (float*)(mask.GetData()), (float*)(ref.GetData()), (float*)(ccmask.GetData()), aConfig.PhiAngIter, aConfig.PhiAngIncr, aConfig.AngIter, aConfig.AngIncr, aConfig.BinarizeMask, aConfig.RotateMaskCC, aConfig.UseFilterVolume, aConfig.LinearInterpolation);
+			AvgProcess p(size,
+                         0,
+                         ctx,
+                         (float*)(mask.GetData()),
+                         (float*)(ref.GetData()),
+                         (float*)(ccmask.GetData()),
+                         aConfig.BinarizeMask,
+                         aConfig.RotateMaskCC,
+                         aConfig.UseFilterVolume,
+                         aConfig.LinearInterpolation);
+
+            // Set or plan angular sampling
+            if (aConfig.UseCustomAngles)
+            {
+                p.setAngularSampling(customAngleList,
+                                     customAngleNum);
+            }
+            else
+            {
+                p.planAngularSampling(aConfig.PhiAngIter,
+                                      aConfig.PhiAngIncr,
+                                      aConfig.AngIter,
+                                      aConfig.AngIncr,
+                                      aConfig.CouplePhiToPsi);
+            }
+
 			int motCount = partCount;
 
 			std::cout << "Init OK" << std::endl;
@@ -771,11 +844,34 @@ int main(int argc, char* argv[])
 
 				if (aConfig.Correlation == Configuration::CM_CrossCorrelation)
 				{
-					v = p.execute((float*)part.GetData(), (float*)wedges[wedgeIdx]->GetData(), filterData, mot.phi, mot.psi, mot.theta, (float)aConfig.HighPass, (float)aConfig.LowPass, (float)aConfig.Sigma, make_float3(mot.x_Shift, mot.y_Shift, mot.z_Shift), aConfig.CouplePhiToPsi, aConfig.ComputeCCValOnly, oldIndex);
+					v = p.execute((float*)part.GetData(),
+                                  (float*)wedges[wedgeIdx]->GetData(),
+                                  filterData,
+                                  mot.phi,
+                                  mot.psi,
+                                  mot.theta,
+                                  (float)aConfig.HighPass,
+                                  (float)aConfig.LowPass,
+                                  (float)aConfig.Sigma,
+                                  make_float3(mot.x_Shift, mot.y_Shift, mot.z_Shift),
+                                  aConfig.ComputeCCValOnly,
+                                  oldIndex);
 				}
 				else if (aConfig.Correlation == Configuration::CM_PhaseCorrelation)
 				{
-					v = p.executePhaseCorrelation((float*)part.GetData(), (float*)wedges[wedgeIdx]->GetData(), filterData, mot.phi, mot.psi, mot.theta, (float)aConfig.HighPass, (float)aConfig.LowPass, (float)aConfig.Sigma, make_float3(mot.x_Shift, mot.y_Shift, mot.z_Shift), aConfig.CouplePhiToPsi, aConfig.ComputeCCValOnly, oldIndex, aConfig.CertaintyMaxDistance);
+					v = p.executePhaseCorrelation((float*)part.GetData(),
+                                                  (float*)wedges[wedgeIdx]->GetData(),
+                                                  filterData,
+                                                  mot.phi,
+                                                  mot.psi,
+                                                  mot.theta,
+                                                  (float)aConfig.HighPass,
+                                                  (float)aConfig.LowPass,
+                                                  (float)aConfig.Sigma,
+                                                  make_float3(mot.x_Shift, mot.y_Shift, mot.z_Shift),
+                                                  aConfig.ComputeCCValOnly,
+                                                  oldIndex,
+                                                  aConfig.CertaintyMaxDistance);
 				}
 
 				int sx, sy, sz;
@@ -857,7 +953,6 @@ int main(int argc, char* argv[])
 				memcpy(&motlBuffer[motl.DimX * mpi * partCount], buffer, lastPartCount * motl.DimX * sizeof(float));
 				//cout << mpi_part << ": " << buffer[0] << endl;
 			}
-
 
 
 			double counter = 0;
@@ -1009,9 +1104,6 @@ int main(int argc, char* argv[])
 				wedgeSumE.Memset(0);
 				wedgeSumA.Memset(0);
 				wedgeSumB.Memset(0);
-
-				
-
 
 				int sumCount = 0;
 				int motCount = partCount;
@@ -1305,13 +1397,36 @@ int main(int argc, char* argv[])
 						emwrite("testSum.em", sum, size, size, size);*/
 
 
-						AvgProcess p(size, 0, ctx, sum, nowedge, nowedge, 1, 0, 5, 3, aConfig.BinarizeMask, aConfig.RotateMaskCC, aConfig.UseFilterVolume, aConfig.LinearInterpolation);
+						AvgProcess p(size,
+                                     0,
+                                     ctx,
+                                     sum,
+                                     nowedge,
+                                     nowedge,
+                                     aConfig.BinarizeMask,
+                                     aConfig.RotateMaskCC,
+                                     aConfig.UseFilterVolume,
+                                     aConfig.LinearInterpolation);
+
+                        p.planAngularSampling(1, 0, 5, 3, aConfig.CouplePhiToPsi);
+
 						float* filterData = NULL;
 						if (aConfig.UseFilterVolume)
 						{
 							filterData = (float*)filter->GetData();
 						}
-						maxVals_t v = p.execute(part, nowedge, filterData, 0, 0, 0, (float)aConfig.HighPass, (float)aConfig.LowPass, (float)aConfig.Sigma, make_float3(0, 0, 0), aConfig.CouplePhiToPsi, false, 0);
+						maxVals_t v = p.execute(part,
+                                                nowedge,
+                                                filterData,
+                                                0,
+                                                0,
+                                                0,
+                                                (float)aConfig.HighPass,
+                                                (float)aConfig.LowPass,
+                                                (float)aConfig.Sigma,
+                                                make_float3(0, 0, 0),
+                                                false,
+                                                0);
 						int sx, sy, sz;
 						v.getXYZ(size, sx, sy, sz);
 

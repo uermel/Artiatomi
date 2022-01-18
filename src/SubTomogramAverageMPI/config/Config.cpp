@@ -63,7 +63,9 @@ namespace Configuration
 		PixelSize(1),
 		ComputeCCValOnly(false),
 		Correlation(CM_PhaseCorrelation),
-		CertaintyMaxDistance(-1)
+		CertaintyMaxDistance(-1),
+        UseCustomAngles(false),
+        CustomAngleList()
 	{
 		while (appEnvp && *appEnvp) {
 			string envEntry = *appEnvp;
@@ -278,6 +280,8 @@ namespace Configuration
 
 		CertaintyMaxDistance = GetInt("CertaintyMaxDistance", -1);
 
+        UseCustomAngles = GetBool("UseCustomAngles", false);
+        CustomAngleList = GetStringOptional("CustomAngleList");
 	}
     Config* Config::config = NULL;
 	Config& Config::GetConfig(string aConfigFile, int argc, char** argv, int mpiPart, char** appEnvp)

@@ -133,6 +133,8 @@ namespace Configuration
 			bool ComputeCCValOnly;
 			CorrelationMethod Correlation;
 			int CertaintyMaxDistance;
+            bool UseCustomAngles;
+            string CustomAngleList;
 
 
             static Config& GetConfig();
