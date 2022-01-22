@@ -136,24 +136,27 @@ void AvgProcess::planAngularSampling(float aPhiAngIter,
 {
     float rphi, npsi, dpsi, rpsi, rthe;
 
-    for (int iterPhi = 0; iterPhi < 2 * aPhiAngIter + 1; ++iterPhi) {
-        rphi = aPhiAngInc * (iterPhi - aPhiAngIter);
-        for (int iterThe = (int) 0; iterThe < aAngIter + 1; ++iterThe) {
+    for (int iterPhi = 0; iterPhi < 2 * (int)aPhiAngIter + 1; ++iterPhi) {
+        rphi = aPhiAngInc * ((float)iterPhi - aPhiAngIter);
+
+        for (int iterThe = (int) 0; iterThe < (int)aAngIter + 1; ++iterThe) {
+            rthe = (float)iterThe * aAngIncr;
+
             if (iterThe == 0) {
                 npsi = 1;
                 dpsi = 360;
             } else {
-                dpsi = aAngIncr / sinf(iterThe * aAngIncr * (float) M_PI / 180.0f);
+                dpsi = aAngIncr / sinf((float)iterThe * aAngIncr * (float) M_PI / 180.0f);
                 npsi = ceilf(360.0f / dpsi);
             }
-            rthe = iterThe * aAngIncr;
-            for (int iterPsi = 0; iterPsi < npsi; ++iterPsi) {
-                rpsi = iterPsi * dpsi;
+
+            for (int iterPsi = 0; iterPsi < (int)npsi; ++iterPsi) {
+                rpsi = (float)iterPsi * dpsi;
 
                 if (aCouplePhiToPsi) {
-                    rphi = aPhiAngInc * (iterPhi - aPhiAngIter) - rpsi;
+                    rphi = aPhiAngInc * ((float)iterPhi - aPhiAngIter) - rpsi;
                 } else {
-                    rphi = aPhiAngInc * (iterPhi - aPhiAngIter);
+                    rphi = aPhiAngInc * ((float)iterPhi - aPhiAngIter);
                 }
 
                 vector<float> angles = {rphi, rpsi, rthe};
@@ -163,10 +166,20 @@ void AvgProcess::planAngularSampling(float aPhiAngIter,
     }
 
 //    printf("ANGLES Planned: \n");
+//    auto angles = new float[angleList.size()*3];
 //    for (int trpIdx = 0; trpIdx < angleList.size(); trpIdx++)
 //    {
 //        printf("phi: %f psi: %f theta: %f\n", angleList[trpIdx][0], angleList[trpIdx][1], angleList[trpIdx][2]);
+//        angles[trpIdx*3+0] = angleList[trpIdx][0];
+//        angles[trpIdx*3+1] = angleList[trpIdx][1];
+//        angles[trpIdx*3+2] = angleList[trpIdx][2];
 //    }
+//
+//    stringstream ss;
+//    ss << "testangles.em";
+//    emwrite(ss.str(), angles, 3, angleList.size());
+//    delete[] angles;
+
 }
 
 void AvgProcess::setAngularSampling(const float* customAngles,
