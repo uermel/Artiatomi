@@ -29,6 +29,7 @@
 #include "cuda/CudaVariables.h"
 #include "cuda/CudaKernel.h"
 #include "cuda/CudaContext.h"
+#include "CudaTextures.h"
 
 using namespace Cuda;
 
@@ -111,6 +112,7 @@ class CudaWedgeNorm
 {
 private:
 	CudaKernel* wedge;
+    CudaKernel* wedgeWiener;
 
 	CudaContext* ctx;
 	int volSize;
@@ -121,10 +123,21 @@ private:
 
 	void runWedgeNormKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_partdata, CudaDeviceVariable& d_odata, int newMethod);
 
+    void runWedgeNormWienerKernel(CudaDeviceVariable& d_wedgeSum,
+                                  CudaDeviceVariable& d_partSum,
+                                  CudaDeviceVariable& d_tausqr,
+                                  float T);
+
 public:
 	CudaWedgeNorm(int aVolSize, CUstream aStream, CudaContext* context);
 
 	void WedgeNorm(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_partdata, CudaDeviceVariable& d_odata, int newMethod);
+
+    void WedgeNormWiener(CudaDeviceVariable& d_wedgeSum,
+                         CudaDeviceVariable& d_partSum,
+                         CudaDeviceVariable& d_tausqr,
+                         float T);
+
 };
 
 
@@ -135,6 +148,7 @@ private:
 	CudaKernel* mulVol;
 	CudaKernel* mulVolCplx;
 	CudaKernel* mul;
+    CudaKernel* mulMaskMeanFreeCplx;
 
 	CudaContext* ctx;
 	int volSize;
@@ -143,9 +157,17 @@ private:
 
 	CUstream stream;
 
-	void runMulVolKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
-	void runMulVolCplxKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
-	void runMulKernel(float val, CudaDeviceVariable& d_odata);
+	void runMulVolKernel(CudaDeviceVariable& d_idata,
+                         CudaDeviceVariable& d_odata);
+	void runMulVolCplxKernel(CudaDeviceVariable& d_idata,
+                             CudaDeviceVariable& d_odata);
+	void runMulKernel(float val,
+                      CudaDeviceVariable& d_odata);
+    void runMulMaskMeanFreeCplxKernel(CudaDeviceVariable& d_im1_io,
+                                      CudaDeviceVariable& d_im1sqr_o,
+                                      CudaDeviceVariable& d_mask1,
+                                      CudaDeviceVariable& d_sumVol,
+                                      CudaDeviceVariable& d_sumMask);
 
 public:
 	CudaMul(int aVolSize, CUstream aStream, CudaContext* context);
@@ -153,6 +175,12 @@ public:
 	void MulVol(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
 	void MulVolCplx(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
 	void Mul(float val, CudaDeviceVariable& d_odata);
+
+    void MulMaskMeanFreeCplx(CudaDeviceVariable& d_im1_io,
+                             CudaDeviceVariable& d_im1sqr_o,
+                             CudaDeviceVariable& d_mask1,
+                             CudaDeviceVariable& d_sumVol,
+                             CudaDeviceVariable& d_sumMask);
 };
 
 
@@ -170,6 +198,8 @@ private:
 	CudaKernel* fftshift2;
 	CudaKernel* splitDataset;
 	CudaKernel* energynorm;
+    CudaKernel* energynormPadfield;
+    CudaKernel* particleWiener;
 
 	CudaContext* ctx;
 	int volSize;
@@ -189,6 +219,17 @@ private:
 	void runSplitDataset(CudaDeviceVariable& d_volIn, CudaDeviceVariable& d_volOutA, CudaDeviceVariable& d_volOutB);
 	void runEnergyNormKernel(CudaDeviceVariable& d_particle, CudaDeviceVariable& d_partSqr, CudaDeviceVariable& d_cccMap, CudaDeviceVariable& energyRef, CudaDeviceVariable& nVox);
 
+    void runEnergyNormPadfieldKernel(CudaDeviceVariable& d_NCCNum,
+                                     CudaDeviceVariable& d_NCCDen2_f2sqr,
+                                     CudaDeviceVariable& d_NCCDen2_f2,
+                                     CudaDeviceVariable& d_NCCDen1,
+                                     CudaDeviceVariable& d_maskNorm);
+
+    void runParticleWienerKernel(CudaDeviceVariable& d_particle,
+                                 CudaDeviceVariable& d_wedge_ctfsqr,
+                                 CudaDeviceVariable& d_wedge_coverage,
+                                 float wienerConst);
+
 public:
 	CudaFFT(int aVolSize, CUstream aStream, CudaContext* context);
 
@@ -202,6 +243,17 @@ public:
 	void FFTShift2(CudaDeviceVariable& d_volIn, CudaDeviceVariable& d_volOut);
 	void SplitDataset(CudaDeviceVariable& d_volIn, CudaDeviceVariable& d_volOutA, CudaDeviceVariable& d_volOutB);
 	void EnergyNorm(CudaDeviceVariable& d_particle, CudaDeviceVariable& d_partSqr, CudaDeviceVariable& d_cccMap, CudaDeviceVariable& energyRef, CudaDeviceVariable& nVox);
+
+    void EnergyNormPadfield(CudaDeviceVariable& d_NCCNum,
+                            CudaDeviceVariable& d_NCCDen2_f2sqr,
+                            CudaDeviceVariable& d_NCCDen2_f2,
+                            CudaDeviceVariable& d_NCCDen1,
+                            CudaDeviceVariable& d_maskNorm);
+
+    void ParticleWiener(CudaDeviceVariable& d_particle,
+                        CudaDeviceVariable& d_wedge_ctfsqr,
+                        CudaDeviceVariable& d_wedge_coverage,
+                        float wienerConst);
 
 };
 
@@ -227,6 +279,36 @@ public:
 	void Max(CudaDeviceVariable& maxVals, CudaDeviceVariable& index, CudaDeviceVariable& val, float rphi, float rpsi, float rthe);
 	void MaxWithCertainty(CudaDeviceVariable& maxVals, CudaDeviceVariable& index, CudaDeviceVariable& val, CudaDeviceVariable& indexA, CudaDeviceVariable& indexB, float rphi, float rpsi, float rthe, int volSize, int limit);
 	//findmaxWithCertainty(float* maxVals, float* index, float* val, float* indexA, float* indexB, float rphi, float rpsi, float rthe, int volSize, int limit)
+};
+
+class CudaRadial
+{
+private:
+    CudaKernel* sphericalSum;
+    CudaKernel* line2sphere;
+    CudaKernel* div;
+
+    CudaContext* ctx;
+    int volSize;
+    dim3 blockSize;
+    dim3 gridSize;
+
+    CUstream stream;
+
+    CudaArray1D lineTex;
+
+    void runSphericalSumKernel(CudaDeviceVariable& d_wedgeSum, CudaDeviceVariable& d_ampSum, CudaDeviceVariable& d_nShell);
+    void runLine2SphereKernel(CudaDeviceVariable& d_outVol);
+    void runDivKernel(CudaDeviceVariable& d_ampSum, CudaDeviceVariable& d_nShell, CudaDeviceVariable& d_SNR);
+
+public:
+    CudaRadial(int aVolSize, CUstream aStream, CudaContext* context);
+
+    void SetTexture(CudaDeviceVariable& d_idata);
+
+    void SphericalSumKernel(CudaDeviceVariable& d_wedgeSum, CudaDeviceVariable& d_ampSum, CudaDeviceVariable& d_nShell);
+    void Line2Sphere(CudaDeviceVariable& d_outVol);
+    void Div(CudaDeviceVariable& d_ampSum, CudaDeviceVariable& d_nShell, CudaDeviceVariable& d_SNR);
 };
 
 

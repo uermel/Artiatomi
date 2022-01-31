@@ -97,18 +97,41 @@ private:
 	CudaFFT fft;
 	CudaMax max;
 
+	// Temp storage
 	CudaDeviceVariable d_ffttemp;
-	CudaDeviceVariable d_particle, d_particleCplx, d_particleSqrCplx, d_particleCplx_orig, d_particleSqrCplx_orig, d_filter;
-	CudaDeviceVariable d_wedge;
-	CudaDeviceVariable d_reference, d_reference_orig, d_referenceCplx;
-	CudaDeviceVariable d_mask, d_mask_orig, d_maskCplx;
-	CudaDeviceVariable d_ccMask, d_ccMask_Orig;
 	CudaDeviceVariable d_buffer;
 	CudaDeviceVariable d_index;
-	CudaDeviceVariable nVox;
-	CudaDeviceVariable sum;
-	CudaDeviceVariable sumSqr;
-	CudaDeviceVariable maxVals;
+	CudaDeviceVariable d_sum;
+	CudaDeviceVariable d_maxVals;
+	CudaDeviceVariable d_real_tmp;
+
+	// Freq space filters
+	CudaDeviceVariable d_real_cov_wedge;
+	CudaDeviceVariable d_real_ovl_wedge;
+	CudaDeviceVariable d_real_filter;
+	CudaDeviceVariable d_real_ccMask;
+	CudaDeviceVariable d_real_ccMask_orig;
+
+	// Particle image
+	CudaDeviceVariable d_real_f2;
+	CudaDeviceVariable d_cplx_F2;
+	CudaDeviceVariable d_cplx_F2sqr;
+	CudaDeviceVariable d_cplx_F2_orig;
+	CudaDeviceVariable d_cplx_F2sqr_orig;
+	CudaDeviceVariable d_cplx_NCCNum;
+
+	// Mask image
+	CudaDeviceVariable d_real_mask1;
+	CudaDeviceVariable d_real_mask1_orig;
+	CudaDeviceVariable d_real_maskNorm;
+	CudaDeviceVariable d_cplx_M1;
+
+	// Reference image
+	CudaDeviceVariable d_real_f1;
+	CudaDeviceVariable d_real_f1_orig;
+	CudaDeviceVariable d_cplx_F1;
+	CudaDeviceVariable d_cplx_f1sqr;
+	CudaDeviceVariable d_real_NCCDen1;
 
 	cufftHandle ffthandle;
 
@@ -135,18 +158,32 @@ public:
     void setAngularSampling(const float* customAngles,
                             int customAngleNum);
 
-	maxVals_t execute(float* _data,
-                      float* wedge,
-                      float* filter,
-                      float oldphi,
-                      float oldpsi,
-                      float oldtheta,
-                      float rDown,
-                      float rUp,
-                      float smooth,
-                      float3 oldShift,
-                      bool computeCCValOnly,
-                      int oldIndex);
+//	maxVals_t execute(float* _data,
+//                      float* wedge,
+//                      float* filter,
+//                      float oldphi,
+//                      float oldpsi,
+//                      float oldtheta,
+//                      float rDown,
+//                      float rUp,
+//                      float smooth,
+//                      float3 oldShift,
+//                      bool computeCCValOnly,
+//                      int oldIndex);
+
+	maxVals_t executePadfield(float* _data,
+					  		  float* coverageWedge,
+							  float* overlapWedge,
+							  float* filter,
+							  float oldphi,
+							  float oldpsi,
+							  float oldtheta,
+							  float rDown,
+							  float rUp,
+							  float smooth,
+							  float3 oldShift,
+							  bool computeCCValOnly,
+							  int oldIndex);
 
 	maxVals_t executePhaseCorrelation(float* _data,
                                       float* wedge,

@@ -34,6 +34,8 @@ struct SharedMemory
 	}
 };
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /*
 	This version adds multiple elements per thread sequentially.  This reduces the overall
@@ -192,6 +194,8 @@ void reduce(int size, int threads, int blocks, int whichKernel, float *d_idata, 
 	}
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <unsigned int blockSize>
 __global__ void
@@ -338,8 +342,156 @@ void reduceCplx(int size, int threads, int blocks, int whichKernel, float2 *d_id
 	}
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <unsigned int blockSize>
+__global__ void
+maskedReduceCplx(float2 *g_idata, float* g_maskdata, float *g_odata, unsigned int n)
+{
+    float *sdata = SharedMemory<float>();
+
+    // perform first level of reduction,
+    // reading from global memory, writing to shared memory
+    unsigned int tid = threadIdx.x;
+    unsigned int i = blockIdx.x*blockSize*2 + threadIdx.x;
+    unsigned int gridSize = blockSize*2*gridDim.x;
+
+    float mySum = 0;
+
+    // we reduce multiple elements per thread.  The number is determined by the
+    // number of active thread blocks (via gridDim).  More blocks will result
+    // in a larger gridSize and therefore fewer elements per thread
+    while (i < n)
+    {
+        mySum += g_idata[i].x * g_maskdata[i];
+
+        // ensure we don't read out of bounds -- this is optimized away for powerOf2 sized arrays
+        mySum += g_idata[i+blockSize].x * g_maskdata[i+blockSize];
+
+        i += gridSize;
+    }
+
+    // each thread puts its local sum into shared memory
+    sdata[tid] = mySum;
+    __syncthreads();
 
 
+    // do reduction in shared mem
+    if (blockSize >= 512)
+    {
+        if (tid < 256)
+        {
+            sdata[tid] = mySum = mySum + sdata[tid + 256];
+        }
+
+        __syncthreads();
+    }
+
+    if (blockSize >= 256)
+    {
+        if (tid < 128)
+        {
+            sdata[tid] = mySum = mySum + sdata[tid + 128];
+        }
+
+        __syncthreads();
+    }
+
+    if (blockSize >= 128)
+    {
+        if (tid <  64)
+        {
+            sdata[tid] = mySum = mySum + sdata[tid +  64];
+        }
+
+        __syncthreads();
+    }
+
+    if (tid < 32)
+    {
+        // now that we are using warp-synchronous programming (below)
+        // we need to declare our shared memory volatile so that the compiler
+        // doesn't reorder stores to it and induce incorrect behavior.
+        volatile float *smem = sdata;
+
+        if (blockSize >=  64)
+        {
+            smem[tid] = mySum = mySum + smem[tid + 32];
+        }
+
+        if (blockSize >=  32)
+        {
+            smem[tid] = mySum = mySum + smem[tid + 16];
+        }
+
+        if (blockSize >=  16)
+        {
+            smem[tid] = mySum = mySum + smem[tid +  8];
+        }
+
+        if (blockSize >=   8)
+        {
+            smem[tid] = mySum = mySum + smem[tid +  4];
+        }
+
+        if (blockSize >=   4)
+        {
+            smem[tid] = mySum = mySum + smem[tid +  2];
+        }
+
+        if (blockSize >=   2)
+        {
+            smem[tid] = mySum = mySum + smem[tid +  1];
+        }
+    }
+
+    // write result for this block to global mem
+    if (tid == 0)
+        g_odata[blockIdx.x] = sdata[0];
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Wrapper function for kernel launch
+////////////////////////////////////////////////////////////////////////////////
+
+void maskedReduceCplx(int size, int threads, int blocks, int whichKernel, float2 *d_idata, float* d_maskdata, float *d_odata)
+{
+    dim3 dimBlock(threads, 1, 1);
+    dim3 dimGrid(blocks, 1, 1);
+
+    // when there is only one warp per block, we need to allocate two warps
+    // worth of shared memory so that we don't index shared memory out of bounds
+    int smemSize = (threads <= 32) ? 2 * threads * sizeof(float) : threads * sizeof(float);
+
+    switch (threads)
+    {
+        case 512:
+            maskedReduceCplx<512><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
+        case 256:
+            maskedReduceCplx<256><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
+        case 128:
+            maskedReduceCplx<128><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
+        case 64:
+            maskedReduceCplx< 64><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
+        case 32:
+            maskedReduceCplx< 32><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
+        case 16:
+            maskedReduceCplx< 16><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
+        case  8:
+            maskedReduceCplx<  8><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
+        case  4:
+            maskedReduceCplx<  4><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
+        case  2:
+            maskedReduceCplx<  2><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
+        case  1:
+            maskedReduceCplx<  1><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
+
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <unsigned int blockSize>
 __global__ void
@@ -486,6 +638,8 @@ void reduceSqrCplx(int size, int threads, int blocks, int whichKernel, float2 *d
 	}
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /*
 	This version adds multiple elements per thread sequentially.  This reduces the overall
@@ -705,7 +859,8 @@ void maxIndex(int size, int threads, int blocks, int whichKernel, float *d_idata
 	}
 }
 
-
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <unsigned int blockSize>
 __global__ void

@@ -90,7 +90,10 @@ namespace Configuration
 		public:
 			vector<int> CudaDeviceIDs;
 			string	MotiveList;
-			string	WedgeFile;
+			string	CoverageWedgeFile;
+            string	OverlapWedgeFile;
+            string	CTFWedgeFile;
+            string  SNRFile;
 			bool SingleWedge;
 			//vector<int> WedgeIndices;
 			string	Particles;
@@ -135,6 +138,7 @@ namespace Configuration
 			int CertaintyMaxDistance;
             bool UseCustomAngles;
             string CustomAngleList;
+            float T;
 
 
             static Config& GetConfig();

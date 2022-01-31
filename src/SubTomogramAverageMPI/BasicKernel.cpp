@@ -24,6 +24,7 @@
 #include "BasicKernel.h"
 #include "CudaKernelBinaries.h"
 
+
 CudaSub::CudaSub(int aVolSize, CUstream aStream, CudaContext* context)
 	: volSize(aVolSize), stream(aStream), ctx(context), blockSize(32, 16, 1), 
 	  gridSize(aVolSize / 32, aVolSize / 16, aVolSize)
@@ -268,6 +269,7 @@ CudaMul::CudaMul(int aVolSize, CUstream aStream, CudaContext* context)
 	mulVol = new CudaKernel("mulVol", cuMod);
 	mulVolCplx = new CudaKernel("mulVolCplx", cuMod);
 	mul = new CudaKernel("mul", cuMod);
+    mulMaskMeanFreeCplx = new CudaKernel("mulMaskMeanFreeCplx", cuMod);
 }
 
 void CudaMul::runMulVolKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata)
@@ -332,6 +334,56 @@ void CudaMul::Mul(float val, CudaDeviceVariable& d_odata)
 	runMulKernel(val, d_odata);
 }
 
+void CudaMul::runMulMaskMeanFreeCplxKernel(CudaDeviceVariable& d_im1_io,
+                                           CudaDeviceVariable& d_im1sqr_o,
+                                           CudaDeviceVariable& d_mask1,
+                                           CudaDeviceVariable& d_sumVol,
+                                           CudaDeviceVariable& d_sumMask)
+{
+    CUdeviceptr im1_dptr = d_im1_io.GetDevicePtr();
+    CUdeviceptr im1sqr_dptr = d_im1sqr_o.GetDevicePtr();
+    CUdeviceptr mask_dptr = d_mask1.GetDevicePtr();
+    CUdeviceptr sumVol_dptr = d_sumVol.GetDevicePtr();
+    CUdeviceptr sumMask_dptr = d_sumMask.GetDevicePtr();
+
+    void** arglist = (void**)new void*[6];
+
+    arglist[0] = &volSize;
+    arglist[1] = &im1_dptr;
+    arglist[2] = &im1sqr_dptr;
+    arglist[3] = &mask_dptr;
+    arglist[4] = &sumVol_dptr;
+    arglist[5] = &sumMask_dptr;
+
+    cudaSafeCall(cuLaunchKernel(mulMaskMeanFreeCplx->GetCUfunction(),
+                                gridSize.x,
+                                gridSize.y,
+                                gridSize.z,
+                                blockSize.x,
+                                blockSize.y,
+                                blockSize.z,
+                                0,
+                                stream,
+                                arglist,
+                                NULL));
+
+    delete[] arglist;
+}
+
+
+void CudaMul::MulMaskMeanFreeCplx(CudaDeviceVariable& d_im1_io,
+                                  CudaDeviceVariable& d_im1sqr_o,
+                                  CudaDeviceVariable& d_mask1,
+                                  CudaDeviceVariable& d_sumVol,
+                                  CudaDeviceVariable& d_sumMask)
+{
+    runMulMaskMeanFreeCplxKernel(d_im1_io,
+                                 d_im1sqr_o,
+                                 d_mask1,
+                                 d_sumVol,
+                                 d_sumMask);
+}
+
 
 
 
@@ -353,6 +405,8 @@ CudaFFT::CudaFFT(int aVolSize, CUstream aStream, CudaContext* context)
 	fftshift2 = new CudaKernel("fftshift2", cuMod);
     splitDataset = new CudaKernel("splitDataset", cuMod);
 	energynorm = new CudaKernel("energynorm", cuMod);
+    energynormPadfield = new CudaKernel("energynormPadfield", cuMod);
+    particleWiener = new CudaKernel("particleWiener", cuMod);
 }
 
 void CudaFFT::runConvKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata)
@@ -550,6 +604,71 @@ void CudaFFT::EnergyNorm(CudaDeviceVariable& d_particle, CudaDeviceVariable& d_p
 	runEnergyNormKernel(d_particle, d_partSqr, d_cccMap, energyRef, nVox);
 }
 
+void CudaFFT::runEnergyNormPadfieldKernel(CudaDeviceVariable& d_NCCNum,
+                                          CudaDeviceVariable& d_NCCDen2_f2sqr,
+                                          CudaDeviceVariable& d_NCCDen2_f2,
+                                          CudaDeviceVariable& d_NCCDen1,
+                                          CudaDeviceVariable& d_maskNorm)
+{
+    CUdeviceptr NCCNum_dptr = d_NCCNum.GetDevicePtr();
+    CUdeviceptr NCCDen2_f2sqr_dptr = d_NCCDen2_f2sqr.GetDevicePtr();
+    CUdeviceptr NCCDen2_f2_dptr = d_NCCDen2_f2.GetDevicePtr();
+    CUdeviceptr NCCDen1_dptr = d_NCCDen1.GetDevicePtr();
+    CUdeviceptr maskNorm_dptr = d_maskNorm.GetDevicePtr();
+
+    void** arglist = (void**)new void*[6];
+
+    arglist[0] = &volSize;
+    arglist[1] = &NCCNum_dptr;
+    arglist[2] = &NCCDen2_f2sqr_dptr;
+    arglist[3] = &NCCDen2_f2_dptr;
+    arglist[4] = &NCCDen1_dptr;
+    arglist[5] = &maskNorm_dptr;
+
+    cudaSafeCall(cuLaunchKernel(energynormPadfield->GetCUfunction(), gridSize.x, gridSize.y,
+                                gridSize.z, blockSize.x, blockSize.y, blockSize.z, 0, stream, arglist,NULL));
+
+    delete[] arglist;
+}
+void CudaFFT::EnergyNormPadfield(CudaDeviceVariable& d_NCCNum,
+                                 CudaDeviceVariable& d_NCCDen2_f2sqr,
+                                 CudaDeviceVariable& d_NCCDen2_f2,
+                                 CudaDeviceVariable& d_NCCDen1,
+                                 CudaDeviceVariable& d_maskNorm)
+{
+    runEnergyNormPadfieldKernel(d_NCCNum, d_NCCDen2_f2sqr, d_NCCDen2_f2, d_NCCDen1, d_maskNorm);
+}
+
+void CudaFFT::runParticleWienerKernel(CudaDeviceVariable& d_particle,
+                                      CudaDeviceVariable& d_wedge_ctfsqr,
+                                      CudaDeviceVariable& d_wedge_coverage,
+                                      float wienerConst)
+{
+    CUdeviceptr particle_dptr = d_particle.GetDevicePtr();
+    CUdeviceptr wedge_ctfsqr_dptr = d_wedge_ctfsqr.GetDevicePtr();
+    CUdeviceptr wedge_coverage_dptr = d_wedge_coverage.GetDevicePtr();
+
+    void** arglist = (void**)new void*[5];
+
+    arglist[0] = &volSize;
+    arglist[1] = &particle_dptr;
+    arglist[2] = &wedge_ctfsqr_dptr;
+    arglist[3] = &wedge_coverage_dptr;
+    arglist[4] = &wienerConst;
+
+    cudaSafeCall(cuLaunchKernel(particleWiener->GetCUfunction(), gridSize.x, gridSize.y,
+                                gridSize.z, blockSize.x, blockSize.y, blockSize.z, 0, stream, arglist,NULL));
+
+    delete[] arglist;
+}
+void CudaFFT::ParticleWiener(CudaDeviceVariable& d_particle,
+                             CudaDeviceVariable& d_wedge_ctfsqr,
+                             CudaDeviceVariable& d_wedge_coverage,
+                             float wienerConst)
+{
+    runParticleWienerKernel(d_particle, d_wedge_ctfsqr, d_wedge_coverage, wienerConst);
+}
+
 void CudaFFT::runSplitDataset(CudaDeviceVariable& d_volIn, CudaDeviceVariable& d_volOutA, CudaDeviceVariable& d_volOutB)
 {
 	CUdeviceptr volIn_dptr = d_volIn.GetDevicePtr();
@@ -654,6 +773,7 @@ CudaWedgeNorm::CudaWedgeNorm(int aVolSize, CUstream aStream, CudaContext* contex
     CUmodule cuMod = ctx->LoadModulePTX(SubTomogramAverageBasicKernel, 0, false, false);
 
 	wedge = new CudaKernel("wedgeNorm", cuMod);
+    wedgeWiener = new CudaKernel("wedgeNormWiener", cuMod);
 }
 
 void CudaWedgeNorm::runWedgeNormKernel(CudaDeviceVariable& d_data, CudaDeviceVariable& d_partdata, CudaDeviceVariable& d_maxVal, int newMethod)
@@ -678,4 +798,166 @@ void CudaWedgeNorm::runWedgeNormKernel(CudaDeviceVariable& d_data, CudaDeviceVar
 void CudaWedgeNorm::WedgeNorm(CudaDeviceVariable& d_data, CudaDeviceVariable& d_partdata, CudaDeviceVariable& d_maxVal, int newMethod)
 {
 	runWedgeNormKernel(d_data, d_partdata, d_maxVal, newMethod);
+}
+
+void CudaWedgeNorm::runWedgeNormWienerKernel(CudaDeviceVariable& d_wedgeSum,
+                                             CudaDeviceVariable& d_partSum,
+                                             CudaDeviceVariable& tausqr,
+                                             float T)
+{
+    CUdeviceptr wedgeSum_dptr = d_wedgeSum.GetDevicePtr();
+    CUdeviceptr partSum_dptr = d_partSum.GetDevicePtr();
+    CUdeviceptr tausqr_dptr = tausqr.GetDevicePtr();
+
+    void** arglist = (void**)new void*[5];
+
+    arglist[0] = &volSize;
+    arglist[1] = &wedgeSum_dptr;
+    arglist[2] = &partSum_dptr;
+    arglist[3] = &tausqr_dptr;
+    arglist[4] = &T;
+
+    cudaSafeCall(cuLaunchKernel(wedgeWiener->GetCUfunction(), gridSize.x, gridSize.y,
+                                gridSize.z, blockSize.x, blockSize.y, blockSize.z, 0, stream, arglist, NULL));
+
+    delete[] arglist;
+}
+
+void CudaWedgeNorm::WedgeNormWiener(CudaDeviceVariable& d_wedgeSum,
+                                    CudaDeviceVariable& d_partSum,
+                                    CudaDeviceVariable& d_tausqr,
+                                    float T)
+{
+    runWedgeNormWienerKernel(d_wedgeSum, d_partSum, d_tausqr, T);
+}
+
+
+CudaRadial::CudaRadial(int aVolSize, CUstream aStream, CudaContext* context)
+    : volSize(aVolSize),
+      stream(aStream),
+      ctx(context),
+      blockSize(32, 16, 1),
+      gridSize(aVolSize / 32, aVolSize / 16, aVolSize),
+      lineTex(CU_AD_FORMAT_FLOAT, aVolSize/2, 1)
+{
+    CUmodule cuMod = ctx->LoadModulePTX(SubTomogramAverageBasicKernel, 0, false, false);
+    // CUmodule cuMod = ctx->LoadModule("basicKernels.ptx");
+
+    sphericalSum = new CudaKernel("sphericalSum", cuMod);
+    line2sphere = new CudaKernel("line2sphere", cuMod);
+    div = new CudaKernel("lineDiv", cuMod);
+
+    CudaTextureArray1D texLine(line2sphere,
+                               "texLine",
+                               CU_TR_ADDRESS_MODE_CLAMP,
+                               CU_TR_FILTER_MODE_LINEAR,
+                               0,
+                               &lineTex);
+}
+
+void CudaRadial::SetTexture(CudaDeviceVariable &d_idata)
+{
+    lineTex.CopyFromDeviceToArray(d_idata);
+}
+
+void CudaRadial::SphericalSumKernel(CudaDeviceVariable &d_wedgeSum,
+                                    CudaDeviceVariable &d_ampSum,
+                                    CudaDeviceVariable &d_nShell)
+{
+    runSphericalSumKernel(d_wedgeSum, d_ampSum, d_nShell);
+}
+
+void CudaRadial::Line2Sphere(CudaDeviceVariable &d_outVol)
+{
+    runLine2SphereKernel(d_outVol);
+}
+
+void CudaRadial::Div(CudaDeviceVariable &d_ampSum, CudaDeviceVariable &d_nShell, CudaDeviceVariable &d_SNR)
+{
+    runDivKernel(d_ampSum, d_nShell, d_SNR);
+}
+
+void CudaRadial::runSphericalSumKernel(CudaDeviceVariable &d_wedgeSum,
+                                       CudaDeviceVariable &d_ampSum,
+                                       CudaDeviceVariable &d_nShell)
+{
+    CUdeviceptr wedgeSum_dptr = d_wedgeSum.GetDevicePtr();
+    CUdeviceptr ampSum_dptr = d_ampSum.GetDevicePtr();
+    CUdeviceptr nShell_dptr = d_nShell.GetDevicePtr();
+    int center = volSize/2;
+
+    void** arglist = (void**)new void*[5];
+
+    arglist[0] = &volSize;
+    arglist[1] = &center;
+    arglist[2] = &wedgeSum_dptr;
+    arglist[3] = &ampSum_dptr;
+    arglist[4] = &nShell_dptr;
+
+    cudaSafeCall(cuLaunchKernel(sphericalSum->GetCUfunction(),
+                                gridSize.x,
+                                gridSize.y,
+                                gridSize.z,
+                                blockSize.x,
+                                blockSize.y,
+                                blockSize.z,
+                                0,
+                                stream,
+                                arglist,
+                                NULL));
+
+    delete[] arglist;
+}
+
+void CudaRadial::runLine2SphereKernel(CudaDeviceVariable &d_outVol)
+{
+    CUdeviceptr outVol_dptr = d_outVol.GetDevicePtr();
+    int center = volSize/2;
+
+    void** arglist = (void**)new void*[3];
+
+    arglist[0] = &volSize;
+    arglist[1] = &center;
+    arglist[2] = &outVol_dptr;
+
+    cudaSafeCall(cuLaunchKernel(line2sphere->GetCUfunction(),
+                                gridSize.x,
+                                gridSize.y,
+                                gridSize.z,
+                                blockSize.x,
+                                blockSize.y,
+                                blockSize.z,
+                                0,
+                                stream,
+                                arglist,
+                                NULL));
+
+    delete[] arglist;
+}
+
+void CudaRadial::runDivKernel(CudaDeviceVariable &d_ampSum, CudaDeviceVariable &d_nShell, CudaDeviceVariable &d_SNR)
+{
+    CUdeviceptr ampSum_dptr = d_ampSum.GetDevicePtr();
+    CUdeviceptr nShell_dptr = d_nShell.GetDevicePtr();
+    CUdeviceptr SNR_dptr = d_SNR.GetDevicePtr();
+
+    void** arglist = (void**)new void*[3];
+
+    arglist[0] = &ampSum_dptr;
+    arglist[1] = &nShell_dptr;
+    arglist[2] = &SNR_dptr;
+
+    cudaSafeCall(cuLaunchKernel(div->GetCUfunction(),
+                                volSize/(2*8),
+                                1,
+                                1,
+                                8,
+                                1,
+                                1,
+                                0,
+                                stream,
+                                arglist,
+                                NULL));
+
+    delete[] arglist;
 }

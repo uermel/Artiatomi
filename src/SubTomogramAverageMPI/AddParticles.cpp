@@ -439,24 +439,52 @@ int main(int argc, char* argv[])
         auto wedge_ids = new int[motl.GetParticleCount()]; // For each particle, the corresponding wedge index within unique_ref_ids
         motl.getWedgeIndeces(unique_wedge_ids, wedge_ids, unique_wedge_count);
 
-		map<int, EMFile*> wedges;
-		if (aConfig.SingleWedge)
-		{
-			wedges.insert(pair<int, EMFile*>(0, new EMFile(aConfig.WedgeFile)));
-			wedges[0]->OpenAndRead();
-			wedges[0]->ReadHeaderInfo();
-		}
-		else
-		{
-			for (size_t i = 0; i < unique_wedge_count; i++)
-			{
-				stringstream sswedge;
-				sswedge << aConfig.WedgeFile << unique_wedge_ids[i] << ".em";
-				wedges.insert(pair<int, EMFile*>(unique_wedge_ids[i], new EMFile(sswedge.str())));
-				wedges[unique_wedge_ids[i]]->OpenAndRead();
-				wedges[unique_wedge_ids[i]]->ReadHeaderInfo();
-			}
-		}
+        map<int, EMFile*> coverage_wedges;
+        map<int, EMFile*> overlap_wedges;
+        map<int, EMFile*> ctfsqr_wedges;
+
+        if (aConfig.SingleWedge)
+        {
+            coverage_wedges.insert(pair<int, EMFile*>(0, new EMFile(aConfig.CoverageWedgeFile)));
+            coverage_wedges[0]->OpenAndRead();
+            coverage_wedges[0]->ReadHeaderInfo();
+
+            overlap_wedges.insert(pair<int, EMFile*>(0, new EMFile(aConfig.OverlapWedgeFile)));
+            overlap_wedges[0]->OpenAndRead();
+            overlap_wedges[0]->ReadHeaderInfo();
+
+            ctfsqr_wedges.insert(pair<int, EMFile*>(0, new EMFile(aConfig.CTFWedgeFile)));
+            ctfsqr_wedges[0]->OpenAndRead();
+            ctfsqr_wedges[0]->ReadHeaderInfo();
+        }
+        else
+        {
+            for (size_t i = 0; i < unique_wedge_count; i++)
+            {
+                stringstream covwedge;
+                covwedge << aConfig.CoverageWedgeFile << unique_wedge_ids[i] << ".em";
+                coverage_wedges.insert(pair<int, EMFile*>(unique_wedge_ids[i], new EMFile(covwedge.str())));
+                coverage_wedges[unique_wedge_ids[i]]->OpenAndRead();
+                coverage_wedges[unique_wedge_ids[i]]->ReadHeaderInfo();
+
+                stringstream ovlwedge;
+                ovlwedge << aConfig.OverlapWedgeFile << unique_wedge_ids[i] << ".em";
+                overlap_wedges.insert(pair<int, EMFile*>(unique_wedge_ids[i], new EMFile(ovlwedge.str())));
+                overlap_wedges[unique_wedge_ids[i]]->OpenAndRead();
+                overlap_wedges[unique_wedge_ids[i]]->ReadHeaderInfo();
+
+                stringstream ctfwedge;
+                ctfwedge << aConfig.CTFWedgeFile << unique_wedge_ids[i] << ".em";
+                ctfsqr_wedges.insert(pair<int, EMFile*>(unique_wedge_ids[i], new EMFile(ctfwedge.str())));
+                ctfsqr_wedges[unique_wedge_ids[i]]->OpenAndRead();
+                ctfsqr_wedges[unique_wedge_ids[i]]->ReadHeaderInfo();
+            }
+        }
+        EMFile snr(aConfig.SNRFile);
+        snr.OpenAndRead();
+        snr.ReadHeaderInfo();
+        if (mpi_part == 0)
+            cout << "wiener OK" << endl;
 		//EMFile wedge(aConfig.WedgeList);
 		//EMFile mask(aConfig.Mask);
 		//EMFile ccmask(aConfig.MaskCC);
@@ -506,12 +534,12 @@ int main(int argc, char* argv[])
 				cout << "Checking dimensions of input data:" << endl;
 				//cout << "Reference: " << ref.DimX << endl;
 				cout << "Particles: " << particleSize << endl;
-				cout << "Wedge:     " << wedges.begin()->second->DimX << endl;
+				cout << "Wedge:     " << coverage_wedges.begin()->second->DimX << endl;
 				//cout << "Mask:      " << mask.DimX << endl;
 				//cout << "MaskCC:    " << ccmask.DimX << endl;
 			}
 
-			if (wedges.begin()->second->DimX != particleSize)
+			if (coverage_wedges.begin()->second->DimX != particleSize)
 			{
 				if (mpi_part == 0)
 					cout << endl << "ERROR: not all input data dimensions are equal!" << endl;
@@ -637,331 +665,413 @@ int main(int argc, char* argv[])
 
 
 
-		/////////////////////
-		/// Add particles ///
-		/////////////////////
-
-		{
-
-			cufftHandle ffthandle;
-
-			int n[] = { size, size, size };
-			cufftSafeCall(cufftPlanMany(&ffthandle, 3, n, NULL, 0, 0, NULL, 0, 0, CUFFT_C2C, 1));
-
-			CUstream stream = 0;
-			cufftSafeCall(cufftSetStream(ffthandle, stream));
-
-			CudaRot rot(size, stream, ctx, aConfig.LinearInterpolation);
-			CudaRot rotWedge(size, stream, ctx, aConfig.LinearInterpolation);
-			CudaSub sub(size, stream, ctx);
-			CudaMakeCplxWithSub makecplx(size, stream, ctx);
-			CudaBinarize binarize(size, stream, ctx);
-			CudaMul mul(size, stream, ctx);
-			CudaFFT fft(size, stream, ctx);
-			CudaReducer max(size*size*size, stream, ctx);
-			CudaWedgeNorm wedgeNorm(size, stream, ctx);
-
-			CudaDeviceVariable partReal(size*size*size*sizeof(float));
-			CudaDeviceVariable partRot(size*size*size*sizeof(float));
-			CudaDeviceVariable partCplx(size*size*size*sizeof(float2));
-			CudaDeviceVariable wedge_d(size*size*size*sizeof(float));
-			CudaDeviceVariable wedgeSum(size*size*size*sizeof(float));
-			CudaDeviceVariable wedgeSumO(size*size*size*sizeof(float));
-			CudaDeviceVariable wedgeSumE(size*size*size*sizeof(float));
-			CudaDeviceVariable wedgeSumA(size*size*size*sizeof(float));
-			CudaDeviceVariable wedgeSumB(size*size*size*sizeof(float));
-			CudaDeviceVariable tempCplx(size*size*size*sizeof(float2));
-			CudaDeviceVariable temp(size*size*size*sizeof(float));
-			CudaDeviceVariable partSum(size*size*size*sizeof(float));
-			CudaDeviceVariable partSumEven(size*size*size*sizeof(float));
-			CudaDeviceVariable partSumOdd(size*size*size*sizeof(float));
-			CudaDeviceVariable partSumA(size*size*size*sizeof(float));
-			CudaDeviceVariable partSumB(size*size*size*sizeof(float));
-
-
-			int skipped = 0;
-			vector<int> partsPerRef;
-
-			for (size_t ref = 0; ref < aConfig.Reference.size(); ref++)
-			{
-				float currentReference = ref + 1;
-
-				partSum.Memset(0);
-				partSumOdd.Memset(0);
-				partSumEven.Memset(0);
-				partSumA.Memset(0);
-				partSumB.Memset(0);
-
-				wedgeSum.Memset(0);
-				wedgeSumO.Memset(0);
-				wedgeSumE.Memset(0);
-				wedgeSumA.Memset(0);
-				wedgeSumB.Memset(0);
-
-
-
-
-				int sumCount = 0;
-				int motCount = partCount;
-
-				float limit = 0;
-
-				limit = meanCCValue;
-				int oldWedgeIdx = -1;
-
-				for (int i = startParticle; i < endParticle; i++)
-				{
-					motive mot = motl.GetAt(i);
-					stringstream ss;
-
-					ss << aConfig.Path << aConfig.Particles;
-					if (mot.classNo != currentReference && aConfig.Reference.size() > 1)
-					{
-						continue;
-					}
-					if (mot.ccCoeff < limit)
-					{
-						skipped++;
-						continue;
-					}
-
-					if (oldWedgeIdx != mot.wedgeIdx)
-					{
-						oldWedgeIdx = 0;
-						if (unique_wedge_ids.size() > 0)
-						{
-							oldWedgeIdx = mot.wedgeIdx;
-						}
-
-						wedge_d.CopyHostToDevice((float*)wedges[oldWedgeIdx]->GetData());
-						rotWedge.SetTexture(wedge_d);
-					}
-					sumCount++;
-
-					ss << mot.GetIndexCoding(aConfig.NamingConv) << ".em";
-
-					cout << mpi_part << ": " << "Part nr: " << mot.partNr << " ref: " << currentReference << " summed up: " << sumCount << " skipped: " << skipped << " = " << sumCount + skipped << " of " << motCount << endl;
-
-					EMFile part(ss.str());
-					part.OpenAndRead();
-					part.ReadHeaderInfo();
-
-					int size = part.DimX;
-
-					partReal.CopyHostToDevice(part.GetData());
-
-					float3 shift;
-					shift.x = -mot.x_Shift;
-					shift.y = -mot.y_Shift;
-					shift.z = -mot.z_Shift;
-
-					//rot.SetTextureShift(partReal);
-					//rot.Shift(partRot, shift);
-
-					rot.SetTexture(partReal);
-					rot.ShiftRot(partReal, shift, -mot.psi, -mot.phi, -mot.theta);
-
-					rotWedge.Rot(wedge_d, -mot.psi, -mot.phi, -mot.theta);
-					sub.Add(wedge_d, wedgeSum);
-
-					makecplx.MakeCplxWithSub(partReal, partCplx, 0);
-
-
-					cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)partCplx.GetDevicePtr(), (cufftComplex*)tempCplx.GetDevicePtr(), CUFFT_FORWARD));
-					fft.FFTShift2(tempCplx, partCplx);
-					mul.MulVolCplx(wedge_d, partCplx);
-
-					fft.FFTShift2(partCplx, tempCplx);
-
-					cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)tempCplx.GetDevicePtr(), (cufftComplex*)partCplx.GetDevicePtr(), CUFFT_INVERSE));
-
-					mul.Mul(1.0f / (float)size / (float)size / (float)size, partCplx);
-
-					makecplx.MakeReal(partCplx, partReal);
-
-					sub.Add(partReal, partSum);
-
-					if (sumCount % 2 == 0)
-					{
-						sub.Add(partReal, partSumEven);
-						sub.Add(wedge_d, wedgeSumE);
-					}
-					else
-					{
-						sub.Add(partReal, partSumOdd);
-						sub.Add(wedge_d, wedgeSumO);
-					}
-
-					if (i < motCount / 2)
-					{
-						sub.Add(partReal, partSumA);
-						sub.Add(wedge_d, wedgeSumA);
-					}
-					else
-					{
-						sub.Add(partReal, partSumB);
-						sub.Add(wedge_d, wedgeSumB);
-					}
-
-				}
-
-				partsPerRef.push_back(sumCount);
-
-				if (mpi_part == 0)
-				{
-					float* buffer = new float[size*size*size];
-					for (int mpi = 1; mpi < mpi_size; mpi++)
-					{
-						MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						partReal.CopyHostToDevice(buffer);
-						sub.Add(partReal, partSum);
-						MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						partReal.CopyHostToDevice(buffer);
-						sub.Add(partReal, wedgeSum);
-
-						MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						partReal.CopyHostToDevice(buffer);
-						sub.Add(partReal, partSumEven);
-						MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						partReal.CopyHostToDevice(buffer);
-						sub.Add(partReal, wedgeSumE);
-
-						MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						partReal.CopyHostToDevice(buffer);
-						sub.Add(partReal, partSumOdd);
-						MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						partReal.CopyHostToDevice(buffer);
-						sub.Add(partReal, wedgeSumO);
-
-						MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						partReal.CopyHostToDevice(buffer);
-						sub.Add(partReal, partSumA);
-						MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						partReal.CopyHostToDevice(buffer);
-						sub.Add(partReal, wedgeSumA);
-
-						MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						partReal.CopyHostToDevice(buffer);
-						sub.Add(partReal, partSumB);
-						MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-						partReal.CopyHostToDevice(buffer);
-						sub.Add(partReal, wedgeSumB);
-					}
-					delete[] buffer;
-				}
-				else
-				{
-					float* buffer = new float[size*size*size];
-
-					partSum.CopyDeviceToHost(buffer);
-					MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
-					wedgeSum.CopyDeviceToHost(buffer);
-					MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
-
-					partSumEven.CopyDeviceToHost(buffer);
-					MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
-					wedgeSumE.CopyDeviceToHost(buffer);
-					MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
-
-					partSumOdd.CopyDeviceToHost(buffer);
-					MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
-					wedgeSumO.CopyDeviceToHost(buffer);
-					MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
-
-					partSumA.CopyDeviceToHost(buffer);
-					MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
-					wedgeSumA.CopyDeviceToHost(buffer);
-					MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
-
-					partSumB.CopyDeviceToHost(buffer);
-					MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
-					wedgeSumB.CopyDeviceToHost(buffer);
-					MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
-
-					delete[] buffer;
-				}
-
-
-				if (mpi_part == 0)
-				{
-					max.MaxIndex(wedgeSum, temp, tempCplx);
-					/*float* test2 = new float[128 * 128 * 128];
-					partSum.CopyDeviceToHost(test2);
-					emwrite("Z:\\kunz\\Documents\\TestSubTomogramAveraging\\testPart.em", test2, 128, 128, 128);*/
-
-					makecplx.MakeCplxWithSub(partSum, partCplx, 0);
-					cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)partCplx.GetDevicePtr(), (cufftComplex*)tempCplx.GetDevicePtr(), CUFFT_FORWARD));
-					fft.FFTShift2(tempCplx, partCplx);
-
-					/*float* test = new float[128 * 128 * 128];
-					wedgeSum.CopyDeviceToHost(test);
-					emwrite("Z:\\kunz\\Documents\\TestSubTomogramAveraging\\testWedge.em", test, 128, 128, 128);*/
-					
-					wedgeNorm.WedgeNorm(wedgeSum, partCplx, temp, 0);
-
-					fft.FFTShift2(partCplx, tempCplx);
-					cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)tempCplx.GetDevicePtr(), (cufftComplex*)partCplx.GetDevicePtr(), CUFFT_INVERSE));
-					mul.Mul(1.0f / (float)size / (float)size / (float)size, partCplx);
-					makecplx.MakeReal(partCplx, partSum);
-
-					max.MaxIndex(wedgeSumO, temp, tempCplx);
-
-					makecplx.MakeCplxWithSub(partSumOdd, partCplx, 0);
-					cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)partCplx.GetDevicePtr(), (cufftComplex*)tempCplx.GetDevicePtr(), CUFFT_FORWARD));
-					fft.FFTShift2(tempCplx, partCplx);
-
-					wedgeNorm.WedgeNorm(wedgeSumO, partCplx, temp, 0);
-
-					fft.FFTShift2(partCplx, tempCplx);
-					cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)tempCplx.GetDevicePtr(), (cufftComplex*)partCplx.GetDevicePtr(), CUFFT_INVERSE));
-					mul.Mul(1.0f / (float)size / (float)size / (float)size, partCplx);
-					makecplx.MakeReal(partCplx, partSumOdd);
-
-
-
-					max.MaxIndex(wedgeSumE, temp, tempCplx);
-
-					makecplx.MakeCplxWithSub(partSumEven, partCplx, 0);
-					cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)partCplx.GetDevicePtr(), (cufftComplex*)tempCplx.GetDevicePtr(), CUFFT_FORWARD));
-					fft.FFTShift2(tempCplx, partCplx);
-
-					wedgeNorm.WedgeNorm(wedgeSumE, partCplx, temp, 0);
-
-					fft.FFTShift2(partCplx, tempCplx);
-					cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)tempCplx.GetDevicePtr(), (cufftComplex*)partCplx.GetDevicePtr(), CUFFT_INVERSE));
-					mul.Mul(1.0f / (float)size / (float)size / (float)size, partCplx);
-					makecplx.MakeReal(partCplx, partSumEven);
-
-
-
-					max.MaxIndex(wedgeSumA, temp, tempCplx);
-
-					makecplx.MakeCplxWithSub(partSumA, partCplx, 0);
-					cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)partCplx.GetDevicePtr(), (cufftComplex*)tempCplx.GetDevicePtr(), CUFFT_FORWARD));
-					fft.FFTShift2(tempCplx, partCplx);
-
-					wedgeNorm.WedgeNorm(wedgeSumA, partCplx, temp, 0);
-
-					fft.FFTShift2(partCplx, tempCplx);
-					cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)tempCplx.GetDevicePtr(), (cufftComplex*)partCplx.GetDevicePtr(), CUFFT_INVERSE));
-					mul.Mul(1.0f / (float)size / (float)size / (float)size, partCplx);
-					makecplx.MakeReal(partCplx, partSumA);
-
-
-
-					max.MaxIndex(wedgeSumB, temp, tempCplx);
-
-					makecplx.MakeCplxWithSub(partSumB, partCplx, 0);
-					cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)partCplx.GetDevicePtr(), (cufftComplex*)tempCplx.GetDevicePtr(), CUFFT_FORWARD));
-					fft.FFTShift2(tempCplx, partCplx);
-
-					wedgeNorm.WedgeNorm(wedgeSumB, partCplx, temp, 0);
-
-					fft.FFTShift2(partCplx, tempCplx);
-					cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)tempCplx.GetDevicePtr(), (cufftComplex*)partCplx.GetDevicePtr(), CUFFT_INVERSE));
-					mul.Mul(1.0f / (float)size / (float)size / (float)size, partCplx);
-					makecplx.MakeReal(partCplx, partSumB);
-
+        /////////////////////
+        /// Add particles ///
+        /////////////////////
+
+        {
+
+            cufftHandle ffthandle;
+
+            int n[] = { size, size, size };
+            cufftSafeCall(cufftPlanMany(&ffthandle, 3, n, NULL, 0, 0, NULL, 0, 0, CUFFT_C2C, 1));
+
+            CUstream stream = 0;
+            cufftSafeCall(cufftSetStream(ffthandle, stream));
+
+            CudaRot rot(size, stream, ctx, aConfig.LinearInterpolation);
+            CudaRot rotWedgeCov(size, stream, ctx, aConfig.LinearInterpolation);
+            CudaRot rotWedgeCTF(size, stream, ctx, aConfig.LinearInterpolation);
+            CudaSub sub(size, stream, ctx);
+            CudaMakeCplxWithSub makecplx(size, stream, ctx);
+            CudaBinarize binarize(size, stream, ctx);
+            CudaMul mul(size, stream, ctx);
+            CudaFFT fft(size, stream, ctx);
+            CudaReducer max(size*size*size, stream, ctx);
+            CudaWedgeNorm wedgeNorm(size, stream, ctx);
+            CudaRadial radAvg(size, stream, ctx);
+            CudaReducer reduce(size*size*size, stream, ctx);
+
+            CudaDeviceVariable partReal(size*size*size*sizeof(float));
+            CudaDeviceVariable partRot(size*size*size*sizeof(float));
+            CudaDeviceVariable partCplx(size*size*size*sizeof(float2));
+            CudaDeviceVariable d_cov_wedge(size*size*size*sizeof(float));
+            CudaDeviceVariable d_ctf_wedge(size*size*size*sizeof(float));
+            CudaDeviceVariable d_SNR(size/2 * sizeof(float));
+            CudaDeviceVariable wedgeSum(size*size*size*sizeof(float));
+            CudaDeviceVariable wedgeSumO(size*size*size*sizeof(float));
+            CudaDeviceVariable wedgeSumE(size*size*size*sizeof(float));
+            CudaDeviceVariable wedgeSumA(size*size*size*sizeof(float));
+            CudaDeviceVariable wedgeSumB(size*size*size*sizeof(float));
+            CudaDeviceVariable tempCplx(size*size*size*sizeof(float2));
+            CudaDeviceVariable temp(size*size*size*sizeof(float));
+            CudaDeviceVariable partSum(size*size*size*sizeof(float));
+            CudaDeviceVariable partSumEven(size*size*size*sizeof(float));
+            CudaDeviceVariable partSumOdd(size*size*size*sizeof(float));
+            CudaDeviceVariable partSumA(size*size*size*sizeof(float));
+            CudaDeviceVariable partSumB(size*size*size*sizeof(float));
+            CudaDeviceVariable d_buffer(size*size*size*sizeof(float));
+
+            CudaDeviceVariable d_sphsum_wedge(size/2 * sizeof(float));
+            CudaDeviceVariable d_sphN_wedge(size/2 * sizeof(float));
+            CudaDeviceVariable d_sphAvg_wedge(size*size*size * sizeof(float));
+
+            // Wiener constant to device
+            d_SNR.CopyHostToDevice((float*)snr.GetData());
+
+            int skipped = 0;
+            vector<int> partsPerRef;
+
+            for (size_t ref = 0; ref < aConfig.Reference.size(); ref++)
+            {
+                float currentReference = ref + 1;
+
+                partSum.Memset(0);
+                partSumOdd.Memset(0);
+                partSumEven.Memset(0);
+                partSumA.Memset(0);
+                partSumB.Memset(0);
+
+                wedgeSum.Memset(0);
+                wedgeSumO.Memset(0);
+                wedgeSumE.Memset(0);
+                wedgeSumA.Memset(0);
+                wedgeSumB.Memset(0);
+
+                int sumCount = 0;
+                int motCount = partCount;
+
+                float limit = 0;
+
+                limit = meanCCValue;
+                int oldWedgeIdx = -1;
+
+                for (int i = startParticle; i < endParticle; i++)
+                {
+                    motive mot = motl.GetAt(i);
+                    stringstream ss;
+
+                    ss << aConfig.Path << aConfig.Particles;
+                    if (mot.classNo != currentReference && aConfig.Reference.size() > 1)
+                    {
+                        continue;
+                    }
+                    if (mot.ccCoeff < limit)
+                    {
+                        skipped++;
+                        continue;
+                    }
+                    if (mot.ccCoeff < 0)
+                    {
+                        skipped++;
+                        continue;
+                    }
+
+                    if (oldWedgeIdx != mot.wedgeIdx)
+                    {
+                        oldWedgeIdx = 0;
+                        if (unique_wedge_ids.size() > 0)
+                        {
+                            oldWedgeIdx = mot.wedgeIdx;
+                        }
+
+                        // Coverage Wedges for particle preprocessing
+                        d_cov_wedge.CopyHostToDevice((float*)coverage_wedges[oldWedgeIdx]->GetData());
+                        rotWedgeCov.SetTexture(d_cov_wedge);
+
+                        // CTF Wedges for normalization
+                        d_ctf_wedge.CopyHostToDevice((float*)ctfsqr_wedges[oldWedgeIdx]->GetData());
+                        rotWedgeCTF.SetTexture(d_ctf_wedge);
+                    }
+                    sumCount++;
+
+                    ss << mot.GetIndexCoding(aConfig.NamingConv) << ".em";
+
+                    cout << mpi_part << ": " << "Part nr: " << mot.partNr << " ref: " << currentReference << " summed up: " << sumCount << " skipped: " << skipped << " = " << sumCount + skipped << " of " << motCount << endl;
+
+                    EMFile part(ss.str());
+                    part.OpenAndRead();
+                    part.ReadHeaderInfo();
+
+                    int size = part.DimX;
+
+                    partReal.CopyHostToDevice(part.GetData());
+
+                    float3 shift;
+                    shift.x = -mot.x_Shift;
+                    shift.y = -mot.y_Shift;
+                    shift.z = -mot.z_Shift;
+
+                    //rot.SetTextureShift(partReal);
+                    //rot.Shift(partRot, shift);
+
+                    rot.SetTexture(partReal);
+                    rot.ShiftRot(partReal, shift, -mot.psi, -mot.phi, -mot.theta);
+
+                    // Rotate both wedges, add ctf wedge to sum for normalization
+                    rotWedgeCov.Rot(d_cov_wedge, -mot.psi, -mot.phi, -mot.theta);
+                    rotWedgeCTF.Rot(d_ctf_wedge, -mot.psi, -mot.phi, -mot.theta);
+                    //TODO: change back to ctf
+                    sub.Add(d_ctf_wedge, wedgeSum);
+
+                    makecplx.MakeCplxWithSub(partReal, partCplx, 0);
+
+                    cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)partCplx.GetDevicePtr(), (cufftComplex*)tempCplx.GetDevicePtr(), CUFFT_FORWARD));
+                    fft.FFTShift2(tempCplx, partCplx);
+                    mul.MulVolCplx(d_cov_wedge, partCplx);
+
+                    fft.FFTShift2(partCplx, tempCplx);
+
+                    cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)tempCplx.GetDevicePtr(), (cufftComplex*)partCplx.GetDevicePtr(), CUFFT_INVERSE));
+
+                    mul.Mul(1.0f / (float)size / (float)size / (float)size, partCplx);
+
+                    makecplx.MakeReal(partCplx, partReal);
+
+                    sub.Add(partReal, partSum);
+
+                    if (sumCount % 2 == 0)
+                    {
+                        sub.Add(partReal, partSumEven);
+                        sub.Add(d_ctf_wedge, wedgeSumE);
+                    }
+                    else
+                    {
+                        sub.Add(partReal, partSumOdd);
+                        sub.Add(d_ctf_wedge, wedgeSumO);
+                    }
+
+                    if (i < motCount / 2)
+                    {
+                        sub.Add(partReal, partSumA);
+                        sub.Add(d_ctf_wedge, wedgeSumA);
+                    }
+                    else
+                    {
+                        sub.Add(partReal, partSumB);
+                        sub.Add(d_ctf_wedge, wedgeSumB);
+                    }
+
+                }
+
+                partsPerRef.push_back(sumCount);
+
+                if (mpi_part == 0)
+                {
+                    float* buffer = new float[size*size*size];
+                    for (int mpi = 1; mpi < mpi_size; mpi++)
+                    {
+                        MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                        partReal.CopyHostToDevice(buffer);
+                        sub.Add(partReal, partSum);
+                        MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                        partReal.CopyHostToDevice(buffer);
+                        sub.Add(partReal, wedgeSum);
+
+                        MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                        partReal.CopyHostToDevice(buffer);
+                        sub.Add(partReal, partSumEven);
+                        MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                        partReal.CopyHostToDevice(buffer);
+                        sub.Add(partReal, wedgeSumE);
+
+                        MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                        partReal.CopyHostToDevice(buffer);
+                        sub.Add(partReal, partSumOdd);
+                        MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                        partReal.CopyHostToDevice(buffer);
+                        sub.Add(partReal, wedgeSumO);
+
+                        MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                        partReal.CopyHostToDevice(buffer);
+                        sub.Add(partReal, partSumA);
+                        MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                        partReal.CopyHostToDevice(buffer);
+                        sub.Add(partReal, wedgeSumA);
+
+                        MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                        partReal.CopyHostToDevice(buffer);
+                        sub.Add(partReal, partSumB);
+                        MPI_Recv(buffer, size*size*size, MPI_FLOAT, mpi, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                        partReal.CopyHostToDevice(buffer);
+                        sub.Add(partReal, wedgeSumB);
+                    }
+                    delete[] buffer;
+                }
+                else
+                {
+                    float* buffer = new float[size*size*size];
+
+                    partSum.CopyDeviceToHost(buffer);
+                    MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+                    wedgeSum.CopyDeviceToHost(buffer);
+                    MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+
+                    partSumEven.CopyDeviceToHost(buffer);
+                    MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+                    wedgeSumE.CopyDeviceToHost(buffer);
+                    MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+
+                    partSumOdd.CopyDeviceToHost(buffer);
+                    MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+                    wedgeSumO.CopyDeviceToHost(buffer);
+                    MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+
+                    partSumA.CopyDeviceToHost(buffer);
+                    MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+                    wedgeSumA.CopyDeviceToHost(buffer);
+                    MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+
+                    partSumB.CopyDeviceToHost(buffer);
+                    MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+                    wedgeSumB.CopyDeviceToHost(buffer);
+                    MPI_Send(buffer, size*size*size, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+
+                    delete[] buffer;
+                }
+
+
+                if (mpi_part == 0)
+                {
+                    // Average Full
+                    makecplx.MakeCplxWithSub(partSum, partCplx, 0);
+                    cufftSafeCall(cufftExecC2C(ffthandle,
+                                               (cufftComplex*)partCplx.GetDevicePtr(),
+                                               (cufftComplex*)tempCplx.GetDevicePtr(),
+                                               CUFFT_FORWARD));
+
+                    fft.FFTShift2(tempCplx, partCplx);
+
+                    d_sphsum_wedge.Memset(0);
+                    d_sphN_wedge.Memset(0);
+                    radAvg.SphericalSumKernel(wedgeSum, d_sphsum_wedge, d_sphN_wedge);
+                    radAvg.Div(d_sphsum_wedge, d_sphN_wedge, d_SNR);
+                    radAvg.SetTexture(d_sphsum_wedge);
+                    radAvg.Line2Sphere(d_sphAvg_wedge);
+//                    {
+//                        auto tmp = new float[size*size*size];
+//                        wedgeSum.CopyDeviceToHost(tmp);
+//
+//                        stringstream ss2;
+//                        ss2 << "wedgesum.em";
+//                        emwrite(ss2.str(), tmp, size, size, size);
+//
+//                        delete[] tmp;
+//                    }
+
+//                    {
+//                        auto tmp = new float[size*size*size];
+//                        partSum.CopyDeviceToHost(tmp);
+//
+//                        stringstream ss2;
+//                        ss2 << "partsum.em";
+//                        emwrite(ss2.str(), tmp, size, size, size);
+//
+//                        delete[] tmp;
+//                    }
+                    wedgeNorm.WedgeNormWiener(wedgeSum, partCplx, d_sphAvg_wedge, aConfig.T);
+
+                    fft.FFTShift2(partCplx, tempCplx);
+                    cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)tempCplx.GetDevicePtr(), (cufftComplex*)partCplx.GetDevicePtr(), CUFFT_INVERSE));
+                    mul.Mul(1.0f / (float)size / (float)size / (float)size, partCplx);
+                    makecplx.MakeReal(partCplx, partSum);
+
+                    reduce.Sum(partSum, d_buffer);
+                    float hsum = 0;
+                    d_buffer.CopyDeviceToHost(&hsum, sizeof(float));
+                    sub.Sub(partSum, partSum, hsum/(size*size*size));
+
+                    // Average Odd
+                    makecplx.MakeCplxWithSub(partSumOdd, partCplx, 0);
+                    cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)partCplx.GetDevicePtr(), (cufftComplex*)tempCplx.GetDevicePtr(), CUFFT_FORWARD));
+                    fft.FFTShift2(tempCplx, partCplx);
+
+                    d_sphsum_wedge.Memset(0);
+                    d_sphN_wedge.Memset(0);
+                    radAvg.SphericalSumKernel(wedgeSumO, d_sphsum_wedge, d_sphN_wedge);
+                    radAvg.Div(d_sphsum_wedge, d_sphN_wedge, d_SNR);
+                    radAvg.SetTexture(d_sphsum_wedge);
+                    radAvg.Line2Sphere(d_sphAvg_wedge);
+                    wedgeNorm.WedgeNormWiener(wedgeSumO, partCplx, d_sphAvg_wedge, aConfig.T);
+
+                    fft.FFTShift2(partCplx, tempCplx);
+                    cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)tempCplx.GetDevicePtr(), (cufftComplex*)partCplx.GetDevicePtr(), CUFFT_INVERSE));
+                    mul.Mul(1.0f / (float)size / (float)size / (float)size, partCplx);
+                    makecplx.MakeReal(partCplx, partSumOdd);
+
+                    reduce.Sum(partSumOdd, d_buffer);
+                    hsum = 0;
+                    d_buffer.CopyDeviceToHost(&hsum, sizeof(float));
+                    sub.Sub(partSumOdd, partSumOdd, hsum/(size*size*size));
+
+                    // Average Even
+                    makecplx.MakeCplxWithSub(partSumEven, partCplx, 0);
+                    cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)partCplx.GetDevicePtr(), (cufftComplex*)tempCplx.GetDevicePtr(), CUFFT_FORWARD));
+                    fft.FFTShift2(tempCplx, partCplx);
+
+                    d_sphsum_wedge.Memset(0);
+                    d_sphN_wedge.Memset(0);
+                    radAvg.SphericalSumKernel(wedgeSumE, d_sphsum_wedge, d_sphN_wedge);
+                    radAvg.Div(d_sphsum_wedge, d_sphN_wedge, d_SNR);
+                    radAvg.SetTexture(d_sphsum_wedge);
+                    radAvg.Line2Sphere(d_sphAvg_wedge);
+                    wedgeNorm.WedgeNormWiener(wedgeSumE, partCplx, d_sphAvg_wedge, aConfig.T);
+
+                    fft.FFTShift2(partCplx, tempCplx);
+                    cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)tempCplx.GetDevicePtr(), (cufftComplex*)partCplx.GetDevicePtr(), CUFFT_INVERSE));
+                    mul.Mul(1.0f / (float)size / (float)size / (float)size, partCplx);
+                    makecplx.MakeReal(partCplx, partSumEven);
+
+                    reduce.Sum(partSumEven, d_buffer);
+                    hsum = 0;
+                    d_buffer.CopyDeviceToHost(&hsum, sizeof(float));
+                    sub.Sub(partSumEven, partSumEven, hsum/(size*size*size));
+
+                    // Average A
+                    makecplx.MakeCplxWithSub(partSumA, partCplx, 0);
+                    cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)partCplx.GetDevicePtr(), (cufftComplex*)tempCplx.GetDevicePtr(), CUFFT_FORWARD));
+                    fft.FFTShift2(tempCplx, partCplx);
+
+                    d_sphsum_wedge.Memset(0);
+                    d_sphN_wedge.Memset(0);
+                    radAvg.SphericalSumKernel(wedgeSumA, d_sphsum_wedge, d_sphN_wedge);
+                    radAvg.Div(d_sphsum_wedge, d_sphN_wedge, d_SNR);
+                    radAvg.SetTexture(d_sphsum_wedge);
+                    radAvg.Line2Sphere(d_sphAvg_wedge);
+                    wedgeNorm.WedgeNormWiener(wedgeSumA, partCplx, d_sphAvg_wedge, aConfig.T);
+
+                    fft.FFTShift2(partCplx, tempCplx);
+                    cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)tempCplx.GetDevicePtr(), (cufftComplex*)partCplx.GetDevicePtr(), CUFFT_INVERSE));
+                    mul.Mul(1.0f / (float)size / (float)size / (float)size, partCplx);
+                    makecplx.MakeReal(partCplx, partSumA);
+
+                    reduce.Sum(partSumA, d_buffer);
+                    hsum = 0;
+                    d_buffer.CopyDeviceToHost(&hsum, sizeof(float));
+                    sub.Sub(partSumA, partSumA, hsum/(size*size*size));
+
+                    // Average B
+                    makecplx.MakeCplxWithSub(partSumB, partCplx, 0);
+                    cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)partCplx.GetDevicePtr(), (cufftComplex*)tempCplx.GetDevicePtr(), CUFFT_FORWARD));
+                    fft.FFTShift2(tempCplx, partCplx);
+
+                    d_sphsum_wedge.Memset(0);
+                    d_sphN_wedge.Memset(0);
+                    radAvg.SphericalSumKernel(wedgeSumB, d_sphsum_wedge, d_sphN_wedge);
+                    radAvg.Div(d_sphsum_wedge, d_sphN_wedge, d_SNR);
+                    radAvg.SetTexture(d_sphsum_wedge);
+                    radAvg.Line2Sphere(d_sphAvg_wedge);
+                    wedgeNorm.WedgeNormWiener(wedgeSumB, partCplx, d_sphAvg_wedge, aConfig.T);
+
+                    fft.FFTShift2(partCplx, tempCplx);
+                    cufftSafeCall(cufftExecC2C(ffthandle, (cufftComplex*)tempCplx.GetDevicePtr(), (cufftComplex*)partCplx.GetDevicePtr(), CUFFT_INVERSE));
+                    mul.Mul(1.0f / (float)size / (float)size / (float)size, partCplx);
+                    makecplx.MakeReal(partCplx, partSumB);
+
+                    reduce.Sum(partSumB, d_buffer);
+                    hsum = 0;
+                    d_buffer.CopyDeviceToHost(&hsum, sizeof(float));
+                    sub.Sub(partSumB, partSumB, hsum/(size*size*size));
 
 
 					float* sum = new float[size*size*size];
@@ -997,18 +1107,19 @@ int main(int argc, char* argv[])
 
                         p.planAngularSampling(1, 0, 5, 3, aConfig.CouplePhiToPsi);
 
-						maxVals_t v = p.execute(part,
-                                                nowedge,
-                                                NULL,
-                                                0,
-                                                0,
-                                                0,
-                                                (float)aConfig.HighPass,
-                                                (float)aConfig.LowPass,
-                                                (float)aConfig.Sigma,
-                                                make_float3(0, 0, 0),
-                                                false,
-                                                0);
+						maxVals_t v = p.executePadfield(part,
+                                                        nowedge,
+                                                        nowedge,
+                                                        NULL,
+                                                        0,
+                                                        0,
+                                                        0,
+                                                        (float)aConfig.HighPass,
+                                                        (float)aConfig.LowPass,
+                                                        (float)aConfig.Sigma,
+                                                        make_float3(0, 0, 0),
+                                                        false,
+                                                        0);
 						int sx, sy, sz;
 						v.getXYZ(size, sx, sy, sz);
 

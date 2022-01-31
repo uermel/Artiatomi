@@ -35,7 +35,9 @@ namespace Configuration
 		:mConfigFileName(aConfigFile),
 		CudaDeviceIDs(),
 		MotiveList(),
-		WedgeFile(),
+		CoverageWedgeFile(),
+        OverlapWedgeFile(),
+        CTFWedgeFile(),
 		Particles(),
 		Path(),
 		Reference(),
@@ -65,7 +67,8 @@ namespace Configuration
 		Correlation(CM_PhaseCorrelation),
 		CertaintyMaxDistance(-1),
         UseCustomAngles(false),
-        CustomAngleList()
+        CustomAngleList(),
+        T(2)
 	{
 		while (appEnvp && *appEnvp) {
 			string envEntry = *appEnvp;
@@ -149,8 +152,12 @@ namespace Configuration
 
 		CudaDeviceIDs = GetVectorInt("CudaDeviceID");
 		MotiveList = GetString("MotiveList");
-		WedgeFile = GetString("WedgeFile");
+		CoverageWedgeFile = GetString("CoverageWedgeFile");
+        OverlapWedgeFile = GetString("OverlapWedgeFile");
+        CTFWedgeFile = GetString("CTFWedgeFile");
         SingleWedge = GetBool("SingleWedge");
+        SNRFile = GetString("SNRFile");
+        T = GetFloat("T");
 		//WedgeIndices = GetVectorInt("WedgeIndices", true);
 		Particles = GetString("Particles");
 #ifdef WIN32

@@ -20,6 +20,7 @@
 texture<float, 3, cudaReadModeElementType> texVol;
 texture<float, 3, cudaReadModeElementType> texShift;
 texture<float2, 3, cudaReadModeElementType> texVolCplx;
+texture<float, 1, cudaReadModeElementType> texLine;
 
 extern "C"
 __global__ void rot3d(int size, float3 rotMat0, float3 rotMat1, float3 rotMat2, float* outVol)
@@ -163,6 +164,23 @@ __global__ void wedgeNorm(int size, float* wedge, float2* part, float* maxVal, i
 	part[z * size * size + y * size + x] = p;
 }
 
+extern "C"
+__global__ void wedgeNormWiener(int size, float* wedgeSum, float2* partSum, float* tausqr, float T)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    float w2 = wedgeSum[z * size * size + y * size + x];
+    float wc = 1/(tausqr[z * size * size + y * size + x] * T);
+    float2 p = partSum[z * size * size + y * size + x];
+    float2 erg;
+    erg.x = p.x / (w2 + wc);
+    erg.y = p.y / (w2 + wc);
+
+    partSum[z * size * size + y * size + x] = erg;
+}
+
 
 extern "C"
 __global__ void subCplx2(int size, float2* inVol, float2* outVol, float* subval, float* divVal)
@@ -252,6 +270,31 @@ __global__ void mulVolCplx(int size, float2* inVol, float2* outVol)
 	temp.x *= temp2.x; //complex component is meant to be zero
 	temp.y *= temp2.x;
 	outVol[z * size * size + y * size + x] = temp;
+}
+
+extern "C"
+__global__ void mulMaskMeanFreeCplx(int size, float2* im_io, float2* imsqr_o, float* mask, float* sumVol, float* sumMask)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    // Get data
+    float2 imsqr = make_float2(0, 0);
+    float2 im = im_io[z * size * size + y * size + x];
+    float ma = mask[z * size * size + y * size + x];
+
+    // Masked squared image
+    imsqr.x = ma * (im.x - (sumVol[0]/sumMask[0])) * (im.x - (sumVol[0]/sumMask[0]));
+    imsqr.y = 0;
+
+    // Masked image
+    im.x = ma * (im.x - (sumVol[0]/sumMask[0])); //complex component is meant to be zero
+    im.y = 0;
+
+    // Out
+    im_io[z * size * size + y * size + x] = im;
+    imsqr_o[z * size * size + y * size + x] = imsqr;
 }
 
 
@@ -526,7 +569,47 @@ __global__ void energynorm(int size, float2* particle, float2* partSqr, float2* 
 	cccMap[z * size * size + y * size + x] = erg;
 }
 
+extern "C"
+__global__ void energynormPadfield(int size, float2* NCCNum, float2* NCCDen2_f2sqr, float2* NCCDen2_f2, float* NCCDen1, float* maskNorm)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
 
+    float Num = NCCNum[z * size * size + y * size + x].x;
+    float NCCDen2p1 = NCCDen2_f2sqr[z * size * size + y * size + x].x;
+    float NCCDen2p2 = NCCDen2_f2[z * size * size + y * size + x].x;
+    float NCCDen2 = NCCDen2p1 - (NCCDen2p2 * NCCDen2p2) / maskNorm[0];
+    float Den = sqrt(NCCDen1[0]) * sqrt(NCCDen2);
+
+    float2 erg;
+    erg.x = 0;
+    erg.y = 0;
+
+    if (Den > EPS)
+    {
+        erg.x = Num / Den;
+    }
+
+    NCCNum[z * size * size + y * size + x] = erg;
+}
+
+extern "C"
+__global__ void particleWiener(int size, float2* particle, float* wedge_ctfsqr, float* wedge_coverage, float wienerConst)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    float2 part = particle[z * size * size + y * size + x];
+    float ctf = wedge_ctfsqr[z * size * size + y * size + x];
+    float cov = wedge_coverage[z * size * size + y * size + x];
+
+    part.x = part.x / (ctf + wienerConst) * cov;
+    part.y = part.y / (ctf + wienerConst) * cov;
+
+    particle[z * size * size + y * size + x] = part;
+}
 
 
 
@@ -603,4 +686,60 @@ __global__ void findmaxWithCertainty(float* maxVals, int* index, float* val, int
 	}
 }
 
+extern "C"
+__global__ void sphericalSum(int size,
+                             int center,
+                             float* wedgeSum,
+                             float* ampSum,
+                             float* nShell)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
 
+    // No val at center
+    //if (x == center && y == center && z == center) return;
+
+    // Where are we?
+    float xx = x - center;
+    float yy = y - center;
+    float zz = z - center;
+    float r = sqrt(xx*xx + yy*yy + zz*zz);
+    int shell = (int) r;
+
+    // Return if outside
+    if (shell >= center || shell<0) return;
+
+    // Ugh, not nice
+    atomicAdd(ampSum + shell, wedgeSum[z * size * size + y * size + x]);
+    atomicAdd(nShell + shell, 1);
+}
+
+extern "C"
+__global__ void line2sphere(int size,
+                            int center,
+                            float* outVol)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    // Where are we?
+    float xx = (float)x - (float)center;
+    float yy = (float)y - (float)center;
+    float zz = (float)z - (float)center;
+    float r = sqrt(xx*xx + yy*yy + zz*zz);
+
+    // Get val from tex
+    outVol[z * size * size + y * size + x] =  tex1D(texLine, r + 0.5f);
+}
+
+extern "C"
+__global__ void lineDiv(float* ampSum,
+                        float* nShell,
+                        float* SNR)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+
+    ampSum[x] = SNR[x]/(ampSum[x]/nShell[x]);
+}

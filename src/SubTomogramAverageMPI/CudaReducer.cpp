@@ -53,7 +53,17 @@ CudaReducer::CudaReducer(int aVoxelCount, CUstream aStream, CudaContext* context
 	sumCplx2   = new CudaKernel("_Z10reduceCplxILj2EEvP6float2Pfj",   cuMod);
 	sumCplx1   = new CudaKernel("_Z10reduceCplxILj1EEvP6float2Pfj",   cuMod);
 
-		
+    maskedSumCplx512 = new CudaKernel("_Z16maskedReduceCplxILj512EEvP6float2PfS2_j", cuMod);
+    maskedSumCplx256 = new CudaKernel("_Z16maskedReduceCplxILj256EEvP6float2PfS2_j", cuMod);
+    maskedSumCplx128 = new CudaKernel("_Z16maskedReduceCplxILj128EEvP6float2PfS2_j", cuMod);
+    maskedSumCplx64  = new CudaKernel("_Z16maskedReduceCplxILj64EEvP6float2PfS2_j",  cuMod);
+    maskedSumCplx32  = new CudaKernel("_Z16maskedReduceCplxILj32EEvP6float2PfS2_j",  cuMod);
+    maskedSumCplx16  = new CudaKernel("_Z16maskedReduceCplxILj16EEvP6float2PfS2_j",  cuMod);
+    maskedSumCplx8   = new CudaKernel("_Z16maskedReduceCplxILj8EEvP6float2PfS2_j",   cuMod);
+    maskedSumCplx4   = new CudaKernel("_Z16maskedReduceCplxILj4EEvP6float2PfS2_j",   cuMod);
+    maskedSumCplx2   = new CudaKernel("_Z16maskedReduceCplxILj2EEvP6float2PfS2_j",   cuMod);
+    maskedSumCplx1   = new CudaKernel("_Z16maskedReduceCplxILj1EEvP6float2PfS2_j",   cuMod);
+
 	sumSqrCplx512 = new CudaKernel("_Z13reduceSqrCplxILj512EEvP6float2Pfj", cuMod);
 	sumSqrCplx256 = new CudaKernel("_Z13reduceSqrCplxILj256EEvP6float2Pfj", cuMod);
 	sumSqrCplx128 = new CudaKernel("_Z13reduceSqrCplxILj128EEvP6float2Pfj", cuMod);
@@ -336,6 +346,56 @@ void CudaReducer::SumCplx(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_oda
     {
         // copy final sum from device to host
 		//d_odata.CopyDeviceToHost(&gpu_result, sizeof(float));
+    }
+
+}
+
+void CudaReducer::MaskedSumCplx(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_mask, CudaDeviceVariable& d_odata)
+{
+    int blocks;
+    int threads;
+    float gpu_result = 0;
+    bool needReadBack = true;
+
+    gpu_result = 0;
+
+
+    getNumBlocksAndThreads(voxelCount, blocks, threads);
+    // execute the kernel
+    runMaskedSumCplxKernel(voxelCount, blocks, threads, d_idata, d_mask, d_odata);
+
+    // sum partial block sums on GPU
+    int s=blocks;
+
+    while (s > 1)
+    {
+        int threads = 0, blocks = 0;
+        getNumBlocksAndThreads(s, blocks, threads);
+
+        runSumKernel(s, blocks, threads, d_odata, d_odata);
+        s = (s + (threads*2-1)) / (threads*2);
+    }
+
+    if (s > 1)
+    {
+        printf("Oops, not a power of 2?\n");
+        //      // copy result from device to host
+        //d_odata.CopyDeviceToHost(h_odata, s * sizeof(float));
+
+        //      for (int i=0; i < s; i++)
+        //      {
+        //          gpu_result += h_odata[i];
+        //      }
+
+        //      needReadBack = false;
+    }
+
+
+
+    if (needReadBack)
+    {
+        // copy final sum from device to host
+        //d_odata.CopyDeviceToHost(&gpu_result, sizeof(float));
     }
 
 }
@@ -638,6 +698,80 @@ void CudaReducer::runSumCplxKernel(int size, int blocks, int threads, CudaDevice
     //cudaSafeCall(cuEventRecord(eventStart, stream));
     cudaSafeCall(cuLaunchKernel(kernel->GetCUfunction(), dimGrid.x, dimGrid.y,
 		dimGrid.z, dimBlock.x, dimBlock.y, dimBlock.z, smemSize, stream, arglist,NULL));
+
+    //cudaSafeCall(cuCtxSynchronize());
+
+    //cudaSafeCall(cuStreamQuery(stream));
+    //cudaSafeCall(cuEventRecord(eventEnd, stream));
+    //cudaSafeCall(cuEventSynchronize(eventEnd));
+    //cudaSafeCall(cuEventElapsedTime(&ms, eventStart, eventEnd));
+
+    delete[] arglist;
+}
+
+void CudaReducer::runMaskedSumCplxKernel(int size,
+                                         int blocks,
+                                         int threads,
+                                         CudaDeviceVariable& d_idata,
+                                         CudaDeviceVariable& d_mask,
+                                         CudaDeviceVariable& d_odata)
+{
+    CudaKernel* kernel;
+    dim3 dimBlock(threads, 1, 1);
+    dim3 dimGrid(blocks, 1, 1);
+
+    // when there is only one warp per block, we need to allocate two warps
+    // worth of shared memory so that we don't index shared memory out of bounds
+    int smemSize = (threads <= 32) ? 2 * threads * sizeof(float) : threads * sizeof(float);
+
+    switch (threads)
+    {
+        case 512:
+            kernel = maskedSumCplx512; break;
+        case 256:
+            kernel = maskedSumCplx256; break;
+        case 128:
+            kernel = maskedSumCplx128; break;
+        case 64:
+            kernel = maskedSumCplx64; break;
+        case 32:
+            kernel = maskedSumCplx32; break;
+        case 16:
+            kernel = maskedSumCplx16; break;
+        case  8:
+            kernel = maskedSumCplx8; break;
+        case  4:
+            kernel = maskedSumCplx4; break;
+        case  2:
+            kernel = maskedSumCplx2; break;
+        case  1:
+            kernel = maskedSumCplx1; break;
+    }
+
+    CUdeviceptr in_dptr = d_idata.GetDevicePtr();
+    CUdeviceptr mask_dptr = d_mask.GetDevicePtr();
+    CUdeviceptr out_dptr = d_odata.GetDevicePtr();
+    int n = size;
+
+    void** arglist = (void**)new void*[4];
+
+    arglist[0] = &in_dptr;
+    arglist[1] = &mask_dptr;
+    arglist[2] = &out_dptr;
+    arglist[3] = &n;
+
+    //float ms;
+
+    //CUevent eventStart;
+    //CUevent eventEnd;
+    //CUstream stream = 0;
+    //cudaSafeCall(cuEventCreate(&eventStart, CU_EVENT_BLOCKING_SYNC));
+    //cudaSafeCall(cuEventCreate(&eventEnd, CU_EVENT_BLOCKING_SYNC));
+
+    //cudaSafeCall(cuStreamQuery(stream));
+    //cudaSafeCall(cuEventRecord(eventStart, stream));
+    cudaSafeCall(cuLaunchKernel(kernel->GetCUfunction(), dimGrid.x, dimGrid.y,
+                                dimGrid.z, dimBlock.x, dimBlock.y, dimBlock.z, smemSize, stream, arglist,NULL));
 
     //cudaSafeCall(cuCtxSynchronize());
 
