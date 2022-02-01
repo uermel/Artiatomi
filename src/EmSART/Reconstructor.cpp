@@ -1717,10 +1717,17 @@ void Reconstructor::Compare(Volume<TVol>* vol, char* originalImage, int index)
 {
 	if (mpi_part == 0)
 	{
-		float z_Direction = proj.GetNormalVector(index).z;
-		float z_VolMinZ = vol->GetVolumeBBoxMin().z;
-		float z_VolMaxZ = vol->GetVolumeBBoxMax().z;
-		float volumeTraversalLength = fabs((DIST - z_VolMinZ) / z_Direction - (DIST - z_VolMaxZ) / z_Direction);
+//		float z_Direction = proj.GetNormalVector(index).z;
+//		float z_VolMinZ = vol->GetVolumeBBoxMin().z;
+//		float z_VolMaxZ = vol->GetVolumeBBoxMax().z;
+//		float volumeTraversalLength = fabs((DIST - z_VolMinZ) / z_Direction - (DIST - z_VolMaxZ) / z_Direction);
+
+        nppSafeCall(nppsMax_32f((Npp32f*)dist_d.GetDevicePtr(),
+                                proj.GetWidth()*proj.GetHeight(),
+                                (Npp32f*) meanval.GetDevicePtr(),
+                                (Npp8u*) meanbuffer.GetDevicePtr()));
+        float volumeTraversalLength = 0.f;
+        meanval.CopyDeviceToHost(&volumeTraversalLength);
 
         realproj_d.CopyHostToDevice(originalImage);
 
