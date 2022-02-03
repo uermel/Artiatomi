@@ -79,27 +79,49 @@ private:
 	CudaKernel* sumSqrCplx2;
 	CudaKernel* sumSqrCplx1;
 
-	CudaKernel* maxIndex512;
-	CudaKernel* maxIndex256;
-	CudaKernel* maxIndex128;
-	CudaKernel* maxIndex64;
-	CudaKernel* maxIndex32;
-	CudaKernel* maxIndex16;
-	CudaKernel* maxIndex8;
-	CudaKernel* maxIndex4;
-	CudaKernel* maxIndex2;
-	CudaKernel* maxIndex1;
+	CudaKernel* maxIndexMasked512;
+	CudaKernel* maxIndexMasked256;
+	CudaKernel* maxIndexMasked128;
+	CudaKernel* maxIndexMasked64;
+	CudaKernel* maxIndexMasked32;
+	CudaKernel* maxIndexMasked16;
+	CudaKernel* maxIndexMasked8;
+	CudaKernel* maxIndexMasked4;
+	CudaKernel* maxIndexMasked2;
+	CudaKernel* maxIndexMasked1;
 
-	CudaKernel* maxIndexCplx512;
-	CudaKernel* maxIndexCplx256;
-	CudaKernel* maxIndexCplx128;
-	CudaKernel* maxIndexCplx64;
-	CudaKernel* maxIndexCplx32;
-	CudaKernel* maxIndexCplx16;
-	CudaKernel* maxIndexCplx8;
-	CudaKernel* maxIndexCplx4;
-	CudaKernel* maxIndexCplx2;
-	CudaKernel* maxIndexCplx1;
+	CudaKernel* maxIndexMaskedCplx512;
+	CudaKernel* maxIndexMaskedCplx256;
+	CudaKernel* maxIndexMaskedCplx128;
+	CudaKernel* maxIndexMaskedCplx64;
+	CudaKernel* maxIndexMaskedCplx32;
+	CudaKernel* maxIndexMaskedCplx16;
+	CudaKernel* maxIndexMaskedCplx8;
+	CudaKernel* maxIndexMaskedCplx4;
+	CudaKernel* maxIndexMaskedCplx2;
+	CudaKernel* maxIndexMaskedCplx1;
+
+    CudaKernel* maxIndex512;
+    CudaKernel* maxIndex256;
+    CudaKernel* maxIndex128;
+    CudaKernel* maxIndex64;
+    CudaKernel* maxIndex32;
+    CudaKernel* maxIndex16;
+    CudaKernel* maxIndex8;
+    CudaKernel* maxIndex4;
+    CudaKernel* maxIndex2;
+    CudaKernel* maxIndex1;
+
+    CudaKernel* maxIndexCplx512;
+    CudaKernel* maxIndexCplx256;
+    CudaKernel* maxIndexCplx128;
+    CudaKernel* maxIndexCplx64;
+    CudaKernel* maxIndexCplx32;
+    CudaKernel* maxIndexCplx16;
+    CudaKernel* maxIndexCplx8;
+    CudaKernel* maxIndexCplx4;
+    CudaKernel* maxIndexCplx2;
+    CudaKernel* maxIndexCplx1;
 
 	CudaContext* ctx;
 	int voxelCount;
@@ -112,12 +134,41 @@ private:
 	void getNumBlocksAndThreads(int n, int &blocks, int &threads);
 	uint nextPow2(uint x);
 
-	void runSumKernel(int size, int blocks, int threads, CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
-	void runMaxIndexKernel(int size, int blocks, int threads, CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, CudaDeviceVariable& d_index, bool readIndex);
-	void runSumCplxKernel(int size, int blocks, int threads, CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
-	void runMaskedSumCplxKernel(int size, int blocks, int threads, CudaDeviceVariable& d_idata, CudaDeviceVariable& d_mask, CudaDeviceVariable& d_odata);
-	void runSumSqrCplxKernel(int size, int blocks, int threads, CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
-	void runMaxIndexCplxKernel(int size, int blocks, int threads, CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, CudaDeviceVariable& d_index, bool readIndex);
+	void runSumKernel(int size, int blocks, int threads,
+                      CudaDeviceVariable& d_idata,
+                      CudaDeviceVariable& d_odata);
+    void runMaxIndexKernel(int size, int blocks, int threads,
+                           CudaDeviceVariable& d_idata,
+                           CudaDeviceVariable& d_odata,
+                           CudaDeviceVariable& d_index,
+                           bool readIndex);
+    void runMaxIndexMaskedKernel(int size, int blocks, int threads,
+                           CudaDeviceVariable& d_idata,
+                           CudaDeviceVariable& d_odata,
+                           CudaDeviceVariable& d_maskdata,
+                           CudaDeviceVariable& d_index,
+                           bool readIndex);
+	void runSumCplxKernel(int size, int blocks, int threads,
+                          CudaDeviceVariable& d_idata,
+                          CudaDeviceVariable& d_odata);
+	void runMaskedSumCplxKernel(int size, int blocks, int threads,
+                                CudaDeviceVariable& d_idata,
+                                CudaDeviceVariable& d_mask,
+                                CudaDeviceVariable& d_odata);
+	void runSumSqrCplxKernel(int size, int blocks, int threads,
+                             CudaDeviceVariable& d_idata,
+                             CudaDeviceVariable& d_odata);
+    void runMaxIndexCplxKernel(int size, int blocks, int threads,
+                               CudaDeviceVariable& d_idata,
+                               CudaDeviceVariable& d_odata,
+                               CudaDeviceVariable& d_index,
+                               bool readIndex);
+    void runMaxIndexMaskedCplxKernel(int size, int blocks, int threads,
+                               CudaDeviceVariable& d_idata,
+                               CudaDeviceVariable& d_odata,
+                               CudaDeviceVariable& d_maskdata,
+                               CudaDeviceVariable& d_index,
+                               bool readIndex);
 
 public:
 
@@ -125,12 +176,29 @@ public:
 
 	int GetOutBufferSize();
 
-	void Sum(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
-	void MaxIndex(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, CudaDeviceVariable& d_index);
-	void SumCplx(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
-	void MaskedSumCplx(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_mask, CudaDeviceVariable& d_odata);
-	void SumSqrCplx(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
-	void MaxIndexCplx(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, CudaDeviceVariable& d_index);
+	void Sum(CudaDeviceVariable& d_idata,
+             CudaDeviceVariable& d_odata);
+    void MaxIndex(CudaDeviceVariable& d_idata,
+                  CudaDeviceVariable& d_odata,
+                  CudaDeviceVariable& d_index);
+    void MaxIndexMasked(CudaDeviceVariable& d_idata,
+                        CudaDeviceVariable& d_odata,
+                        CudaDeviceVariable& d_maskdata,
+                        CudaDeviceVariable& d_index);
+	void SumCplx(CudaDeviceVariable& d_idata,
+                 CudaDeviceVariable& d_odata);
+	void MaskedSumCplx(CudaDeviceVariable& d_idata,
+                       CudaDeviceVariable& d_mask,
+                       CudaDeviceVariable& d_odata);
+	void SumSqrCplx(CudaDeviceVariable& d_idata,
+                    CudaDeviceVariable& d_odata);
+    void MaxIndexCplx(CudaDeviceVariable& d_idata,
+                      CudaDeviceVariable& d_odata,
+                      CudaDeviceVariable& d_index);
+    void MaxIndexMaskedCplx(CudaDeviceVariable& d_idata,
+                            CudaDeviceVariable& d_odata,
+                            CudaDeviceVariable& d_maskdata,
+                             CudaDeviceVariable& d_index);
 };
 
 #endif //CUDAREDUCER_H

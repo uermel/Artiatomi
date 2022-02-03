@@ -75,32 +75,158 @@ CudaReducer::CudaReducer(int aVoxelCount, CUstream aStream, CudaContext* context
 	sumSqrCplx2   = new CudaKernel("_Z13reduceSqrCplxILj2EEvP6float2Pfj",   cuMod);
 	sumSqrCplx1   = new CudaKernel("_Z13reduceSqrCplxILj1EEvP6float2Pfj",   cuMod);
 
-	maxIndex512 = new CudaKernel("_Z8maxIndexILj512EEvPfS0_Pijb", cuMod);
-	maxIndex256 = new CudaKernel("_Z8maxIndexILj256EEvPfS0_Pijb", cuMod);
-	maxIndex128 = new CudaKernel("_Z8maxIndexILj128EEvPfS0_Pijb", cuMod);
-	maxIndex64  = new CudaKernel("_Z8maxIndexILj64EEvPfS0_Pijb",  cuMod);
-	maxIndex32  = new CudaKernel("_Z8maxIndexILj32EEvPfS0_Pijb",  cuMod);
-	maxIndex16  = new CudaKernel("_Z8maxIndexILj16EEvPfS0_Pijb",  cuMod);
-	maxIndex8   = new CudaKernel("_Z8maxIndexILj8EEvPfS0_Pijb",   cuMod);
-	maxIndex4   = new CudaKernel("_Z8maxIndexILj4EEvPfS0_Pijb",   cuMod);
-	maxIndex2   = new CudaKernel("_Z8maxIndexILj2EEvPfS0_Pijb",   cuMod);
-	maxIndex1   = new CudaKernel("_Z8maxIndexILj1EEvPfS0_Pijb",   cuMod);
+    maxIndex512 = new CudaKernel("_Z8maxIndexILj512EEvPfS0_Pijb", cuMod);
+    maxIndex256 = new CudaKernel("_Z8maxIndexILj256EEvPfS0_Pijb", cuMod);
+    maxIndex128 = new CudaKernel("_Z8maxIndexILj128EEvPfS0_Pijb", cuMod);
+    maxIndex64  = new CudaKernel("_Z8maxIndexILj64EEvPfS0_Pijb",  cuMod);
+    maxIndex32  = new CudaKernel("_Z8maxIndexILj32EEvPfS0_Pijb",  cuMod);
+    maxIndex16  = new CudaKernel("_Z8maxIndexILj16EEvPfS0_Pijb",  cuMod);
+    maxIndex8   = new CudaKernel("_Z8maxIndexILj8EEvPfS0_Pijb",   cuMod);
+    maxIndex4   = new CudaKernel("_Z8maxIndexILj4EEvPfS0_Pijb",   cuMod);
+    maxIndex2   = new CudaKernel("_Z8maxIndexILj2EEvPfS0_Pijb",   cuMod);
+    maxIndex1   = new CudaKernel("_Z8maxIndexILj1EEvPfS0_Pijb",   cuMod);
 
-	maxIndexCplx512 = new CudaKernel("_Z12maxIndexCplxILj512EEvP6float2PfPijb", cuMod);
-	maxIndexCplx256 = new CudaKernel("_Z12maxIndexCplxILj256EEvP6float2PfPijb", cuMod);
-	maxIndexCplx128 = new CudaKernel("_Z12maxIndexCplxILj128EEvP6float2PfPijb", cuMod);
-	maxIndexCplx64  = new CudaKernel("_Z12maxIndexCplxILj64EEvP6float2PfPijb",  cuMod);
-	maxIndexCplx32  = new CudaKernel("_Z12maxIndexCplxILj32EEvP6float2PfPijb",  cuMod);
-	maxIndexCplx16  = new CudaKernel("_Z12maxIndexCplxILj16EEvP6float2PfPijb",  cuMod);
-	maxIndexCplx8   = new CudaKernel("_Z12maxIndexCplxILj8EEvP6float2PfPijb",   cuMod);
-	maxIndexCplx4   = new CudaKernel("_Z12maxIndexCplxILj4EEvP6float2PfPijb",   cuMod);
-	maxIndexCplx2   = new CudaKernel("_Z12maxIndexCplxILj2EEvP6float2PfPijb",   cuMod);
-	maxIndexCplx1   = new CudaKernel("_Z12maxIndexCplxILj1EEvP6float2PfPijb",   cuMod);
+    maxIndexCplx512 = new CudaKernel("_Z12maxIndexCplxILj512EEvP6float2PfPijb", cuMod);
+    maxIndexCplx256 = new CudaKernel("_Z12maxIndexCplxILj256EEvP6float2PfPijb", cuMod);
+    maxIndexCplx128 = new CudaKernel("_Z12maxIndexCplxILj128EEvP6float2PfPijb", cuMod);
+    maxIndexCplx64  = new CudaKernel("_Z12maxIndexCplxILj64EEvP6float2PfPijb",  cuMod);
+    maxIndexCplx32  = new CudaKernel("_Z12maxIndexCplxILj32EEvP6float2PfPijb",  cuMod);
+    maxIndexCplx16  = new CudaKernel("_Z12maxIndexCplxILj16EEvP6float2PfPijb",  cuMod);
+    maxIndexCplx8   = new CudaKernel("_Z12maxIndexCplxILj8EEvP6float2PfPijb",   cuMod);
+    maxIndexCplx4   = new CudaKernel("_Z12maxIndexCplxILj4EEvP6float2PfPijb",   cuMod);
+    maxIndexCplx2   = new CudaKernel("_Z12maxIndexCplxILj2EEvP6float2PfPijb",   cuMod);
+    maxIndexCplx1   = new CudaKernel("_Z12maxIndexCplxILj1EEvP6float2PfPijb",   cuMod);
+
+	maxIndexMasked512 = new CudaKernel("_Z14maxIndexMaskedILj512EEvPfS0_S0_Pijb", cuMod);
+	maxIndexMasked256 = new CudaKernel("_Z14maxIndexMaskedILj256EEvPfS0_S0_Pijb", cuMod);
+	maxIndexMasked128 = new CudaKernel("_Z14maxIndexMaskedILj128EEvPfS0_S0_Pijb", cuMod);
+	maxIndexMasked64  = new CudaKernel("_Z14maxIndexMaskedILj64EEvPfS0_S0_Pijb",  cuMod);
+	maxIndexMasked32  = new CudaKernel("_Z14maxIndexMaskedILj32EEvPfS0_S0_Pijb",  cuMod);
+	maxIndexMasked16  = new CudaKernel("_Z14maxIndexMaskedILj16EEvPfS0_S0_Pijb",  cuMod);
+	maxIndexMasked8   = new CudaKernel("_Z14maxIndexMaskedILj8EEvPfS0_S0_Pijb",   cuMod);
+	maxIndexMasked4   = new CudaKernel("_Z14maxIndexMaskedILj4EEvPfS0_S0_Pijb",   cuMod);
+	maxIndexMasked2   = new CudaKernel("_Z14maxIndexMaskedILj2EEvPfS0_S0_Pijb",   cuMod);
+	maxIndexMasked1   = new CudaKernel("_Z14maxIndexMaskedILj1EEvPfS0_S0_Pijb",   cuMod);
+
+	maxIndexMaskedCplx512 = new CudaKernel("_Z18maxIndexMaskedCplxILj512EEvP6float2PfS2_Pijb", cuMod);
+	maxIndexMaskedCplx256 = new CudaKernel("_Z18maxIndexMaskedCplxILj256EEvP6float2PfS2_Pijb", cuMod);
+	maxIndexMaskedCplx128 = new CudaKernel("_Z18maxIndexMaskedCplxILj128EEvP6float2PfS2_Pijb", cuMod);
+	maxIndexMaskedCplx64  = new CudaKernel("_Z18maxIndexMaskedCplxILj64EEvP6float2PfS2_Pijb",  cuMod);
+	maxIndexMaskedCplx32  = new CudaKernel("_Z18maxIndexMaskedCplxILj32EEvP6float2PfS2_Pijb",  cuMod);
+	maxIndexMaskedCplx16  = new CudaKernel("_Z18maxIndexMaskedCplxILj16EEvP6float2PfS2_Pijb",  cuMod);
+	maxIndexMaskedCplx8   = new CudaKernel("_Z18maxIndexMaskedCplxILj8EEvP6float2PfS2_Pijb",   cuMod);
+	maxIndexMaskedCplx4   = new CudaKernel("_Z18maxIndexMaskedCplxILj4EEvP6float2PfS2_Pijb",   cuMod);
+	maxIndexMaskedCplx2   = new CudaKernel("_Z18maxIndexMaskedCplxILj2EEvP6float2PfS2_Pijb",   cuMod);
+	maxIndexMaskedCplx1   = new CudaKernel("_Z18maxIndexMaskedCplxILj1EEvP6float2PfS2_Pijb",   cuMod);
 
 
 }
 
 void CudaReducer::MaxIndex(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, CudaDeviceVariable& d_index)
+{
+    int blocks;
+    int threads;
+    float gpu_result = 0;
+    bool needReadBack = true;
+
+    gpu_result = 0;
+
+
+    getNumBlocksAndThreads(voxelCount, blocks, threads);
+    // execute the kernel
+    runMaxIndexKernel(voxelCount, blocks, threads, d_idata, d_odata, d_index, false);
+
+    // sum partial block sums on GPU
+    int s=blocks;
+
+    while (s > 1)
+    {
+        int threads = 0, blocks = 0;
+        getNumBlocksAndThreads(s, blocks, threads);
+
+        runMaxIndexKernel(s, blocks, threads, d_odata, d_odata, d_index, true);
+        s = (s + (threads*2-1)) / (threads*2);
+    }
+
+    if (s > 1)
+    {
+        printf("Oops, not a power of 2?\n");
+        //      // copy result from device to host
+        //d_odata.CopyDeviceToHost(h_odata, s * sizeof(float));
+
+        //      for (int i=0; i < s; i++)
+        //      {
+        //          gpu_result += h_odata[i];
+        //      }
+
+        //      needReadBack = false;
+    }
+
+
+
+    if (needReadBack)
+    {
+        // copy final sum from device to host
+        //d_odata.CopyDeviceToHost(&gpu_result, sizeof(float));
+    }
+
+}
+
+void CudaReducer::MaxIndexCplx(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, CudaDeviceVariable& d_index)
+{
+    int blocks;
+    int threads;
+    float gpu_result = 0;
+    bool needReadBack = true;
+
+    gpu_result = 0;
+
+
+    getNumBlocksAndThreads(voxelCount, blocks, threads);
+    // execute the kernel
+    runMaxIndexCplxKernel(voxelCount, blocks, threads, d_idata, d_odata, d_index, false);
+
+    // sum partial block sums on GPU
+    int s=blocks;
+
+    while (s > 1)
+    {
+        int threads = 0, blocks = 0;
+        getNumBlocksAndThreads(s, blocks, threads);
+
+        runMaxIndexKernel(s, blocks, threads, d_odata, d_odata, d_index, true);
+        s = (s + (threads*2-1)) / (threads*2);
+    }
+
+    if (s > 1)
+    {
+        printf("Oops, not a power of 2?\n");
+        //      // copy result from device to host
+        //d_odata.CopyDeviceToHost(h_odata, s * sizeof(float));
+
+        //      for (int i=0; i < s; i++)
+        //      {
+        //          gpu_result += h_odata[i];
+        //      }
+
+        //      needReadBack = false;
+    }
+
+
+
+    if (needReadBack)
+    {
+        // copy final sum from device to host
+        //d_odata.CopyDeviceToHost(&gpu_result, sizeof(float));
+    }
+
+}
+
+
+void CudaReducer::MaxIndexMasked(CudaDeviceVariable& d_idata,
+                                 CudaDeviceVariable& d_odata,
+                                 CudaDeviceVariable& d_maskdata,
+                                 CudaDeviceVariable& d_index)
 {
 	int blocks;
 	int threads;
@@ -112,7 +238,7 @@ void CudaReducer::MaxIndex(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_od
 	
     getNumBlocksAndThreads(voxelCount, blocks, threads);
     // execute the kernel
-    runMaxIndexKernel(voxelCount, blocks, threads, d_idata, d_odata, d_index, false);
+    runMaxIndexMaskedKernel(voxelCount, blocks, threads, d_idata, d_odata, d_maskdata, d_index, false);
 
     // sum partial block sums on GPU
     int s=blocks;
@@ -150,7 +276,10 @@ void CudaReducer::MaxIndex(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_od
 
 }
 
-void CudaReducer::MaxIndexCplx(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, CudaDeviceVariable& d_index)
+void CudaReducer::MaxIndexMaskedCplx(CudaDeviceVariable& d_idata,
+                                     CudaDeviceVariable& d_odata,
+                                     CudaDeviceVariable& d_maskdata,
+                                     CudaDeviceVariable& d_index)
 {
 	int blocks;
 	int threads;
@@ -162,7 +291,7 @@ void CudaReducer::MaxIndexCplx(CudaDeviceVariable& d_idata, CudaDeviceVariable& 
 	
     getNumBlocksAndThreads(voxelCount, blocks, threads);
     // execute the kernel
-    runMaxIndexCplxKernel(voxelCount, blocks, threads, d_idata, d_odata, d_index, false);
+    runMaxIndexMaskedCplxKernel(voxelCount, blocks, threads, d_idata, d_odata, d_maskdata, d_index, false);
 
     // sum partial block sums on GPU
     int s=blocks;
@@ -400,11 +529,9 @@ void CudaReducer::MaskedSumCplx(CudaDeviceVariable& d_idata, CudaDeviceVariable&
 
 }
 
-
-
 void CudaReducer::runMaxIndexKernel(int size, int blocks, int threads, CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, CudaDeviceVariable& d_index, bool readIndex)
 {
-	CudaKernel* kernel;
+    CudaKernel* kernel;
     dim3 dimBlock(threads, 1, 1);
     dim3 dimGrid(blocks, 1, 1);
 
@@ -412,7 +539,7 @@ void CudaReducer::runMaxIndexKernel(int size, int blocks, int threads, CudaDevic
     // worth of shared memory so that we don't index shared memory out of bounds
     int smemSize = (threads <= 32) ? 4 * threads * sizeof(float) : 2 * threads * sizeof(float);
 
-	switch (threads)
+    switch (threads)
     {
         case 512:
             kernel = maxIndex512; break;
@@ -435,7 +562,7 @@ void CudaReducer::runMaxIndexKernel(int size, int blocks, int threads, CudaDevic
         case  1:
             kernel = maxIndex1; break;
     }
-	
+
     CUdeviceptr in_dptr = d_idata.GetDevicePtr();
     CUdeviceptr out_dptr = d_odata.GetDevicePtr();
     CUdeviceptr index_dptr = d_index.GetDevicePtr();
@@ -447,17 +574,17 @@ void CudaReducer::runMaxIndexKernel(int size, int blocks, int threads, CudaDevic
     arglist[1] = &out_dptr;
     arglist[2] = &index_dptr;
     arglist[3] = &n;
-	arglist[4] = &readIndex;
+    arglist[4] = &readIndex;
 
     cudaSafeCall(cuLaunchKernel(kernel->GetCUfunction(), dimGrid.x, dimGrid.y,
-		dimGrid.z, dimBlock.x, dimBlock.y, dimBlock.z, smemSize, stream, arglist,NULL));
+                                dimGrid.z, dimBlock.x, dimBlock.y, dimBlock.z, smemSize, stream, arglist,NULL));
 
     delete[] arglist;
 }
 
 void CudaReducer::runMaxIndexCplxKernel(int size, int blocks, int threads, CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, CudaDeviceVariable& d_index, bool readIndex)
 {
-	CudaKernel* kernel;
+    CudaKernel* kernel;
     dim3 dimBlock(threads, 1, 1);
     dim3 dimGrid(blocks, 1, 1);
 
@@ -465,7 +592,7 @@ void CudaReducer::runMaxIndexCplxKernel(int size, int blocks, int threads, CudaD
     // worth of shared memory so that we don't index shared memory out of bounds
     int smemSize = (threads <= 32) ? 4 * threads * sizeof(float) : 2 * threads * sizeof(float);
 
-	switch (threads)
+    switch (threads)
     {
         case 512:
             kernel = maxIndexCplx512; break;
@@ -488,7 +615,7 @@ void CudaReducer::runMaxIndexCplxKernel(int size, int blocks, int threads, CudaD
         case  1:
             kernel = maxIndexCplx1; break;
     }
-	
+
     CUdeviceptr in_dptr = d_idata.GetDevicePtr();
     CUdeviceptr out_dptr = d_odata.GetDevicePtr();
     CUdeviceptr index_dptr = d_index.GetDevicePtr();
@@ -500,7 +627,127 @@ void CudaReducer::runMaxIndexCplxKernel(int size, int blocks, int threads, CudaD
     arglist[1] = &out_dptr;
     arglist[2] = &index_dptr;
     arglist[3] = &n;
-	arglist[4] = &readIndex;
+    arglist[4] = &readIndex;
+
+    cudaSafeCall(cuLaunchKernel(kernel->GetCUfunction(), dimGrid.x, dimGrid.y,
+                                dimGrid.z, dimBlock.x, dimBlock.y, dimBlock.z, smemSize, stream, arglist,NULL));
+
+    delete[] arglist;
+}
+
+void CudaReducer::runMaxIndexMaskedKernel(int size, int blocks, int threads,
+                                    CudaDeviceVariable& d_idata,
+                                    CudaDeviceVariable& d_odata,
+                                    CudaDeviceVariable& d_maskdata,
+                                    CudaDeviceVariable& d_index,
+                                    bool readIndex)
+{
+	CudaKernel* kernel;
+    dim3 dimBlock(threads, 1, 1);
+    dim3 dimGrid(blocks, 1, 1);
+
+    // when there is only one warp per block, we need to allocate two warps
+    // worth of shared memory so that we don't index shared memory out of bounds
+    int smemSize = (threads <= 32) ? 4 * threads * sizeof(float) : 2 * threads * sizeof(float);
+
+	switch (threads)
+    {
+        case 512:
+            kernel = maxIndexMasked512; break;
+        case 256:
+            kernel = maxIndexMasked256; break;
+        case 128:
+            kernel = maxIndexMasked128; break;
+        case 64:
+            kernel = maxIndexMasked64; break;
+        case 32:
+            kernel = maxIndexMasked32; break;
+        case 16:
+            kernel = maxIndexMasked16; break;
+        case  8:
+            kernel = maxIndexMasked8; break;
+        case  4:
+            kernel = maxIndexMasked4; break;
+        case  2:
+            kernel = maxIndexMasked2; break;
+        case  1:
+            kernel = maxIndexMasked1; break;
+    }
+	
+    CUdeviceptr in_dptr = d_idata.GetDevicePtr();
+    CUdeviceptr out_dptr = d_odata.GetDevicePtr();
+    CUdeviceptr mask_dptr = d_maskdata.GetDevicePtr();
+    CUdeviceptr index_dptr = d_index.GetDevicePtr();
+    int n = size;
+
+    void** arglist = (void**)new void*[6];
+
+    arglist[0] = &in_dptr;
+    arglist[1] = &out_dptr;
+    arglist[2] = &mask_dptr;
+    arglist[3] = &index_dptr;
+    arglist[4] = &n;
+	arglist[5] = &readIndex;
+
+    cudaSafeCall(cuLaunchKernel(kernel->GetCUfunction(), dimGrid.x, dimGrid.y,
+		dimGrid.z, dimBlock.x, dimBlock.y, dimBlock.z, smemSize, stream, arglist,NULL));
+
+    delete[] arglist;
+}
+
+void CudaReducer::runMaxIndexMaskedCplxKernel(int size, int blocks, int threads,
+                                              CudaDeviceVariable& d_idata,
+                                              CudaDeviceVariable& d_odata,
+                                              CudaDeviceVariable& d_maskdata,
+                                              CudaDeviceVariable& d_index,
+                                              bool readIndex)
+{
+	CudaKernel* kernel;
+    dim3 dimBlock(threads, 1, 1);
+    dim3 dimGrid(blocks, 1, 1);
+
+    // when there is only one warp per block, we need to allocate two warps
+    // worth of shared memory so that we don't index shared memory out of bounds
+    int smemSize = (threads <= 32) ? 4 * threads * sizeof(float) : 2 * threads * sizeof(float);
+
+	switch (threads)
+    {
+        case 512:
+            kernel = maxIndexMaskedCplx512; break;
+        case 256:
+            kernel = maxIndexMaskedCplx256; break;
+        case 128:
+            kernel = maxIndexMaskedCplx128; break;
+        case 64:
+            kernel = maxIndexMaskedCplx64; break;
+        case 32:
+            kernel = maxIndexMaskedCplx32; break;
+        case 16:
+            kernel = maxIndexMaskedCplx16; break;
+        case  8:
+            kernel = maxIndexMaskedCplx8; break;
+        case  4:
+            kernel = maxIndexMaskedCplx4; break;
+        case  2:
+            kernel = maxIndexMaskedCplx2; break;
+        case  1:
+            kernel = maxIndexMaskedCplx1; break;
+    }
+	
+    CUdeviceptr in_dptr = d_idata.GetDevicePtr();
+    CUdeviceptr out_dptr = d_odata.GetDevicePtr();
+    CUdeviceptr mask_dptr = d_maskdata.GetDevicePtr();
+    CUdeviceptr index_dptr = d_index.GetDevicePtr();
+    int n = size;
+
+    void** arglist = (void**)new void*[6];
+
+    arglist[0] = &in_dptr;
+    arglist[1] = &out_dptr;
+    arglist[2] = &mask_dptr;
+    arglist[3] = &index_dptr;
+    arglist[4] = &n;
+	arglist[5] = &readIndex;
 
     cudaSafeCall(cuLaunchKernel(kernel->GetCUfunction(), dimGrid.x, dimGrid.y,
 		dimGrid.z, dimBlock.x, dimBlock.y, dimBlock.z, smemSize, stream, arglist,NULL));

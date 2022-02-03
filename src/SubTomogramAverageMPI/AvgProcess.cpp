@@ -645,7 +645,7 @@ maxVals_t AvgProcess::executePadfield(float* _data,
 //        }
 
         // Apply cc-mask
-        mul.MulVol(d_real_ccMask, d_ffttemp);
+        //mul.MulVol(d_real_ccMask, d_ffttemp);
         counter++;
 
         if (computeCCValOnly)
@@ -657,7 +657,7 @@ maxVals_t AvgProcess::executePadfield(float* _data,
         else
         {
             //find new Maximum value and store position and value
-            reduce.MaxIndexCplx(d_ffttemp, d_buffer, d_index);
+            reduce.MaxIndexMaskedCplx(d_ffttemp, d_buffer, d_real_ccMask, d_index);
 //            {
 //                auto tmp = new float[3];
 //                d_index.
