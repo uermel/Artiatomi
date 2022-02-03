@@ -382,7 +382,7 @@ maxVals_t AvgProcess::execute(float* _data,
 
         fft.FFTShift2(d_referenceCplx, d_ffttemp);
 
-        mul.MulVol(d_ccMask, d_ffttemp);
+        //mul.MulVol(d_ccMask, d_ffttemp);
         counter++;
 
         if (computeCCValOnly)
@@ -394,7 +394,7 @@ maxVals_t AvgProcess::execute(float* _data,
         else
         {
             //find new Maximum value and store position and value
-            reduce.MaxIndexCplx(d_ffttemp, d_buffer, d_index);
+            reduce.MaxIndexMaskedCplx(d_ffttemp, d_buffer, d_ccMask, d_index);
         }
 
         max.Max(maxVals, d_index, d_buffer, rphi, rpsi, rthe);
