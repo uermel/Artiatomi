@@ -32,9 +32,9 @@
 #include "config/Config.h"
 #include "io/EMFile.h"
 #include "CudaReducer.h"
-#include "cuda/CudaContext.h"
-#include "cuda/CudaVariables.h"
-#include "cuda/CudaKernel.h"
+#include <CudaContext.h>
+#include <CudaVariables.h>
+#include <CudaKernel.h>
 #include "AvgProcess.h"
 #include <time.h>
 #include <iomanip>

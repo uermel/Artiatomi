@@ -479,8 +479,8 @@ namespace Cuda
 
 		if (mComputeMode == CU_COMPUTEMODE_DEFAULT)
 			cout << "  CUDA compute mode:                                " << "Default compute mode" << endl;
-		/*	if (mComputeMode == CU_COMPUTEMODE_EXCLUSIVE)
-			cout << "  CUDA compute mode:                                " << "Compute-exclusive mode" << endl;*/
+		//	if (mComputeMode == CU_COMPUTEMODE_EXCLUSIVE)
+		//	cout << "  CUDA compute mode:                                " << "Compute-exclusive mode" << endl;
 		if (mComputeMode == CU_COMPUTEMODE_PROHIBITED)
 			cout << "  CUDA compute mode:                                " << "Compute-prohibited mode" << endl;
 

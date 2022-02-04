@@ -47,7 +47,7 @@ struct SharedMemory
 	If blockSize > 32, allocate blockSize*sizeof(T) bytes.
 */
 template <unsigned int blockSize>
-__global__ void
+__device__ void
 reduce(float *g_idata, float *g_odata, unsigned int n)
 {
 	float *sdata = SharedMemory<float>();
@@ -152,53 +152,33 @@ reduce(float *g_idata, float *g_odata, unsigned int n)
 		g_odata[blockIdx.x] = sdata[0];
 }
 
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-// Wrapper function for kernel launch
-////////////////////////////////////////////////////////////////////////////////
-
-void reduce(int size, int threads, int blocks, int whichKernel, float *d_idata, float *d_odata)
-{
-	dim3 dimBlock(threads, 1, 1);
-	dim3 dimGrid(blocks, 1, 1);
-
-	// when there is only one warp per block, we need to allocate two warps
-	// worth of shared memory so that we don't index shared memory out of bounds
-	int smemSize = (threads <= 32) ? 2 * threads * sizeof(float) : threads * sizeof(float);
-
-	switch (threads)
-	{
-		case 512:
-			reduce<512><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case 256:
-			reduce<256><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case 128:
-			reduce<128><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case 64:
-			reduce< 64><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case 32:
-			reduce< 32><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case 16:
-			reduce< 16><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case  8:
-			reduce<  8><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case  4:
-			reduce<  4><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case  2:
-			reduce<  2><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case  1:
-			reduce<  1><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-				
-	}
-}
+// Declaration of templated functions
+extern "C" __global__ void
+reduce_512(float *g_idata, float *g_odata, unsigned int n) {reduce<512>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduce_256(float *g_idata, float *g_odata, unsigned int n) {reduce<256>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduce_128(float *g_idata, float *g_odata, unsigned int n) {reduce<128>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduce_64(float *g_idata, float *g_odata, unsigned int n)  {reduce< 64>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduce_32(float *g_idata, float *g_odata, unsigned int n)  {reduce< 32>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduce_16(float *g_idata, float *g_odata, unsigned int n)  {reduce< 16>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduce_8(float *g_idata, float *g_odata, unsigned int n)   {reduce<  8>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduce_4(float *g_idata, float *g_odata, unsigned int n)   {reduce<  4>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduce_2(float *g_idata, float *g_odata, unsigned int n)   {reduce<  2>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduce_1(float *g_idata, float *g_odata, unsigned int n)   {reduce<  1>(g_idata, g_odata, n);}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <unsigned int blockSize>
-__global__ void
+__device__ void
 reduceCplx(float2 *g_idata, float *g_odata, unsigned int n)
 {
 	float *sdata = SharedMemory<float>();
@@ -303,50 +283,33 @@ reduceCplx(float2 *g_idata, float *g_odata, unsigned int n)
 		g_odata[blockIdx.x] = sdata[0];
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Wrapper function for kernel launch
-////////////////////////////////////////////////////////////////////////////////
-
-void reduceCplx(int size, int threads, int blocks, int whichKernel, float2 *d_idata, float *d_odata)
-{
-	dim3 dimBlock(threads, 1, 1);
-	dim3 dimGrid(blocks, 1, 1);
-
-	// when there is only one warp per block, we need to allocate two warps
-	// worth of shared memory so that we don't index shared memory out of bounds
-	int smemSize = (threads <= 32) ? 2 * threads * sizeof(float) : threads * sizeof(float);
-
-	switch (threads)
-	{
-		case 512:
-			reduceCplx<512><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case 256:
-			reduceCplx<256><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case 128:
-			reduceCplx<128><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case 64:
-			reduceCplx< 64><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case 32:
-			reduceCplx< 32><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case 16:
-			reduceCplx< 16><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case  8:
-			reduceCplx<  8><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case  4:
-			reduceCplx<  4><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case  2:
-			reduceCplx<  2><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case  1:
-			reduceCplx<  1><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-				
-	}
-}
+// Declaration of templated functions
+extern "C" __global__ void
+reduceCplx_512(float2 *g_idata, float *g_odata, unsigned int n) {reduceCplx<512>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceCplx_256(float2 *g_idata, float *g_odata, unsigned int n) {reduceCplx<256>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceCplx_128(float2 *g_idata, float *g_odata, unsigned int n) {reduceCplx<128>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceCplx_64(float2 *g_idata, float *g_odata, unsigned int n)  {reduceCplx< 64>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceCplx_32(float2 *g_idata, float *g_odata, unsigned int n)  {reduceCplx< 32>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceCplx_16(float2 *g_idata, float *g_odata, unsigned int n)  {reduceCplx< 16>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceCplx_8(float2 *g_idata, float *g_odata, unsigned int n)   {reduceCplx<  8>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceCplx_4(float2 *g_idata, float *g_odata, unsigned int n)   {reduceCplx<  4>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceCplx_2(float2 *g_idata, float *g_odata, unsigned int n)   {reduceCplx<  2>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceCplx_1(float2 *g_idata, float *g_odata, unsigned int n)   {reduceCplx<  1>(g_idata, g_odata, n);}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <unsigned int blockSize>
-__global__ void
+__device__ void
 maskedReduceCplx(float2 *g_idata, float* g_maskdata, float *g_odata, unsigned int n)
 {
     float *sdata = SharedMemory<float>();
@@ -451,50 +414,33 @@ maskedReduceCplx(float2 *g_idata, float* g_maskdata, float *g_odata, unsigned in
         g_odata[blockIdx.x] = sdata[0];
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Wrapper function for kernel launch
-////////////////////////////////////////////////////////////////////////////////
-
-void maskedReduceCplx(int size, int threads, int blocks, int whichKernel, float2 *d_idata, float* d_maskdata, float *d_odata)
-{
-    dim3 dimBlock(threads, 1, 1);
-    dim3 dimGrid(blocks, 1, 1);
-
-    // when there is only one warp per block, we need to allocate two warps
-    // worth of shared memory so that we don't index shared memory out of bounds
-    int smemSize = (threads <= 32) ? 2 * threads * sizeof(float) : threads * sizeof(float);
-
-    switch (threads)
-    {
-        case 512:
-            maskedReduceCplx<512><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
-        case 256:
-            maskedReduceCplx<256><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
-        case 128:
-            maskedReduceCplx<128><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
-        case 64:
-            maskedReduceCplx< 64><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
-        case 32:
-            maskedReduceCplx< 32><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
-        case 16:
-            maskedReduceCplx< 16><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
-        case  8:
-            maskedReduceCplx<  8><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
-        case  4:
-            maskedReduceCplx<  4><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
-        case  2:
-            maskedReduceCplx<  2><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
-        case  1:
-            maskedReduceCplx<  1><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_maskdata, d_odata, size); break;
-
-    }
-}
+// Declaration of templated functions
+extern "C" __global__ void
+maskedReduceCplx_512(float2 *g_idata, float* g_maskdata, float *g_odata, unsigned int n) {maskedReduceCplx<512>(g_idata, g_maskdata, g_odata, n);}
+extern "C" __global__ void
+maskedReduceCplx_256(float2 *g_idata, float* g_maskdata, float *g_odata, unsigned int n) {maskedReduceCplx<256>(g_idata, g_maskdata, g_odata, n);}
+extern "C" __global__ void
+maskedReduceCplx_128(float2 *g_idata, float* g_maskdata, float *g_odata, unsigned int n) {maskedReduceCplx<128>(g_idata, g_maskdata, g_odata, n);}
+extern "C" __global__ void
+maskedReduceCplx_64(float2 *g_idata, float* g_maskdata, float *g_odata, unsigned int n)  {maskedReduceCplx< 64>(g_idata, g_maskdata, g_odata, n);}
+extern "C" __global__ void
+maskedReduceCplx_32(float2 *g_idata, float* g_maskdata, float *g_odata, unsigned int n)  {maskedReduceCplx< 32>(g_idata, g_maskdata, g_odata, n);}
+extern "C" __global__ void
+maskedReduceCplx_16(float2 *g_idata, float* g_maskdata, float *g_odata, unsigned int n)  {maskedReduceCplx< 16>(g_idata, g_maskdata, g_odata, n);}
+extern "C" __global__ void
+maskedReduceCplx_8(float2 *g_idata, float* g_maskdata, float *g_odata, unsigned int n)   {maskedReduceCplx<  8>(g_idata, g_maskdata, g_odata, n);}
+extern "C" __global__ void
+maskedReduceCplx_4(float2 *g_idata, float* g_maskdata, float *g_odata, unsigned int n)   {maskedReduceCplx<  4>(g_idata, g_maskdata, g_odata, n);}
+extern "C" __global__ void
+maskedReduceCplx_2(float2 *g_idata, float* g_maskdata, float *g_odata, unsigned int n)   {maskedReduceCplx<  2>(g_idata, g_maskdata, g_odata, n);}
+extern "C" __global__ void
+maskedReduceCplx_1(float2 *g_idata, float* g_maskdata, float *g_odata, unsigned int n)   {maskedReduceCplx<  1>(g_idata, g_maskdata, g_odata, n);}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <unsigned int blockSize>
-__global__ void
+__device__ void
 reduceSqrCplx(float2 *g_idata, float *g_odata, unsigned int n)
 {
 	float *sdata = SharedMemory<float>();
@@ -599,59 +545,34 @@ reduceSqrCplx(float2 *g_idata, float *g_odata, unsigned int n)
 		g_odata[blockIdx.x] = sdata[0];
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Wrapper function for kernel launch
-////////////////////////////////////////////////////////////////////////////////
+// Declaration of templated functions
+extern "C" __global__ void
+reduceSqrCplx_512(float2 *g_idata, float *g_odata, unsigned int n) {reduceSqrCplx<512>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceSqrCplx_256(float2 *g_idata, float *g_odata, unsigned int n) {reduceSqrCplx<256>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceSqrCplx_128(float2 *g_idata, float *g_odata, unsigned int n) {reduceSqrCplx<128>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceSqrCplx_64(float2 *g_idata, float *g_odata, unsigned int n)  {reduceSqrCplx< 64>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceSqrCplx_32(float2 *g_idata, float *g_odata, unsigned int n)  {reduceSqrCplx< 32>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceSqrCplx_16(float2 *g_idata, float *g_odata, unsigned int n)  {reduceSqrCplx< 16>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceSqrCplx_8(float2 *g_idata, float *g_odata, unsigned int n)   {reduceSqrCplx<  8>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceSqrCplx_4(float2 *g_idata, float *g_odata, unsigned int n)   {reduceSqrCplx<  4>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceSqrCplx_2(float2 *g_idata, float *g_odata, unsigned int n)   {reduceSqrCplx<  2>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceSqrCplx_1(float2 *g_idata, float *g_odata, unsigned int n)   {reduceSqrCplx<  1>(g_idata, g_odata, n);}
 
-void reduceSqrCplx(int size, int threads, int blocks, int whichKernel, float2 *d_idata, float *d_odata)
-{
-	dim3 dimBlock(threads, 1, 1);
-	dim3 dimGrid(blocks, 1, 1);
-
-	// when there is only one warp per block, we need to allocate two warps
-	// worth of shared memory so that we don't index shared memory out of bounds
-	int smemSize = (threads <= 32) ? 2 * threads * sizeof(float) : threads * sizeof(float);
-
-	switch (threads)
-	{
-		case 512:
-			reduceSqrCplx<512><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case 256:
-			reduceSqrCplx<256><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case 128:
-			reduceSqrCplx<128><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case 64:
-			reduceSqrCplx< 64><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case 32:
-			reduceSqrCplx< 32><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case 16:
-			reduceSqrCplx< 16><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case  8:
-			reduceSqrCplx<  8><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case  4:
-			reduceSqrCplx<  4><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case  2:
-			reduceSqrCplx<  2><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-		case  1:
-			reduceSqrCplx<  1><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, size); break;
-				
-	}
-}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/*
-	This version adds multiple elements per thread sequentially.  This reduces the overall
-	cost of the algorithm while keeping the work complexity O(n) and the step complexity O(log n).
-	(Brent's Theorem optimization)
-
-	Note, this kernel needs a minimum of 64*sizeof(T) bytes of shared memory.
-	In other words if blockSize <= 32, allocate 64*sizeof(T) bytes.
-	If blockSize > 32, allocate blockSize*sizeof(T) bytes.
-*/
 template <unsigned int blockSize>
-__global__ void
+__device__ void
 maxIndex(float *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex)
 {
     //float *sdata = SharedMemory<float>();
@@ -817,53 +738,33 @@ maxIndex(float *g_idata, float *g_odata, int* index, unsigned int n, bool readIn
     }
 }
 
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-// Wrapper function for kernel launch
-////////////////////////////////////////////////////////////////////////////////
-
-void maxIndex(int size, int threads, int blocks, int whichKernel, float *d_idata, float *d_odata, int *index)
-{
-    dim3 dimBlock(threads, 1, 1);
-    dim3 dimGrid(blocks, 1, 1);
-
-    // when there is only one warp per block, we need to allocate two warps
-    // worth of shared memory so that we don't index shared memory out of bounds
-    int smemSize = (threads <= 32) ? 4 * threads * sizeof(float) : 2 * threads * sizeof(float);
-
-    switch (threads)
-    {
-        case 512:
-            maxIndex<512><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-        case 256:
-            maxIndex<256><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-        case 128:
-            maxIndex<128><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-        case 64:
-            maxIndex< 64><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-        case 32:
-            maxIndex< 32><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-        case 16:
-            maxIndex< 16><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-        case  8:
-            maxIndex<  8><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-        case  4:
-            maxIndex<  4><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-        case  2:
-            maxIndex<  2><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-        case  1:
-            maxIndex<  1><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-
-    }
-}
+// Declaration of templated functions
+extern "C" __global__ void
+maxIndex_512(float *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex) {maxIndex<512>(g_idata, g_odata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndex_256(float *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex) {maxIndex<256>(g_idata, g_odata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndex_128(float *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex) {maxIndex<128>(g_idata, g_odata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndex_64(float *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex)  {maxIndex< 64>(g_idata, g_odata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndex_32(float *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex)  {maxIndex< 32>(g_idata, g_odata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndex_16(float *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex)  {maxIndex< 16>(g_idata, g_odata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndex_8(float *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex)   {maxIndex<  8>(g_idata, g_odata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndex_4(float *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex)   {maxIndex<  4>(g_idata, g_odata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndex_2(float *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex)   {maxIndex<  2>(g_idata, g_odata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndex_1(float *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex)   {maxIndex<  1>(g_idata, g_odata, index, n, readIndex);}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <unsigned int blockSize>
-__global__ void
+__device__ void
 maxIndexCplx(float2 *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex)
 {
     //float *sdata = SharedMemory<float>();
@@ -1029,62 +930,34 @@ maxIndexCplx(float2 *g_idata, float *g_odata, int* index, unsigned int n, bool r
     }
 }
 
+// Declaration of templated functions
+extern "C" __global__ void
+maxIndexCplx_512(float2 *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex) {maxIndexCplx<512>(g_idata, g_odata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexCplx_256(float2 *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex) {maxIndexCplx<256>(g_idata, g_odata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexCplx_128(float2 *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex) {maxIndexCplx<128>(g_idata, g_odata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexCplx_64(float2 *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex)  {maxIndexCplx< 64>(g_idata, g_odata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexCplx_32(float2 *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex)  {maxIndexCplx< 32>(g_idata, g_odata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexCplx_16(float2 *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex)  {maxIndexCplx< 16>(g_idata, g_odata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexCplx_8(float2 *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex)   {maxIndexCplx<  8>(g_idata, g_odata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexCplx_4(float2 *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex)   {maxIndexCplx<  4>(g_idata, g_odata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexCplx_2(float2 *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex)   {maxIndexCplx<  2>(g_idata, g_odata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexCplx_1(float2 *g_idata, float *g_odata, int* index, unsigned int n, bool readIndex)   {maxIndexCplx<  1>(g_idata, g_odata, index, n, readIndex);}
 
-
-
-////////////////////////////////////////////////////////////////////////////////
-// Wrapper function for kernel launch
-////////////////////////////////////////////////////////////////////////////////
-
-void maxIndexCplx(int size, int threads, int blocks, int whichKernel, float2 *d_idata, float *d_odata, int *index)
-{
-    dim3 dimBlock(threads, 1, 1);
-    dim3 dimGrid(blocks, 1, 1);
-
-    // when there is only one warp per block, we need to allocate two warps
-    // worth of shared memory so that we don't index shared memory out of bounds
-    int smemSize = (threads <= 32) ? 4 * threads * sizeof(float) : 2 * threads * sizeof(float);
-
-    switch (threads)
-    {
-        case 512:
-            maxIndexCplx<512><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-        case 256:
-            maxIndexCplx<256><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-        case 128:
-            maxIndexCplx<128><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-        case 64:
-            maxIndexCplx< 64><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-        case 32:
-            maxIndexCplx< 32><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-        case 16:
-            maxIndexCplx< 16><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-        case  8:
-            maxIndexCplx<  8><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-        case  4:
-            maxIndexCplx<  4><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-        case  2:
-            maxIndexCplx<  2><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-        case  1:
-            maxIndexCplx<  1><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, index, size, true); break;
-
-    }
-}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/*
-	This version adds multiple elements per thread sequentially.  This reduces the overall
-	cost of the algorithm while keeping the work complexity O(n) and the step complexity O(log n).
-	(Brent's Theorem optimization)
-
-	Note, this kernel needs a minimum of 64*sizeof(T) bytes of shared memory.
-	In other words if blockSize <= 32, allocate 64*sizeof(T) bytes.
-	If blockSize > 32, allocate blockSize*sizeof(T) bytes.
-*/
 template <unsigned int blockSize>
-__global__ void
+__device__ void
 maxIndexMasked(float *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex)
 {
 	//float *sdata = SharedMemory<float>();
@@ -1250,53 +1123,34 @@ maxIndexMasked(float *g_idata, float *g_odata, float *g_maskdata, int* index, un
 	}
 }
 
+// Declaration of templated functions
+extern "C" __global__ void
+maxIndexMasked_512(float *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex) {maxIndexMasked<512>(g_idata, g_odata, g_maskdata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexMasked_256(float *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex) {maxIndexMasked<256>(g_idata, g_odata, g_maskdata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexMasked_128(float *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex) {maxIndexMasked<128>(g_idata, g_odata, g_maskdata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexMasked_64(float *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex)  {maxIndexMasked< 64>(g_idata, g_odata, g_maskdata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexMasked_32(float *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex)  {maxIndexMasked< 32>(g_idata, g_odata, g_maskdata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexMasked_16(float *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex)  {maxIndexMasked< 16>(g_idata, g_odata, g_maskdata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexMasked_8(float *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex)   {maxIndexMasked<  8>(g_idata, g_odata, g_maskdata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexMasked_4(float *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex)   {maxIndexMasked<  4>(g_idata, g_odata, g_maskdata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexMasked_2(float *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex)   {maxIndexMasked<  2>(g_idata, g_odata, g_maskdata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexMasked_1(float *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex)   {maxIndexMasked<  1>(g_idata, g_odata, g_maskdata, index, n, readIndex);}
 
-
-
-////////////////////////////////////////////////////////////////////////////////
-// Wrapper function for kernel launch
-////////////////////////////////////////////////////////////////////////////////
-
-void maxIndexMasked(int size, int threads, int blocks, int whichKernel, float *d_idata, float *d_odata, float *d_maskdata, int *index)
-{
-	dim3 dimBlock(threads, 1, 1);
-	dim3 dimGrid(blocks, 1, 1);
-
-	// when there is only one warp per block, we need to allocate two warps
-	// worth of shared memory so that we don't index shared memory out of bounds
-	int smemSize = (threads <= 32) ? 4 * threads * sizeof(float) : 2 * threads * sizeof(float);
-
-	switch (threads)
-	{
-		case 512:
-            maxIndexMasked<512><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-		case 256:
-            maxIndexMasked<256><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-		case 128:
-            maxIndexMasked<128><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-		case 64:
-            maxIndexMasked< 64><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-		case 32:
-            maxIndexMasked< 32><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-		case 16:
-            maxIndexMasked< 16><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-		case  8:
-            maxIndexMasked<  8><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-		case  4:
-            maxIndexMasked<  4><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-		case  2:
-            maxIndexMasked<  2><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-		case  1:
-            maxIndexMasked<  1><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-				
-	}
-}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <unsigned int blockSize>
-__global__ void
+__device__ void
 maxIndexMaskedCplx(float2 *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex)
 {
 	//float *sdata = SharedMemory<float>();
@@ -1462,44 +1316,24 @@ maxIndexMaskedCplx(float2 *g_idata, float *g_odata, float *g_maskdata, int* inde
 	}
 }
 
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-// Wrapper function for kernel launch
-////////////////////////////////////////////////////////////////////////////////
-
-void maxIndexMaskedCplx(int size, int threads, int blocks, int whichKernel, float2 *d_idata, float *d_odata, float *d_maskdata, int *index)
-{
-	dim3 dimBlock(threads, 1, 1);
-	dim3 dimGrid(blocks, 1, 1);
-
-	// when there is only one warp per block, we need to allocate two warps
-	// worth of shared memory so that we don't index shared memory out of bounds
-	int smemSize = (threads <= 32) ? 4 * threads * sizeof(float) : 2 * threads * sizeof(float);
-
-	switch (threads)
-	{
-		case 512:
-            maxIndexMaskedCplx<512><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-		case 256:
-            maxIndexMaskedCplx<256><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-		case 128:
-            maxIndexMaskedCplx<128><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-		case 64:
-            maxIndexMaskedCplx< 64><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-		case 32:
-            maxIndexMaskedCplx< 32><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-		case 16:
-            maxIndexMaskedCplx< 16><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-		case  8:
-            maxIndexMaskedCplx<  8><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-		case  4:
-            maxIndexMaskedCplx<  4><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-		case  2:
-            maxIndexMaskedCplx<  2><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-		case  1:
-            maxIndexMaskedCplx<  1><<< dimGrid, dimBlock, smemSize >>>(d_idata, d_odata, d_maskdata, index, size, true); break;
-				
-	}
-}
+// Declaration of templated functions
+extern "C" __global__ void
+maxIndexMaskedCplx_512(float2 *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex) {maxIndexMaskedCplx<512>(g_idata, g_odata, g_maskdata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexMaskedCplx_256(float2 *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex) {maxIndexMaskedCplx<256>(g_idata, g_odata, g_maskdata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexMaskedCplx_128(float2 *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex) {maxIndexMaskedCplx<128>(g_idata, g_odata, g_maskdata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexMaskedCplx_64(float2 *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex)  {maxIndexMaskedCplx< 64>(g_idata, g_odata, g_maskdata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexMaskedCplx_32(float2 *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex)  {maxIndexMaskedCplx< 32>(g_idata, g_odata, g_maskdata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexMaskedCplx_16(float2 *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex)  {maxIndexMaskedCplx< 16>(g_idata, g_odata, g_maskdata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexMaskedCplx_8(float2 *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex)   {maxIndexMaskedCplx<  8>(g_idata, g_odata, g_maskdata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexMaskedCplx_4(float2 *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex)   {maxIndexMaskedCplx<  4>(g_idata, g_odata, g_maskdata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexMaskedCplx_2(float2 *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex)   {maxIndexMaskedCplx<  2>(g_idata, g_odata, g_maskdata, index, n, readIndex);}
+extern "C" __global__ void
+maxIndexMaskedCplx_1(float2 *g_idata, float *g_odata, float *g_maskdata, int* index, unsigned int n, bool readIndex)   {maxIndexMaskedCplx<  1>(g_idata, g_odata, g_maskdata, index, n, readIndex);}

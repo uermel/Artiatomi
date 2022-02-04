@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
-set(CMAKE_CUDA_COMPILER /usr/local/cuda-10.1/bin/nvcc)
+set(CMAKE_CUDA_COMPILER /usr/local/cuda-10.2/bin/nvcc)
 project(Artiatomi LANGUAGES CUDA CXX)
 
 set(CMAKE_BUILD_TYPE Debug)
@@ -19,7 +19,7 @@ set(ISA_PATH "src/ImageStackAlignator" CACHE PATH "Path to ImageStackAlignator s
 set(STA_PATH "src/SubTomogramAverageMPI" CACHE PATH "Path to SubTomogramAverageMPI source.")
 
 if(UNIX)
-	set(CUDA_PATH "/usr/local/cuda-10.1" CACHE PATH "Path to CUDA root")
+	set(CUDA_PATH "/usr/local/cuda-10.2" CACHE PATH "Path to CUDA root")
 endif()
 
 if(WIN32)
@@ -52,7 +52,7 @@ set(CUDA_LIBS ${CUDA_CUDA_LIBRARY}
 				${CUDA_LIBRARIES})
 
 #set(CUDA_LIBS ${CUDA_LIBRARIES})
-set(BIN2C_EXEC /usr/local/cuda-10.1/bin/bin2c) #in cuda toolkit binary path
+set(BIN2C_EXEC /usr/local/cuda-10.2/bin/bin2c) #in cuda toolkit binary path
 ######################### CUDA #############################
 if (UNIX)
 	set(OpenCL_INCLUDE_DIR "/usr/local/cuda/include")
@@ -297,7 +297,6 @@ set(STA_CUDA_HELPERS_SRC
         ${STA_PATH}/cuda/CudaContext.cpp
         ${STA_PATH}/cuda/CudaDeviceProperties.cpp
         ${STA_PATH}/cuda/CudaException.cpp
-        ${STA_PATH}/cuda/CudaGral.cpp
         ${STA_PATH}/cuda/CudaKernel.cpp
         ${STA_PATH}/cuda/CudaTextures.cpp
         ${STA_PATH}/cuda/CudaVariables.cpp)
@@ -687,7 +686,7 @@ endif()
 ######################### STA Common ########################
 set(STA_COMMON_SRC
         ${STA_FILEIO_SRC}
-        ${STA_CUDA_HELPERS_SRC}
+        ${CUDA_HELPERS_SRC}
         ${STA_CONFIG_SRC}
         ${MK_LOG_SRC}
         ${THREADING_SRC}
@@ -705,7 +704,7 @@ set(STA_COMMON_INC
         ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
         ${MPI_CXX_INCLUDE_DIRS}
         ${STA_FILEIO_INC}
-        ${STA_CUDA_HELPERS_INC}
+        ${CUDA_HELPERS_INC}
         ${STA_CONFIG_INC}
         ${STA_PATH}/SubTomogramAverageMPI)
 
@@ -713,7 +712,7 @@ set(STA_COMMON_LIB
         ${CUDA_LIBS}
         ${MPI_CXX_LIBRARIES}
         ${STA_FILEIO_LIB}
-        ${STA_CUDA_HELPERS_LIB}
+        ${CUDA_HELPERS_LIB}
         ${STA_CONFIG_LIB}
         ${MK_LOG_LIB}
         ${MINIMIZATION_LIB}
@@ -762,7 +761,7 @@ add_dependencies(SubTomogramAverageMPI sta_basic_ptx_header)
 
 target_include_directories(SubTomogramAverageMPI PUBLIC ${STA_INC})
 target_link_libraries(SubTomogramAverageMPI ${STA_LIB})
-target_compile_definitions(SubTomogramAverageMPI PUBLIC NO_OPENCL USE_MPI)
+target_compile_definitions(SubTomogramAverageMPI PUBLIC NO_OPENCL USE_MPI USE_CUDA)
 target_compile_options(SubTomogramAverageMPI PUBLIC -fpermissive)
 ######################### SubTomogramAverageMPI ########################
 
@@ -791,7 +790,7 @@ add_dependencies(AddParticles sta_basic_ptx_header)
 
 target_include_directories(AddParticles PUBLIC ${ADDPARTICLES_INC})
 target_link_libraries(AddParticles ${ADDPARTICLES_LIB})
-target_compile_definitions(AddParticles PUBLIC NO_OPENCL USE_MPI)
+target_compile_definitions(AddParticles PUBLIC NO_OPENCL USE_MPI USE_CUDA)
 target_compile_options(AddParticles PUBLIC -fpermissive)
 ######################### AddParticles ########################
 

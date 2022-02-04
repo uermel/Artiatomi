@@ -55,21 +55,35 @@ Cuda::CudaException::CudaException(string aFileName, int aLine, string aMessage,
 
 const char* Cuda::CudaException::what() const throw()
 {
-	return mMessage.c_str();
+    //TODO: delete
+//	string str = GetMessage();
+//
+//	char* cstr = new char [str.size()+1];
+//	strcpy (cstr, str.c_str());
+//
+//	return cstr;
+    return mMessage.c_str();
 }
 
 string Cuda::CudaException::GetMessage() const
 {
-	return mMessage;
+    //TODO: delete
+//	if (mFileName.length() == 0)
+//		return mMessage;
+//
+//	stringstream ss;
+//	ss << "CUDA Driver API error = ";
+//	ss << mErr << " from file " << mFileName << ", line " << mLine << ": " << mMessage << ".";
+//	return ss.str();
+    return mMessage;
 }
 
-
-
-
-
+//////////////////////
+/// CufftException ///
+//////////////////////
 
 Cuda::CufftException::CufftException()
-	: mFileName(), mMessage(), mLine(0)
+        : mFileName(), mMessage(), mLine(0)
 {
 
 }
@@ -80,36 +94,35 @@ Cuda::CufftException::~CufftException() throw()
 }
 
 Cuda::CufftException::CufftException(string aMessage)
-	: mFileName(), mMessage(aMessage), mLine()
+        : mFileName(), mMessage(aMessage), mLine()
 {
-	stringstream ss;
-	ss << "CUDA CUFFT error: " << mMessage << ".";
-	mMessage = ss.str();
+    stringstream ss;
+    ss << "CUDA CUFFT error: " << mMessage << ".";
+    mMessage = ss.str();
 }
 
 Cuda::CufftException::CufftException(string aFileName, int aLine, string aMessage, cufftResult aErr)
-	: mFileName(aFileName), mMessage(aMessage), mLine(aLine), mErr(aErr)
+        : mFileName(aFileName), mMessage(aMessage), mLine(aLine), mErr(aErr)
 {
-	stringstream ss;
-	ss << "CUDA CUFFT error = ";
-	ss << mErr << " from file " << mFileName << ", line " << mLine << ": " << mMessage << ".";
-	mMessage = ss.str();
+    stringstream ss;
+    ss << "CUDA CUFFT error = ";
+    ss << mErr << " from file " << mFileName << ", line " << mLine << ": " << mMessage << ".";
+    mMessage = ss.str();
 }
 
 const char* Cuda::CufftException::what() const throw()
 {
-	return mMessage.c_str();
+    return mMessage.c_str();
 }
 
 string Cuda::CufftException::GetMessage() const
 {
-	return mMessage;
+    return mMessage;
 }
 
-
-
-
-
+////////////////////
+/// NppException ///
+////////////////////
 
 Cuda::NppException::NppException()
 	: mFileName(), mMessage(), mLine(0)

@@ -28,11 +28,12 @@
 #include <cuda.h>
 #include <cufft.h>
 #include "io/EMFile.h"
-#include "cuda/CudaVariables.h"
-#include "cuda/CudaKernel.h"
-#include "cuda/CudaArrays.h"
-#include "cuda/CudaTextures.h"
-#include "cuda/CudaContext.h"
+#include <CudaVariables.h>
+#include <CudaKernel.h>
+#include <CudaArrays.h>
+#include <CudaTextures.h>
+#include <CudaContext.h>
+#include <CudaException.h>
 
 #include "BasicKernel.h"
 #include "CudaReducer.h"
@@ -42,7 +43,7 @@
 using namespace std;
 
 
-#define cufftSafeCall(err) __cufftSafeCall (err, __FILE__, __LINE__)
+//#define cufftSafeCall(err) __cufftSafeCall (err, __FILE__, __LINE__)
 
 struct maxVals_t
 {
@@ -201,58 +202,5 @@ public:
 
 	//maxVals_t executeMaxAll(float* _data, float oldphi, float oldpsi, float oldtheta, float rDown, float rUp, float smooth, vector<float>& allCCs);
 };
-
-inline void __cufftSafeCall(cufftResult_t err, const char *file, const int line)
-{
-	if( CUFFT_SUCCESS != err)
-	{
-		std::string errMsg;
-		switch(err)
-		{
-		case CUFFT_INVALID_PLAN:
-			errMsg = "Invalid plan";
-			break;
-		case CUFFT_ALLOC_FAILED:
-			errMsg = "CUFFT_ALLOC_FAILED";
-			break;
-		case CUFFT_INVALID_TYPE:
-			errMsg = "CUFFT_INVALID_TYPE";
-			break;
-		case CUFFT_INVALID_VALUE:
-			errMsg = "CUFFT_INVALID_VALUE";
-			break;
-		case CUFFT_INTERNAL_ERROR:
-			errMsg = "CUFFT_INTERNAL_ERROR";
-			break;
-		case CUFFT_EXEC_FAILED:
-			errMsg = "CUFFT_EXEC_FAILED";
-			break;
-		case CUFFT_SETUP_FAILED:
-			errMsg = "CUFFT_SETUP_FAILED";
-			break;
-		case CUFFT_INVALID_SIZE:
-			errMsg = "CUFFT_INVALID_SIZE";
-			break;
-		case CUFFT_UNALIGNED_DATA:
-			errMsg = "CUFFT_UNALIGNED_DATA";
-			break;
-		case CUFFT_INCOMPLETE_PARAMETER_LIST:
-			errMsg = "CUFFT_INCOMPLETE_PARAMETER_LIST";
-			break;
-		case CUFFT_INVALID_DEVICE:
-			errMsg = "CUFFT_INVALID_DEVICE";
-			break;
-		case CUFFT_PARSE_ERROR:
-			errMsg = "CUFFT_PARSE_ERROR";
-			break;
-		case CUFFT_NO_WORKSPACE:
-			errMsg = "CUFFT_NO_WORKSPACE";
-			break;
-		}
-
-		CudaException ex(file, line, errMsg, (CUresult)err);
-		throw ex;
-	} //if CUDA_SUCCESS
-}
 
 #endif //AVGPROCESS_H

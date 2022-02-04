@@ -26,9 +26,9 @@
 
 #include "basics/default.h"
 #include <cuda.h>
-#include "cuda/CudaVariables.h"
-#include "cuda/CudaKernel.h"
-#include "cuda/CudaContext.h"
+#include <CudaVariables.h>
+#include <CudaKernel.h>
+#include <CudaContext.h>
 
 using namespace Cuda;
 

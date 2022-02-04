@@ -27,7 +27,6 @@
 #include "CudaDefault.h"
 #ifdef USE_CUDA
 #include "CudaException.h"
-//#include "../MemoryPool/BufferRequest.h"
 
 namespace Cuda
 {
@@ -80,6 +79,13 @@ namespace Cuda
 		//Copy data from device memory to this CudaDeviceVariable
 		void CopyDeviceToDevice(CudaDeviceVariable& aSource);
 
+		//! Copy data from device memory to this CudaDeviceVariable
+		/*!
+			\param aSource Data source in device memory
+		*/
+		//Copy data from device memory to this CudaDeviceVariable
+		void CopyDeviceToDeviceAsync(CUstream stream, CudaDeviceVariable& aSource);
+
 
 		//! Copy data from host memory to this CudaDeviceVariable
 		/*!
@@ -96,6 +102,23 @@ namespace Cuda
 		*/
 		//Copy data from this CudaDeviceVariable to host memory
 		void CopyDeviceToHost(void* aDest, size_t aSizeInBytes = 0);
+
+
+		//! Copy data from host memory to this CudaDeviceVariable
+		/*!
+			\param aSource Data source in host memory
+			\param aSizeInBytes Number of bytes to copy
+		*/
+		//Copy data from host memory to this CudaDeviceVariable
+		void CopyHostToDeviceAsync(CUstream stream, void* aSource, size_t aSizeInBytes = 0);
+
+		//! Copy data from this CudaDeviceVariable to host memory
+		/*!
+			\param aDest Data destination in host memory
+			\param aSizeInBytes Number of bytes to copy
+		*/
+		//Copy data from this CudaDeviceVariable to host memory
+		void CopyDeviceToHostAsync(CUstream stream, void* aDest, size_t aSizeInBytes = 0);
 
 		//! Returns the size in bytes of the allocated device memory
 		size_t GetSize();

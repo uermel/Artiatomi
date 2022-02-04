@@ -200,12 +200,12 @@ namespace Cuda
 		params.srcDevice = aSource.GetDevicePtr();
 		params.srcMemoryType = CU_MEMORYTYPE_DEVICE;
         //params.srcHeight = mDescriptor.Height;
-		//params.srcPitch = mDescriptor.Width * mDescriptor.NumChannels * GetChannelSize(mDescriptor.Format);
+		params.srcPitch = mDescriptor.Width * mDescriptor.NumChannels * GetChannelSize(mDescriptor.Format);
 		params.dstArray = mCUarray;
 		params.dstMemoryType = CU_MEMORYTYPE_ARRAY;
 		params.Depth = mDescriptor.Depth;
 		params.Height = mDescriptor.Height;
-		params.WidthInBytes = mDescriptor.Width * mDescriptor.NumChannels * GetChannelSize(mDescriptor.Format);
+		params.WidthInBytes = params.srcPitch;
 
 		cudaSafeCall(cuMemcpy3D_v2(&params));
 	}

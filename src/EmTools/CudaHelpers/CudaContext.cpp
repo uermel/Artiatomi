@@ -172,14 +172,9 @@ CUmodule Cuda::CudaContext::LoadModulePTX(const char* aModulePath, uint aOptionC
 	file.read (memblock, size);
 	file.close();
 	memblock[size] = 0;
-	//cout << endl << endl << "Filesize is: " << size << endl;
+
 	
 	CUmodule hcuModule = LoadModulePTX(aOptionCount, aOptions, aOptionValues, memblock);
-	
-	//CUmodule hcuModule;
-	//cudaSafeCall(cuModuleLoadData(&hcuModule, memblock));
-	
-	//return hcuModule;
 	delete[] memblock;
 	return hcuModule;
 }
