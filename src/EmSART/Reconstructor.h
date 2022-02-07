@@ -179,6 +179,8 @@ private:
 	void BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& subVolumes, vector<float2>& vecExtraShifts, vector<Cuda::CudaArray3D*>& vecArrays, int proj_index);
 #endif
 
+    template<typename TVol>
+    void GetTraversalLength(float& dist, int index, Volume<TVol>* vol);
 	template<typename TVol>
 	void GetDefocusDistances(float& t_in, float& t_out, int index, Volume<TVol>* vol);
 

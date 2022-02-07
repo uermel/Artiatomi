@@ -59,6 +59,68 @@ void Reconstructor::MatrixVector3Mul(float3x3& M, float xIn, float yIn, float& x
 }
 
 template<class TVol>
+void Reconstructor::GetTraversalLength(float& dist, int index, Volume<TVol>* vol)
+{
+    //Shoot ray from center of volume:
+    float3 c_projNorm = proj.GetNormalVector(index);
+    float3 c_detektor = proj.GetPosition(index);
+    float3 MC_bBoxMin;
+    float3 MC_bBoxMax;
+    MC_bBoxMin = vol->GetVolumeBBoxMin();
+    MC_bBoxMax = vol->GetVolumeBBoxMax();
+    float3 volDim = vol->GetDimension();
+    float3 hitPoint;
+    float t;
+
+    t = (c_projNorm.x * (MC_bBoxMin.x + (volDim.x * vol->GetVoxelSize().x * 0.5f)) +
+         c_projNorm.y * (MC_bBoxMin.y + (volDim.y * vol->GetVoxelSize().y * 0.5f)) +
+         c_projNorm.z * (MC_bBoxMin.z + (volDim.z * vol->GetVoxelSize().z * 0.5f)));
+    t += (-c_projNorm.x * c_detektor.x - c_projNorm.y * c_detektor.y - c_projNorm.z * c_detektor.z);
+    t = abs(t);
+
+    hitPoint.x = t * (-c_projNorm.x) + (MC_bBoxMin.x + (volDim.x * vol->GetVoxelSize().x * 0.5f));
+    hitPoint.y = t * (-c_projNorm.y) + (MC_bBoxMin.y + (volDim.y * vol->GetVoxelSize().y * 0.5f));
+    hitPoint.z = t * (-c_projNorm.z) + (MC_bBoxMin.z + (volDim.z * vol->GetVoxelSize().z * 0.5f));
+
+    float4x4 c_DetectorMatrix;
+
+    proj.GetDetectorMatrix(index, (float*)&c_DetectorMatrix, 1);
+    MatrixVector3Mul(c_DetectorMatrix, &hitPoint);
+
+    //--> pixelBorders.x = x.min; pixelBorders.z = y.min;
+    float hitX = round(hitPoint.x);
+    float hitY = round(hitPoint.y);
+
+    //Shoot ray from hit point on projection towards volume to get the distance to entry and exit point
+    //float3 pos = proj.GetPosition(index) + hitX * proj.GetPixelUPitch(index) + hitY * proj.GetPixelVPitch(index);
+    float3 pos = proj.GetPosition(index) + hitX * proj.GetPixelUPitch(index) + hitY * proj.GetPixelVPitch(index);
+
+    float t_in = 0.f;
+    float t_out = 0.f;
+
+    float3 tEntry = make_float3(0, 0, 0);
+    tEntry.x = (MC_bBoxMin.x - pos.x) / c_projNorm.x;
+    tEntry.y = (MC_bBoxMin.y - pos.y) / c_projNorm.y;
+    tEntry.z = (MC_bBoxMin.z - pos.z) / c_projNorm.z;
+
+    float3 tExit = make_float3(0, 0, 0);
+    tExit.x = (MC_bBoxMax.x - pos.x) / c_projNorm.x;
+    tExit.y = (MC_bBoxMax.y - pos.y) / c_projNorm.y;
+    tExit.z = (MC_bBoxMax.z - pos.z) / c_projNorm.z;
+
+    float3 tmin = fminf(tEntry, tExit);
+    float3 tmax = fmaxf(tEntry, tExit);
+
+    t_in  = fmaxf(fmaxf(tmin.x, tmin.y), tmin.z);
+    t_out = fminf(fminf(tmax.x, tmax.y), tmax.z);
+
+    dist = t_out - t_in;
+}
+template void Reconstructor::GetTraversalLength(float& dist, int index, Volume<unsigned short>* vol);
+template void Reconstructor::GetTraversalLength(float& dist, int index, Volume<float>* vol);
+
+
+template<class TVol>
 void Reconstructor::GetDefocusDistances(float & t_in, float & t_out, int index, Volume<TVol>* vol)
 {
 	//Shoot ray from center of volume:
@@ -126,58 +188,6 @@ void Reconstructor::GetDefocusDistances(float & t_in, float & t_out, int index, 
 				if (t < t_in) t_in = t;
 				if (t > t_out) t_out = t;
 			}
-
-	//printf("t_in: %f; t_out: %f\n", t_in, t_out);
-	//t_in = 2*-DIST;
-	//t_out = 2*DIST;
-
-	//for (int x = 0; x <= 1; x++)
-	//	for (int y = 0; y <= 1; y++)
-	//		for (int z = 0; z <= 1; z++)
-	//		{
-	//			//float t;
-
-	//			t = (nvec.x * (MC_bBoxMin.x + x * (MC_bBoxMax.x - MC_bBoxMin.x))
-	//				+ nvec.y * (MC_bBoxMin.y + y * (MC_bBoxMax.y - MC_bBoxMin.y))
-	//				+ nvec.z * (MC_bBoxMin.z + z * (MC_bBoxMax.z - MC_bBoxMin.z)));
-	//			t += (-nvec.x * pos2.x - nvec.y * pos2.y - nvec.z * pos2.z);
-
-	//			if (t < t_in) t_in = t;
-	//			if (t > t_out) t_out = t;
-	//		}
-	////printf("t_in: %f; t_out: %f\n", t_in, t_out);
-
-
-
-	//{
-	//	float xAniso = 2366.25f;
-	//	float yAniso = 4527.75f;
-
-	//	float3 c_source = c_detektor;
-	//	float3 c_uPitch = proj.GetPixelUPitch(index);
-	//	float3 c_vPitch = proj.GetPixelVPitch(index);
-	//	c_source = c_source + (xAniso)* c_uPitch;
-	//	c_source = c_source + (yAniso)* c_vPitch;
-
-	//	//////////// BOX INTERSECTION (partial Volume) /////////////////
-	//	float3 tEntry;
-	//	tEntry.x = (MC_bBoxMin.x - c_source.x) / (c_projNorm.x);
-	//	tEntry.y = (MC_bBoxMin.y - c_source.y) / (c_projNorm.y);
-	//	tEntry.z = (MC_bBoxMin.z - c_source.z) / (c_projNorm.z);
-
-	//	float3 tExit;
-	//	tExit.x = (MC_bBoxMax.x - c_source.x) / (c_projNorm.x);
-	//	tExit.y = (MC_bBoxMax.y - c_source.y) / (c_projNorm.y);
-	//	tExit.z = (MC_bBoxMax.z - c_source.z) / (c_projNorm.z);
-
-
-	//	float3 tmin = fminf(tEntry, tExit);
-	//	float3 tmax = fmaxf(tEntry, tExit);
-
-	//	t_in = fmaxf(fmaxf(tmin.x, tmin.y), tmin.z);
-	//	t_out = fminf(fminf(tmax.x, tmax.y), tmax.z);
-	//	printf("t_in: %f; t_out: %f\n", t_in, t_out);
-	//}
 }
 template void Reconstructor::GetDefocusDistances(float & t_in, float & t_out, int index, Volume<unsigned short>* vol);
 template void Reconstructor::GetDefocusDistances(float & t_in, float & t_out, int index, Volume<float>* vol);
@@ -1056,12 +1066,29 @@ void Reconstructor::BackProjectionNoCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObje
     pC.x = (int)hitC.x; pC.y = (int)hitC.y;
     pD.x = (int)hitD.x; pD.y = (int)hitD.y;
 	cropKernel(proj_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
+
+    // Compute distance through volume and norm (only for WBP)
+    if (config.WBP_NoSART) {
+        float volumeTraversalLength = 0.f;
+        GetTraversalLength(volumeTraversalLength, proj_index, vol);
+
+        nppSafeCall(nppsDivC_32f_I(volumeTraversalLength,
+                                   (Npp32f *) proj_d.GetDevicePtr(),
+                                   proj.GetWidth() * proj.GetHeight()));
+    }
 	
 	// Prepare and execute Backprojection
 	SetConstantValues(bpKernel, *vol, proj, proj_index, mpi_part, magAnisotropy, magAnisotropyInv);
 
-	float runtime = bpKernel(proj.GetWidth(), proj.GetHeight(), config.Lambda / SIRTCount, 
-		config.OverSampling, 1.0f / (float)(config.OverSampling), texImage, surface, 0, 9999999999999.0f);
+	float runtime = bpKernel(proj.GetWidth(),
+                             proj.GetHeight(),
+                             config.Lambda / SIRTCount,
+                             config.OverSampling,
+                             1.0f / (float)(config.OverSampling),
+                             texImage,
+                             surface,
+                             0,
+                             9999999999999.0f);
 
 }
 template void Reconstructor::BackProjectionNoCTF(Volume<unsigned short>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
@@ -1079,6 +1106,16 @@ void Reconstructor::BackProjectionNoCTF(Volume<TVol>* vol, vector<Volume<TVol>*>
 		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
 		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
 	}
+
+    // Compute distance through volume and norm (only for WBP)
+    if (config.WBP_NoSART) {
+        float volumeTraversalLength = 0.f;
+        GetTraversalLength(volumeTraversalLength, proj_index, vol);
+
+        nppSafeCall(nppsDivC_32f_I(volumeTraversalLength,
+                                   (Npp32f *) proj_d.GetDevicePtr(),
+                                   proj.GetWidth() * proj.GetHeight()));
+    }
 
 	for (size_t batch = 0; batch < batchSize; batch++)
 	{
@@ -1137,6 +1174,15 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject
     pD.x = (int)hitD.x; pD.y = (int)hitD.y;
     cropKernel(proj_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
 
+    // Compute distance through volume and norm (only for WBP)
+    if (config.WBP_NoSART) {
+        float volumeTraversalLength = 0.f;
+        GetTraversalLength(volumeTraversalLength, proj_index, vol);
+
+        nppSafeCall(nppsDivC_32f_I(volumeTraversalLength,
+                                   (Npp32f *) proj_d.GetDevicePtr(),
+                                   proj.GetWidth() * proj.GetHeight()));
+    }
 
 	for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize())
 	{
@@ -1189,6 +1235,16 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& 
 		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
 		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
 	}
+
+    // Compute distance through volume and norm (only for WBP)
+    if (config.WBP_NoSART) {
+        float volumeTraversalLength = 0.f;
+        GetTraversalLength(volumeTraversalLength, proj_index, vol);
+
+        nppSafeCall(nppsDivC_32f_I(volumeTraversalLength,
+                                   (Npp32f *) proj_d.GetDevicePtr(),
+                                   proj.GetWidth() * proj.GetHeight()));
+    }
 
 	if (mpi_part == 0)
 		printf("\n");
@@ -1705,6 +1761,16 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 	else
 	{
 		realprojUS_d.CopyDeviceToHost(img_h);
+
+//        {
+//            auto temp = new float[proj.GetWidth()*proj.GetHeight()];
+//            realprojUS_d.CopyDeviceToHost(temp);
+//            stringstream ss;
+//            ss << "afterFilter_" << proj_index << ".em";
+//            emwrite(ss.str(), temp, proj.GetWidth(), proj.GetHeight());
+//            delete[] temp;
+//        }
+
 
 //		stringstream ss;
 //		ss << "test_" << proj_index << ".em";
