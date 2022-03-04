@@ -579,7 +579,7 @@ maxVals_t AvgProcess::executePhaseCorrelation(float* _data,
         emwrite("C:\\Users\\kunz_\\Desktop\\Data\\Average\\check.em", test, 96*2, 96, 96);
         delete[] test;*/
 
-
+        //TODO: should this be masked max finding also?
         mul.MulVol(d_ccMask, d_ffttemp);
         counter++;
 

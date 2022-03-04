@@ -57,12 +57,13 @@ private:
 	CUstream stream;
 
 	void runShiftKernel(CudaDeviceVariable& d_odata, float3 shiftVal);
-	void runRotKernel(CudaDeviceVariable& d_odata, float rotMat[3][3]);
-    void runShiftRotKernel(CudaDeviceVariable& d_odata, float3 shiftVal, float rotMat[3][3]);
-	void runRotCplxKernel(CudaDeviceVariable& d_odata, float rotMat[3][3]);
+	void runRotKernel(CudaDeviceVariable& d_odata, float rotMat[9]);
+    void runShiftRotKernel(CudaDeviceVariable& d_odata, float3 shiftVal, float rotMat[9]);
+	void runRotCplxKernel(CudaDeviceVariable& d_odata, float rotMat[9]);
 
-	void computeRotMat(float phi, float psi, float theta, float rotMat[3][3]);
-	void multiplyRotMatrix(float m1[3][3], float m2[3][3], float out[3][3]);
+	void computeRotMat(float phi, float psi, float theta, float rotMat[9]);
+	void multiplyRotMatrix(const float B[9], const float A[9], float out[9]);
+
 public:
 
 	CudaRot(int aVolSize, CUstream aStream, CudaContext* context, bool linearInterpolation);

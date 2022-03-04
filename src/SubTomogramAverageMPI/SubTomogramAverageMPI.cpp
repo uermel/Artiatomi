@@ -52,196 +52,58 @@ using namespace Cuda;
 
 #define round(x) (x >= 0 ? (int)(x + 0.5) : (int)(x - 0.5))
 
-void computeRotMat(float phi, float psi, float theta, float rotMat[3][3])
+void computeRotMat(float phi, float psi, float the, float rotMat[9])
 {
-	int i, j;
-	float sinphi, sinpsi, sintheta;	/* sin of rotation angles */
-	float cosphi, cospsi, costheta;	/* cos of rotation angles */
+    float sinphi, sinpsi, sinthe;	/* sin of rotation angles */
+    float cosphi, cospsi, costhe;	/* cos of rotation angles */
 
+    sinphi = sin(phi * (float)M_PI/180.f);
+    sinpsi = sin(psi * (float)M_PI/180.f);
+    sinthe = sin(the * (float)M_PI/180.f);
 
-	float angles[] = { 0, 30, 45, 60, 90, 120, 135, 150, 180, 210, 225, 240, 270, 300, 315, 330 };
-	float angle_cos[16];
-	float angle_sin[16];
+    cosphi = cos(phi * (float)M_PI/180.f);
+    cospsi = cos(psi * (float)M_PI/180.f);
+    costhe = cos(the * (float)M_PI/180.f);
 
-	angle_cos[0] = 1.0f;
-	angle_cos[1] = sqrt(3.0f) / 2.0f;
-	angle_cos[2] = sqrt(2.0f) / 2.0f;
-	angle_cos[3] = 0.5f;
-	angle_cos[4] = 0.0f;
-	angle_cos[5] = -0.5f;
-	angle_cos[6] = -sqrt(2.0f) / 2.0f;
-	angle_cos[7] = -sqrt(3.0f) / 2.0f;
-	angle_cos[8] = -1.0f;
-	angle_cos[9] = -sqrt(3.0f) / 2.0f;
-	angle_cos[10] = -sqrt(2.0f) / 2.0f;
-	angle_cos[11] = -0.5f;
-	angle_cos[12] = 0.0f;
-	angle_cos[13] = 0.5f;
-	angle_cos[14] = sqrt(2.0f) / 2.0f;
-	angle_cos[15] = sqrt(3.0f) / 2.0f;
-	angle_sin[0] = 0.0f;
-	angle_sin[1] = 0.5f;
-	angle_sin[2] = sqrt(2.0f) / 2.0f;
-	angle_sin[3] = sqrt(3.0f) / 2.0f;
-	angle_sin[4] = 1.0f;
-	angle_sin[5] = sqrt(3.0f) / 2.0f;
-	angle_sin[6] = sqrt(2.0f) / 2.0f;
-	angle_sin[7] = 0.5f;
-	angle_sin[8] = 0.0f;
-	angle_sin[9] = -0.5f;
-	angle_sin[10] = -sqrt(2.0f) / 2.0f;
-	angle_sin[11] = -sqrt(3.0f) / 2.0f;
-	angle_sin[12] = -1.0f;
-	angle_sin[13] = -sqrt(3.0f) / 2.0f;
-	angle_sin[14] = -sqrt(2.0f) / 2.0f;
-	angle_sin[15] = -0.5f;
-
-	for (i = 0, j = 0; i<16; i++)
-		if (angles[i] == phi)
-		{
-			cosphi = angle_cos[i];
-			sinphi = angle_sin[i];
-			j = 1;
-		}
-
-	if (j < 1)
-	{
-		phi = phi * (float)M_PI / 180.0f;
-		cosphi = cos(phi);
-		sinphi = sin(phi);
-	}
-
-	for (i = 0, j = 0; i<16; i++)
-		if (angles[i] == psi)
-		{
-			cospsi = angle_cos[i];
-			sinpsi = angle_sin[i];
-			j = 1;
-		}
-
-	if (j < 1)
-	{
-		psi = psi * (float)M_PI / 180.0f;
-		cospsi = cos(psi);
-		sinpsi = sin(psi);
-	}
-
-	for (i = 0, j = 0; i<16; i++)
-		if (angles[i] == theta)
-		{
-			costheta = angle_cos[i];
-			sintheta = angle_sin[i];
-			j = 1;
-		}
-
-	if (j < 1)
-	{
-		theta = theta * (float)M_PI / 180.0f;
-		costheta = cos(theta);
-		sintheta = sin(theta);
-	}
-
-	/* calculation of rotation matrix */
-
-	rotMat[0][0] = cospsi*cosphi - costheta*sinpsi*sinphi;
-	rotMat[1][0] = sinpsi*cosphi + costheta*cospsi*sinphi;
-	rotMat[2][0] = sintheta*sinphi;
-	rotMat[0][1] = -cospsi*sinphi - costheta*sinpsi*cosphi;
-	rotMat[1][1] = -sinpsi*sinphi + costheta*cospsi*cosphi;
-	rotMat[2][1] = sintheta*cosphi;
-	rotMat[0][2] = sintheta*sinpsi;
-	rotMat[1][2] = -sintheta*cospsi;
-	rotMat[2][2] = costheta;
+    /* calculation of rotation matrix */
+    // [ 0 1 2
+    //   3 4 5
+    //   6 7 8 ]
+    // This is the matrix of the actual forward rotation     // rot3dc.c from TOM
+    rotMat[0] = cosphi * cospsi - costhe * sinphi * sinpsi;  // rm00 = cospsi*cosphi-costheta*sinpsi*sinphi;
+    rotMat[1] = -cospsi * sinphi - cosphi * costhe * sinpsi; // rm01 =-cospsi*sinphi-costheta*sinpsi*cosphi;
+    rotMat[2] = sinpsi * sinthe;                             // rm02 = sintheta*sinpsi;
+    rotMat[3] = cosphi * sinpsi + cospsi * costhe * sinphi;  // rm10 = sinpsi*cosphi+costheta*cospsi*sinphi;
+    rotMat[4] = cosphi * cospsi * costhe - sinphi * sinpsi;  // rm11 =-sinpsi*sinphi+costheta*cospsi*cosphi;
+    rotMat[5] = -cospsi * sinthe;                            // rm12 =-sintheta*cospsi;
+    rotMat[6] = sinphi * sinthe;                             // rm20 = sintheta*sinphi;
+    rotMat[7] = cosphi * sinthe;                             // rm21 = sintheta*cosphi;
+    rotMat[8] = costhe;                                      // rm22 = costheta;
 }
 
-void multiplyRotMatrix(float m1[3][3], float m2[3][3], float out[3][3])
+void multiplyRotMatrix(const float B[9], const float A[9], float out[9])
 {
-	out[0][0] = (float)((double)m1[0][0] * (double)m2[0][0] + (double)m1[1][0] * (double)m2[0][1] + (double)m1[2][0] * (double)m2[0][2]);
-	out[1][0] = (float)((double)m1[0][0] * (double)m2[1][0] + (double)m1[1][0] * (double)m2[1][1] + (double)m1[2][0] * (double)m2[1][2]);
-	out[2][0] = (float)((double)m1[0][0] * (double)m2[2][0] + (double)m1[1][0] * (double)m2[2][1] + (double)m1[2][0] * (double)m2[2][2]);
-	out[0][1] = (float)((double)m1[0][1] * (double)m2[0][0] + (double)m1[1][1] * (double)m2[0][1] + (double)m1[2][1] * (double)m2[0][2]);
-	out[1][1] = (float)((double)m1[0][1] * (double)m2[1][0] + (double)m1[1][1] * (double)m2[1][1] + (double)m1[2][1] * (double)m2[1][2]);
-	out[2][1] = (float)((double)m1[0][1] * (double)m2[2][0] + (double)m1[1][1] * (double)m2[2][1] + (double)m1[2][1] * (double)m2[2][2]);
-	out[0][2] = (float)((double)m1[0][2] * (double)m2[0][0] + (double)m1[1][2] * (double)m2[0][1] + (double)m1[2][2] * (double)m2[0][2]);
-	out[1][2] = (float)((double)m1[0][2] * (double)m2[1][0] + (double)m1[1][2] * (double)m2[1][1] + (double)m1[2][2] * (double)m2[1][2]);
-	out[2][2] = (float)((double)m1[0][2] * (double)m2[2][0] + (double)m1[1][2] * (double)m2[2][1] + (double)m1[2][2] * (double)m2[2][2]);
-
+    // Implements Matrix rotation out = B * A (matlab convention)
+    out[0] = A[0]*B[0] + A[3]*B[1] + A[6]*B[2];
+    out[1] = A[1]*B[0] + A[4]*B[1] + A[7]*B[2];
+    out[2] = A[2]*B[0] + A[5]*B[1] + A[8]*B[2];
+    out[3] = A[0]*B[3] + A[3]*B[4] + A[6]*B[5];
+    out[4] = A[1]*B[3] + A[4]*B[4] + A[7]*B[5];
+    out[5] = A[2]*B[3] + A[5]*B[4] + A[8]*B[5];
+    out[6] = A[0]*B[6] + A[3]*B[7] + A[6]*B[8];
+    out[7] = A[1]*B[6] + A[4]*B[7] + A[7]*B[8];
+    out[8] = A[2]*B[6] + A[5]*B[7] + A[8]*B[8];
 }
 
-void multiplyRotMatrixVec(float phi, float psi, float theta, float m2[3], float out[3])
+void getEulerAngles(float M[9], float& phi, float& psi, float& the)
 {
-	phi = phi / 180.0f * (float)M_PI; psi = psi / 180.0f * (float)M_PI; theta = theta / 180.0f * (float)M_PI;
-
-	float m11[3][3];
-	m11[0][0] = cos(psi);
-	m11[0][1] = sin(psi);
-	m11[0][2] = 0;
-	m11[1][0] = -sin(psi);
-	m11[1][1] = cos(psi);
-	m11[1][2] = 0;
-	m11[2][0] = 0;
-	m11[2][1] = 0;
-	m11[2][2] = 1;
-
-	float m22[3][3];
-	m22[0][0] = 1;
-	m22[0][1] = 0;
-	m22[0][2] = 0;
-	m22[1][0] = 0;
-	m22[1][1] = cos(theta);
-	m22[1][2] = sin(theta);
-	m22[2][0] = 0;
-	m22[2][1] = -sin(theta);
-	m22[2][2] = cos(theta);
-
-	float m33[3][3];
-	m33[0][0] = cos(phi);
-	m33[0][1] = sin(phi);
-	m33[0][2] = 0;
-	m33[1][0] = -sin(phi);
-	m33[1][1] = cos(phi);
-	m33[1][2] = 0;
-	m33[2][0] = 0;
-	m33[2][1] = 0;
-	m33[2][2] = 1;
-
-	float m4[3][3];
-	float m5[3][3];
-
-	multiplyRotMatrix(m11, m22, m4);
-	multiplyRotMatrix(m4, m33, m5);
-
-
-	out[0] = m5[0][0] * m2[0] + m5[1][0] * m2[1] + m5[2][0] * m2[2];
-	out[1] = m5[0][1] * m2[0] + m5[1][1] * m2[1] + m5[2][1] * m2[2];
-	out[2] = m5[0][2] * m2[0] + m5[1][2] * m2[1] + m5[2][2] * m2[2];
-	/*out[0][1] = m1[0][1] * m2[0][0] + m1[1][1] * m2[0][1] + m1[2][1] * m2[0][2];
-	out[1][1] = m1[0][1] * m2[1][0] + m1[1][1] * m2[1][1] + m1[2][1] * m2[1][2];
-	out[2][1] = m1[0][1] * m2[2][0] + m1[1][1] * m2[2][1] + m1[2][1] * m2[2][2];
-	out[0][2] = m1[0][2] * m2[0][0] + m1[1][2] * m2[0][1] + m1[2][2] * m2[0][2];
-	out[1][2] = m1[0][2] * m2[1][0] + m1[1][2] * m2[1][1] + m1[2][2] * m2[1][2];
-	out[2][2] = m1[0][2] * m2[2][0] + m1[1][2] * m2[2][1] + m1[2][2] * m2[2][2];*/
-
-}
-
-void getEulerAngles(float matrix[3][3], float& phi, float& psi, float& theta)
-{
-	theta = acos(matrix[2][2])*180.0f / (float)M_PI;
-
-	if (matrix[2][2] > 0.999)
-	{
-		float sign = matrix[1][0] > 0 ? 1.0f : -1.0f;
-		//matrix[2][2] < 0 ? -sign : sign;
-		phi = sign * acos(matrix[0][0])*180.0f / (float)M_PI;
-		psi = 0.0f;
-	}
-	else
-	{
-		phi = atan2(matrix[2][0], matrix[2][1]) * 180.0f / (float)M_PI;
-		psi = atan2(matrix[0][2], -matrix[1][2]) * 180.0f / (float)M_PI;
-		//phi = atan2(matrix[0][2], matrix[2][1]) * 180.0f / (float)M_PI;
-		//psi = atan2(matrix[2][0], -matrix[1][2]) * 180.0f / (float)M_PI;
-	}
+    // Matrix ZXZ psi the phi
+    // [ 0 1 2
+    //   3 4 5
+    //   6 7 8 ]
+    psi = atan2(M[2], -M[5]) * 180.0f / (float)M_PI;
+    the = atan2(sqrt(1 - (M[8]*M[8])), M[8]) * 180.0f / (float)M_PI;
+    phi = atan2(M[6], M[7]) * 180.0f / (float)M_PI;
 }
 
 bool checkIfClassIsToAverage(vector<int>& classes, int aClass)
@@ -731,14 +593,14 @@ int main(int argc, char* argv[])
 				v.getXYZ(size, sx, sy, sz);
 
 
-				float matrix1[3][3];
-				float matrix2[3][3];
-				float matrix3[3][3];
+				float matrix1[9];
+				float matrix2[9];
+				float matrix3[9];
 
 				computeRotMat(mot.phi, mot.psi, mot.theta, matrix1);
 				computeRotMat(v.rphi, v.rpsi, v.rthe, matrix2);
 
-				multiplyRotMatrix(matrix2, matrix1, matrix3);
+				multiplyRotMatrix(matrix1, matrix2, matrix3);
 
 				float phi, psi, theta;
 				getEulerAngles(matrix3, phi, psi, theta);
@@ -878,14 +740,14 @@ int main(int argc, char* argv[])
 				v.getXYZ(size, sx, sy, sz);
 
 
-				float matrix1[3][3];
-				float matrix2[3][3];
-				float matrix3[3][3];
+				float matrix1[9];
+				float matrix2[9];
+				float matrix3[9];
 
 				computeRotMat(mot.phi, mot.psi, mot.theta, matrix1);
 				computeRotMat(v.rphi, v.rpsi, v.rthe, matrix2);
 
-				multiplyRotMatrix(matrix2, matrix1, matrix3);
+				multiplyRotMatrix(matrix1, matrix2, matrix3);
 
 				float phi, psi, theta;
 				getEulerAngles(matrix3, phi, psi, theta);

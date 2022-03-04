@@ -69,24 +69,24 @@ void CudaRot::SetTextureCplx(CudaDeviceVariable& d_idata)
 
 void CudaRot::Rot(CudaDeviceVariable& d_odata, float phi, float psi, float theta)
 {
-	float rotMat1[3][3];
-	float rotMat2[3][3];
-	float rotMat[3][3];
+	float rotMat1[9];
+	float rotMat2[9];
+	float rotMat[9];
 	computeRotMat(oldphi, oldpsi, oldtheta, rotMat1);
 	computeRotMat(phi, psi, theta, rotMat2);
-	multiplyRotMatrix(rotMat2, rotMat1, rotMat);
+	multiplyRotMatrix(rotMat1, rotMat2, rotMat);
 
 	runRotKernel(d_odata, rotMat);
 }
 
 void CudaRot::ShiftRot(CudaDeviceVariable& d_odata, float3 shiftVal, float phi, float psi, float theta)
 {
-    float rotMat1[3][3];
-    float rotMat2[3][3];
-    float rotMat[3][3];
+    float rotMat1[9];
+    float rotMat2[9];
+    float rotMat[9];
     computeRotMat(oldphi, oldpsi, oldtheta, rotMat1);
     computeRotMat(phi, psi, theta, rotMat2);
-    multiplyRotMatrix(rotMat2, rotMat1, rotMat);
+    multiplyRotMatrix(rotMat1, rotMat2, rotMat);
 
     runShiftRotKernel(d_odata, shiftVal, rotMat);
 }
@@ -98,139 +98,73 @@ void CudaRot::Shift(CudaDeviceVariable& d_odata, float3 shiftVal)
 
 void CudaRot::RotCplx(CudaDeviceVariable& d_odata, float phi, float psi, float theta)
 {
-	float rotMat1[3][3];
-	float rotMat2[3][3];
-	float rotMat[3][3];
+	float rotMat1[9];
+	float rotMat2[9];
+	float rotMat[9];
 	computeRotMat(oldphi, oldpsi, oldtheta, rotMat1);
 	computeRotMat(phi, psi, theta, rotMat2);
-	multiplyRotMatrix(rotMat2, rotMat1, rotMat);
+	multiplyRotMatrix(rotMat1, rotMat2, rotMat);
 
 	runRotCplxKernel(d_odata, rotMat);
 }
 
-void CudaRot::computeRotMat(float phi, float psi, float theta, float rotMat[3][3])
+void CudaRot::computeRotMat(float phi, float psi, float the, float rotMat[9])
 {
-	int i, j;
-	float sinphi, sinpsi, sintheta;	/* sin of rotation angles */
-	float cosphi, cospsi, costheta;	/* cos of rotation angles */
+    float sinphi, sinpsi, sinthe;	/* sin of rotation angles */
+    float cosphi, cospsi, costhe;	/* cos of rotation angles */
 
+    sinphi = sin(phi * (float)M_PI/180.f);
+    sinpsi = sin(psi * (float)M_PI/180.f);
+    sinthe = sin(the * (float)M_PI/180.f);
 
-	float angles[] = { 0, 30, 45, 60, 90, 120, 135, 150, 180, 210, 225, 240, 270, 300, 315, 330 };
-	float angle_cos[16];
-	float angle_sin[16];
+    cosphi = cos(phi * (float)M_PI/180.f);
+    cospsi = cos(psi * (float)M_PI/180.f);
+    costhe = cos(the * (float)M_PI/180.f);
 
-	angle_cos[0]=1.0f;
-	angle_cos[1]=sqrt(3.0f)/2.0f;
-	angle_cos[2]=sqrt(2.0f)/2.0f;
-	angle_cos[3]=0.5f;
-	angle_cos[4]=0.0f;
-	angle_cos[5]=-0.5f;
-	angle_cos[6]=-sqrt(2.0f)/2.0f;
-	angle_cos[7]=-sqrt(3.0f)/2.0f;
-	angle_cos[8]=-1.0f;
-	angle_cos[9]=-sqrt(3.0f)/2.0f;
-	angle_cos[10]=-sqrt(2.0f)/2.0f;
-	angle_cos[11]=-0.5f;
-	angle_cos[12]=0.0f;
-	angle_cos[13]=0.5f;
-	angle_cos[14]=sqrt(2.0f)/2.0f;
-	angle_cos[15]=sqrt(3.0f)/2.0f;
-	angle_sin[0]=0.0f;
-	angle_sin[1]=0.5f;
-	angle_sin[2]=sqrt(2.0f)/2.0f;
-	angle_sin[3]=sqrt(3.0f)/2.0f;
-	angle_sin[4]=1.0f;
-	angle_sin[5]=sqrt(3.0f)/2.0f;
-	angle_sin[6]=sqrt(2.0f)/2.0f;
-	angle_sin[7]=0.5f;
-	angle_sin[8]=0.0f;
-	angle_sin[9]=-0.5f;
-	angle_sin[10]=-sqrt(2.0f)/2.0f;
-	angle_sin[11]=-sqrt(3.0f)/2.0f;
-	angle_sin[12]=-1.0f;
-	angle_sin[13]=-sqrt(3.0f)/2.0f;
-	angle_sin[14]=-sqrt(2.0f)/2.0f;
-	angle_sin[15]=-0.5f;
-
-	for (i=0, j=0 ; i<16; i++)
-		if (angles[i] == phi )
-		{
-		   cosphi = angle_cos[i];
-		   sinphi = angle_sin[i];
-		   j = 1;
-		}
-
-	if (j < 1)
-	{
-	   phi = phi * (float)M_PI / 180.0f;
-	   cosphi=cos(phi);
-	   sinphi=sin(phi);
-	}
-
-	for (i=0, j=0 ; i<16; i++)
-		if (angles[i] == psi )
-		{
-		   cospsi = angle_cos[i];
-		   sinpsi = angle_sin[i];
-		   j = 1;
-		}
-
-	if (j < 1)
-	{
-		psi = psi * (float)M_PI / 180.0f;
-	   cospsi=cos(psi);
-	   sinpsi=sin(psi);
-	}
-
-	for (i=0, j=0 ; i<16; i++)
-		if (angles[i] == theta )
-		{
-		   costheta = angle_cos[i];
-		   sintheta = angle_sin[i];
-		   j = 1;
-		}
-
-	if (j < 1)
-	{
-		theta = theta * (float)M_PI / 180.0f;
-	   costheta=cos(theta);
-	   sintheta=sin(theta);
-	}
-
-	/* calculation of rotation matrix */
-
-	rotMat[0][0] = cospsi*cosphi-costheta*sinpsi*sinphi;
-	rotMat[1][0] = sinpsi*cosphi+costheta*cospsi*sinphi;
-	rotMat[2][0] = sintheta*sinphi;
-	rotMat[0][1] = -cospsi*sinphi-costheta*sinpsi*cosphi;
-	rotMat[1][1] = -sinpsi*sinphi+costheta*cospsi*cosphi;
-	rotMat[2][1] = sintheta*cosphi;
-	rotMat[0][2] = sintheta*sinpsi;
-	rotMat[1][2] = -sintheta*cospsi;
-	rotMat[2][2] = costheta;
+    /* calculation of rotation matrix */
+    // [ 0 1 2
+    //   3 4 5
+    //   6 7 8 ]
+    // This is the matrix of the actual forward rotation     // rot3dc.c from TOM
+    rotMat[0] = cosphi * cospsi - costhe * sinphi * sinpsi;  // rm00 = cospsi*cosphi-costheta*sinpsi*sinphi;
+    rotMat[1] = -cospsi * sinphi - cosphi * costhe * sinpsi; // rm01 =-cospsi*sinphi-costheta*sinpsi*cosphi;
+    rotMat[2] = sinpsi * sinthe;                             // rm02 = sintheta*sinpsi;
+    rotMat[3] = cosphi * sinpsi + cospsi * costhe * sinphi;  // rm10 = sinpsi*cosphi+costheta*cospsi*sinphi;
+    rotMat[4] = cosphi * cospsi * costhe - sinphi * sinpsi;  // rm11 =-sinpsi*sinphi+costheta*cospsi*cosphi;
+    rotMat[5] = -cospsi * sinthe;                            // rm12 =-sintheta*cospsi;
+    rotMat[6] = sinphi * sinthe;                             // rm20 = sintheta*sinphi;
+    rotMat[7] = cosphi * sinthe;                             // rm21 = sintheta*cosphi;
+    rotMat[8] = costhe;                                      // rm22 = costheta;
 }
 
-void CudaRot::multiplyRotMatrix(float m1[3][3], float m2[3][3], float out[3][3])
+void CudaRot::multiplyRotMatrix(const float B[9], const float A[9], float out[9])
 {
-	out[0][0] = m1[0][0] * m2[0][0] + m1[1][0] * m2[0][1] + m1[2][0] * m2[0][2];
-    out[1][0] = m1[0][0] * m2[1][0] + m1[1][0] * m2[1][1] + m1[2][0] * m2[1][2];
-    out[2][0] = m1[0][0] * m2[2][0] + m1[1][0] * m2[2][1] + m1[2][0] * m2[2][2];
-    out[0][1] = m1[0][1] * m2[0][0] + m1[1][1] * m2[0][1] + m1[2][1] * m2[0][2];
-    out[1][1] = m1[0][1] * m2[1][0] + m1[1][1] * m2[1][1] + m1[2][1] * m2[1][2];
-    out[2][1] = m1[0][1] * m2[2][0] + m1[1][1] * m2[2][1] + m1[2][1] * m2[2][2];
-    out[0][2] = m1[0][2] * m2[0][0] + m1[1][2] * m2[0][1] + m1[2][2] * m2[0][2];
-    out[1][2] = m1[0][2] * m2[1][0] + m1[1][2] * m2[1][1] + m1[2][2] * m2[1][2];
-    out[2][2] = m1[0][2] * m2[2][0] + m1[1][2] * m2[2][1] + m1[2][2] * m2[2][2];
-
+    // Implements Matrix rotation out = B * A (matlab convention)
+    out[0] = A[0]*B[0] + A[3]*B[1] + A[6]*B[2];
+    out[1] = A[1]*B[0] + A[4]*B[1] + A[7]*B[2];
+    out[2] = A[2]*B[0] + A[5]*B[1] + A[8]*B[2];
+    out[3] = A[0]*B[3] + A[3]*B[4] + A[6]*B[5];
+    out[4] = A[1]*B[3] + A[4]*B[4] + A[7]*B[5];
+    out[5] = A[2]*B[3] + A[5]*B[4] + A[8]*B[5];
+    out[6] = A[0]*B[6] + A[3]*B[7] + A[6]*B[8];
+    out[7] = A[1]*B[6] + A[4]*B[7] + A[7]*B[8];
+    out[8] = A[2]*B[6] + A[5]*B[7] + A[8]*B[8];
 }
 
-void CudaRot::runRotKernel(CudaDeviceVariable& d_odata, float rotMat[3][3])
+void CudaRot::runRotKernel(CudaDeviceVariable& d_odata, float rotMat[9])
 {
     CUdeviceptr out_dptr = d_odata.GetDevicePtr();
 
-	float3 rotMat0 = make_float3(rotMat[0][0], rotMat[0][1], rotMat[0][2]);
-	float3 rotMat1 = make_float3(rotMat[1][0], rotMat[1][1], rotMat[1][2]);
-	float3 rotMat2 = make_float3(rotMat[2][0], rotMat[2][1], rotMat[2][2]);
+    // Transposed Matrix for rotation
+    // [ 0 1 2          [ 0 3 6         [ rotMat0
+    //   3 4 5    --->    1 4 7   --->    rotMat1
+    //   6 7 8 ]          2 5 8 ]         rotMat2 ]
+    // x_rot = rotMat0.x * x + rotMat0.y * y + rotMat0.z * z
+    // y_rot = rotMat1.x * x + rotMat1.y * y + rotMat1.z * z
+    // z_rot = rotMat2.x * x + rotMat2.y * y + rotMat2.z * z
+    float3 rotMat0 = make_float3(rotMat[0], rotMat[3], rotMat[6]);
+    float3 rotMat1 = make_float3(rotMat[1], rotMat[4], rotMat[7]);
+    float3 rotMat2 = make_float3(rotMat[2], rotMat[5], rotMat[8]);
 
     void** arglist = (void**)new void*[5];
 
@@ -246,13 +180,20 @@ void CudaRot::runRotKernel(CudaDeviceVariable& d_odata, float rotMat[3][3])
     delete[] arglist;
 }
 
-void CudaRot::runShiftRotKernel(CudaDeviceVariable& d_odata, float3 shiftVal, float rotMat[3][3])
+void CudaRot::runShiftRotKernel(CudaDeviceVariable& d_odata, float3 shiftVal, float rotMat[9])
 {
     CUdeviceptr out_dptr = d_odata.GetDevicePtr();
 
-    float3 rotMat0 = make_float3(rotMat[0][0], rotMat[0][1], rotMat[0][2]);
-    float3 rotMat1 = make_float3(rotMat[1][0], rotMat[1][1], rotMat[1][2]);
-    float3 rotMat2 = make_float3(rotMat[2][0], rotMat[2][1], rotMat[2][2]);
+    // Transposed Matrix for rotation
+    // [ 0 1 2          [ 0 3 6         [ rotMat0
+    //   3 4 5    --->    1 4 7   --->    rotMat1
+    //   6 7 8 ]          2 5 8 ]         rotMat2 ]
+    // x_rot = rotMat0.x * x + rotMat0.y * y + rotMat0.z * z
+    // y_rot = rotMat1.x * x + rotMat1.y * y + rotMat1.z * z
+    // z_rot = rotMat2.x * x + rotMat2.y * y + rotMat2.z * z
+    float3 rotMat0 = make_float3(rotMat[0], rotMat[3], rotMat[6]);
+    float3 rotMat1 = make_float3(rotMat[1], rotMat[4], rotMat[7]);
+    float3 rotMat2 = make_float3(rotMat[2], rotMat[5], rotMat[8]);
 
     void** arglist = (void**)new void*[6];
 
@@ -285,13 +226,20 @@ void CudaRot::runShiftKernel(CudaDeviceVariable& d_odata, float3 shiftVal)
     delete[] arglist;
 }
 
-void CudaRot::runRotCplxKernel(CudaDeviceVariable& d_odata, float rotMat[3][3])
+void CudaRot::runRotCplxKernel(CudaDeviceVariable& d_odata, float rotMat[9])
 {
 	CUdeviceptr out_dptr = d_odata.GetDevicePtr();
 
-	float3 rotMat0 = make_float3(rotMat[0][0], rotMat[0][1], rotMat[0][2]);
-	float3 rotMat1 = make_float3(rotMat[1][0], rotMat[1][1], rotMat[1][2]);
-	float3 rotMat2 = make_float3(rotMat[2][0], rotMat[2][1], rotMat[2][2]);
+    // Transposed Matrix for rotation
+    // [ 0 1 2          [ 0 3 6         [ rotMat0
+    //   3 4 5    --->    1 4 7   --->    rotMat1
+    //   6 7 8 ]          2 5 8 ]         rotMat2 ]
+    // x_rot = rotMat0.x * x + rotMat0.y * y + rotMat0.z * z
+    // y_rot = rotMat1.x * x + rotMat1.y * y + rotMat1.z * z
+    // z_rot = rotMat2.x * x + rotMat2.y * y + rotMat2.z * z
+    float3 rotMat0 = make_float3(rotMat[0], rotMat[3], rotMat[6]);
+    float3 rotMat1 = make_float3(rotMat[1], rotMat[4], rotMat[7]);
+    float3 rotMat2 = make_float3(rotMat[2], rotMat[5], rotMat[8]);
 
     void** arglist = (void**)new void*[5];
 
