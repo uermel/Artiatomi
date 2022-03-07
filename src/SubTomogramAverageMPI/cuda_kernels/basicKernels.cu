@@ -32,9 +32,13 @@ __global__ void rot3d(int size, float3 rotMat0, float3 rotMat1, float3 rotMat2, 
 
 	float3 vox = make_float3(x - center, y - center, z - center);
 	float3 rotVox;
-	rotVox.x = center + rotMat0.x * vox.x + rotMat1.x * vox.y + rotMat2.x * vox.z;
-	rotVox.y = center + rotMat0.y * vox.x + rotMat1.y * vox.y + rotMat2.y * vox.z;
-	rotVox.z = center + rotMat0.z * vox.x + rotMat1.z * vox.y + rotMat2.z * vox.z;
+    // Matrix
+    //  [ rotMat0
+    //    rotMat1
+    //    rotMat2 ]
+    rotVox.x = center + rotMat0.x * vox.x + rotMat0.y * vox.y + rotMat0.z * vox.z;
+    rotVox.y = center + rotMat1.x * vox.x + rotMat1.y * vox.y + rotMat1.z * vox.z;
+    rotVox.z = center + rotMat2.x * vox.x + rotMat2.y * vox.y + rotMat2.z * vox.z;
 
 	outVol[z * size * size + y * size + x] = tex3D(texVol, rotVox.x + 0.5f, rotVox.y + 0.5f, rotVox.z + 0.5f);
 
@@ -51,16 +55,24 @@ __global__ void shiftRot3d(int size, float3 shift, float3 rotMat0, float3 rotMat
     //float3 rotCenter = make_float3(center+shift.x, center+shift.y, center+shift.z);
 
     float3 rotShift;
-    rotShift.x = rotMat0.x * shift.x + rotMat1.x * shift.y + rotMat2.x * shift.z;
-    rotShift.y = rotMat0.y * shift.x + rotMat1.y * shift.y + rotMat2.y * shift.z;
-    rotShift.z = rotMat0.z * shift.x + rotMat1.z * shift.y + rotMat2.z * shift.z;
+    // Matrix
+    //  [ rotMat0
+    //    rotMat1
+    //    rotMat2 ]
+    rotShift.x = rotMat0.x * shift.x + rotMat0.y * shift.y + rotMat0.z * shift.z;
+    rotShift.y = rotMat1.x * shift.x + rotMat1.y * shift.y + rotMat1.z * shift.z;
+    rotShift.z = rotMat2.x * shift.x + rotMat1.y * shift.y + rotMat2.z * shift.z;
 
-    float3 vox = make_float3(x - (center + shift.x), y - (center + shift.y), z - (center + shift.z));
+    float3 vox = make_float3((float)x - (center + shift.x), (float)y - (center + shift.y), (float)z - (center + shift.z));
 
     float3 rotVox;
-    rotVox.x = center + rotMat0.x * vox.x + rotMat1.x * vox.y + rotMat2.x * vox.z - (shift.x - rotShift.x);
-    rotVox.y = center + rotMat0.y * vox.x + rotMat1.y * vox.y + rotMat2.y * vox.z - (shift.y - rotShift.y);
-    rotVox.z = center + rotMat0.z * vox.x + rotMat1.z * vox.y + rotMat2.z * vox.z - (shift.z - rotShift.z);
+    // Matrix
+    //  [ rotMat0
+    //    rotMat1
+    //    rotMat2 ]
+    rotVox.x = center + rotMat0.x * vox.x + rotMat0.y * vox.y + rotMat0.z * vox.z - (shift.x - rotShift.x);
+    rotVox.y = center + rotMat1.x * vox.x + rotMat1.y * vox.y + rotMat1.z * vox.z - (shift.y - rotShift.y);
+    rotVox.z = center + rotMat2.x * vox.x + rotMat2.y * vox.y + rotMat2.z * vox.z - (shift.z - rotShift.z);
 
     outVol[z * size * size + y * size + x] = tex3D(texVol, rotVox.x + 0.5f, rotVox.y + 0.5f, rotVox.z + 0.5f);
 }
@@ -76,9 +88,13 @@ __global__ void rot3dCplx(int size, float3 rotMat0, float3 rotMat1, float3 rotMa
 
 	float3 vox = make_float3(x - center, y - center, z - center);
 	float3 rotVox;
-	rotVox.x = center + rotMat0.x * vox.x + rotMat1.x * vox.y + rotMat2.x * vox.z;
-	rotVox.y = center + rotMat0.y * vox.x + rotMat1.y * vox.y + rotMat2.y * vox.z;
-	rotVox.z = center + rotMat0.z * vox.x + rotMat1.z * vox.y + rotMat2.z * vox.z;
+    // Matrix
+    //  [ rotMat0
+    //    rotMat1
+    //    rotMat2 ]
+    rotVox.x = center + rotMat0.x * vox.x + rotMat0.y * vox.y + rotMat0.z * vox.z;
+    rotVox.y = center + rotMat1.x * vox.x + rotMat1.y * vox.y + rotMat1.z * vox.z;
+    rotVox.z = center + rotMat2.x * vox.x + rotMat2.y * vox.y + rotMat2.z * vox.z;
 
 	outVol[z * size * size + y * size + x] = tex3D(texVolCplx, rotVox.x + 0.5f, rotVox.y + 0.5f, rotVox.z + 0.5f);
 }
