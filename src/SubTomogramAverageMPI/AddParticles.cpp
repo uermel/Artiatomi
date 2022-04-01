@@ -103,7 +103,7 @@ void getEulerAngles(float M[9], float& phi, float& psi, float& the)
 {
     // Limit
     for (int i = 0; i<9; i++){
-        M[i] = min(max(M[i], 1.f), -1.f);
+        M[i] = max(min(M[i], 1.f), -1.f);
     }
 
     // Matrix ZXZ phi the psi
