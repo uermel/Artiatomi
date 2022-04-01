@@ -136,8 +136,10 @@ void AvgProcess::planAngularSampling(float aPhiAngIter,
 {
     float rphi, npsi, dpsi, rpsi, rthe;
 
+    bool rigidScan = true;
+
     for (int iterPhi = 0; iterPhi < 2 * (int)aPhiAngIter + 1; ++iterPhi) {
-        rphi = aPhiAngInc * ((float)iterPhi - aPhiAngIter);
+        //rphi = aPhiAngInc * ((float)iterPhi - aPhiAngIter);
 
         for (int iterThe = (int) 0; iterThe < (int)aAngIter + 1; ++iterThe) {
             rthe = (float)iterThe * aAngIncr;
@@ -145,6 +147,9 @@ void AvgProcess::planAngularSampling(float aPhiAngIter,
             if (iterThe == 0) {
                 npsi = 1;
                 dpsi = 360;
+            } else if (rigidScan){
+                dpsi = aPhiAngInc;
+                npsi = ceilf(360.f/aPhiAngInc);
             } else {
                 dpsi = aAngIncr / sinf((float)iterThe * aAngIncr * (float) M_PI / 180.0f);
                 npsi = ceilf(360.0f / dpsi);
@@ -158,6 +163,10 @@ void AvgProcess::planAngularSampling(float aPhiAngIter,
                 } else {
                     rphi = aPhiAngInc * ((float)iterPhi - aPhiAngIter);
                 }
+
+//                if (aCouplePhiToPsi) {
+//                    rphi = rphi - rpsi;
+//                }
 
                 vector<float> angles = {rphi, rpsi, rthe};
                 angleList.push_back(angles);

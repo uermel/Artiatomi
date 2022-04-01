@@ -95,15 +95,31 @@ void multiplyRotMatrix(const float B[9], const float A[9], float out[9])
     out[8] = A[2]*B[6] + A[5]*B[7] + A[8]*B[8];
 }
 
+template <typename T> int sign(T val) {
+    return T(T(0) < val) - (val < T(0));
+}
+
 void getEulerAngles(float M[9], float& phi, float& psi, float& the)
 {
-    // Matrix ZXZ psi the phi
+    // Limit
+    for (int i = 0; i<9; i++){
+        M[i] = min(max(M[i], 1.f), -1.f);
+    }
+
+    // Matrix ZXZ phi the psi
     // [ 0 1 2
     //   3 4 5
     //   6 7 8 ]
-    psi = atan2(M[2], -M[5]) * 180.0f / (float)M_PI;
     the = atan2(sqrt(1 - (M[8]*M[8])), M[8]) * 180.0f / (float)M_PI;
-    phi = atan2(M[6], M[7]) * 180.0f / (float)M_PI;
+
+    // Check singularity
+    if (M[9] > 0.9999){
+        psi = -1.f * (float)sign<float>(M[1]) * acos(M[0]) * 180.0f/ (float)M_PI;
+        phi = 0.f;
+    } else {
+        psi = atan2(M[2], -M[5]) * 180.0f / (float) M_PI;
+        phi = atan2(M[6], M[7]) * 180.0f / (float) M_PI;
+    }
 }
 
 bool checkIfClassIsToAverage(vector<int>& classes, int aClass)
