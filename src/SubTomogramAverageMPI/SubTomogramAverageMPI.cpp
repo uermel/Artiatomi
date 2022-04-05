@@ -113,7 +113,7 @@ void getEulerAngles(float M[9], float& phi, float& psi, float& the)
     the = atan2(sqrt(1 - (M[8]*M[8])), M[8]) * 180.0f / (float)M_PI;
 
     // Check singularity
-    if (M[9] > 0.9999){
+    if (M[8] > 0.9999){
         psi = -1.f * (float)sign<float>(M[1]) * acos(M[0]) * 180.0f/ (float)M_PI;
         phi = 0.f;
     } else {
