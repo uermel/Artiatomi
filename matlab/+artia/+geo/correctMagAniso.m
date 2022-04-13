@@ -1,6 +1,6 @@
 function undistorted = correctMagAniso(coords, amount, angle, dims)
 % artia.geo.correctMagAniso applies an affine transformation to input coordinates
-% to correct the effect of anisotropic magnification anisotropy.
+% to correct the effect of anisotropic magnification.
 %
 % Parameters:
 %   coords (double[Nx2]):

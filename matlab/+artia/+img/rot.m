@@ -36,12 +36,12 @@ case 2
     if s3==1 & s2>0 & s1>0
         phi=angles(1);
         out = single(zeros(size(im)));
-        rot2dc(single(im),out,phi,interp,center);
+        artia.img.rot2dc(single(im),out,phi,interp,center);
         out = double(out);
     elseif s3>1 & s2>0 & s1>0
         phi=angles(1); psi=angles(2); theta=angles(3);
         out = single(zeros(size(im)));
-        rot3dc(single(im),out,phi,psi,theta,interp,center);
+        artia.img.rot3dc(single(im),out,phi,psi,theta,interp,center);
         out = double(out);        
     end
 
@@ -59,12 +59,12 @@ case 3
     if s3==1 & s2>1 & s1>1
         phi=angles(1);
         out = single(zeros(size(im)));
-        rot2dc(single(im),out,phi,interp,center);
+        artia.img.rot2dc(single(im),out,phi,interp,center);
         out = double(out);
     elseif s3>1 & s2>1 & s1>1
         phi=angles(1); psi=angles(2); theta=angles(3);
         out = single(zeros(size(im)));
-        rot3dc(single(im),out,phi,psi,theta,interp,center);
+        artia.img.rot3dc(single(im),out,phi,psi,theta,interp,center);
         out = double(out);        
     end
 
@@ -82,12 +82,12 @@ case 4
     if s3==1 & s2>0 & s1>0
         phi=angles(1);
         out = single(zeros(size(im)));
-        rot2dc(single(im),out,phi,interp,center);
+        artia.img.rot2dc(single(im),out,phi,interp,center);
         out = double(out);
     elseif s3>0 & s2>0 & s1>0
         phi=angles(1); psi=angles(2); theta=angles(3);
         out = single(zeros(size(im)));
-        rot3dc(single(im),out,phi,psi,theta,interp,center);
+        artia.img.rot3dc(single(im),out,phi,psi,theta,interp,center);
         out = double(out);        
     end
 end

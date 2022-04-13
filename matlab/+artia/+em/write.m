@@ -1,3 +1,4 @@
+
 function emfid = write(data, fileName, varargin)
 % artia.em.write writes the 1-3 dimensional array to an EM-file at fileName. 
 %

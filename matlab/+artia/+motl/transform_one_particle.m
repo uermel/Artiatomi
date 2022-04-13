@@ -1,14 +1,17 @@
-function outMotl = apply_transforms(transforms, inMotl)
-% artia.motl.apply_transforms transforms the orientation and translations
-% of particles in a particle list given a list of successive
-% transformations on the reference volume. To apply transformations to just
-% one particle, use artia.motl.transform_one_particle.
+function outMotl = transform_one_particle(transforms, inMotl, particleNum)
+% artia.motl.transform_one_particle transforms the orientation and 
+% translations of a specific particle in a particle list given a list of 
+% successive transformations on the reference volume. To apply the same set
+% of transformations to all particles in the list, use 
+% artia.motl.apply_transforms.
 %
 % Parameters:
 %   transforms (struct):
 %       Matlab struct describing the transformations.
 %   inMotl (str/double[20xN]):
 %       Path to particle list file or particle list matrix.
+%   particleNum (integer):
+%       Index of the particle within the motivelist
 %
 % Returns:
 %   outMotl (double[20xN]):
@@ -16,7 +19,7 @@ function outMotl = apply_transforms(transforms, inMotl)
 %       coordinates/orientations/translations.
 %
 % Author:
-%   UE, 2019
+%   KS, 2020
 
     % File
     if ischar(inMotl)
@@ -37,27 +40,23 @@ function outMotl = apply_transforms(transforms, inMotl)
         
         % Apply additional rotation
         M2 = euler2matrix(rotation);
-        for i = 1:size(inMotl, 2)
-            angles = inMotl(17:19, i);
-            M1 = artia.geo.euler2matrix(angles);
-            
-            M3 = M2 * M1;
+        angles = inMotl(17:19, particleNum);
+        M1 = artia.geo.euler2matrix(angles);
 
-            [phi, psi, theta] = artia.geo.matrix2euler(M3);
-            inMotl(17:19, i) = [phi, psi, theta];
-        end
+        M3 = M2 * M1;
+
+        [phi, psi, theta] = artia.geo.matrix2euler(M3);
+        inMotl(17:19, particleNum) = [phi, psi, theta];
         
         % Shift particles by rotation of negative shift vector in reference
         % orientation
         shift = -reshape(shift, 3, 1);
-        for i = 1:size(inMotl, 2)
-            angles = inMotl(17:19, i);
-            M = artia.geo.euler2matrix([-angles(2) -angles(1) -angles(3)]);
-            
-            pshift = M * shift;
+        angles = inMotl(17:19, particleNum);
+        M = artia.geo.euler2matrix([-angles(2) -angles(1) -angles(3)]);
 
-            inMotl(8:10, i) = inMotl(8:10, i) + pshift;
-        end
+        pshift = M * shift;
+
+        inMotl(8:10, particleNum) = inMotl(8:10, particleNum) + pshift;
     end
     
     % Output

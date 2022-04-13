@@ -15,18 +15,31 @@ function ali = imod2emsart(imod_rootname)
 % Author:
 %   MK
 %
-    fid = fopen([imod_rootname '.xf']);
+% Edited by:
+%   KS (2020)
+%
+    fid = fopen(imod_rootname + '.xf');
     fx = fscanf(fid, '%f %f %f %f %f %f\n', [6, inf]);
     fclose(fid);
     fx = fx';
 
-    fid = fopen([imod_rootname '.tlt']);
+    fid = fopen(imod_rootname + '.tlt');
     tilt = fscanf(fid, '%f\n', [1, inf]);
     fclose(fid);
     tilt = tilt';
 
 
     projCount = size(fx, 1);
+    
+    % If for whatever reason, the main tlt file does not have all the tilts
+    % check for the fiducial tlt file as a backup (KS)
+    if (projCount ~= size(tilt,1))
+        fprintf('For: ' + imod_rootname + ' the .tlt file seems to be missing some tilts. Substituting with the _fid.tlt instead..\n')
+        fid = fopen(imod_rootname + '_fid.tlt');
+        tilt = fscanf(fid, '%f\n', [1, inf]);
+        fclose(fid);
+        tilt = tilt';        
+    end
 
     ali = zeros(10, projCount);
 
