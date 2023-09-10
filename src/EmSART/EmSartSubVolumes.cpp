@@ -355,7 +355,7 @@ int main(int argc, char* argv[])
 		EmFile reconstructedVol(aConfig.OutVolumeFile);
 		reconstructedVol.OpenAndReadHeader();
 		//reconstructedVol.ReadHeaderInfo();
-		dim3 volDims = make_dim3(reconstructedVol.GetFileHeader().DimX, reconstructedVol.GetFileHeader().DimY, reconstructedVol.GetFileHeader().DimZ);
+		dim3 volDims = aConfig.RecDimensions;//make_dim3(reconstructedVol.GetFileHeader().DimX, reconstructedVol.GetFileHeader().DimY, reconstructedVol.GetFileHeader().DimZ);
 
 		//Create volume dataset (host)
 		Volume<float> *volSubVol = NULL; //this is a subVol filled with zeros to reset the storage on GPU

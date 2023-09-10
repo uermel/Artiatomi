@@ -1252,6 +1252,20 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& 
 	float t_in, t_out;
 	GetDefocusDistances(t_in, t_out, proj_index, vol);
 
+    // Find area shaded by volume, cut and dim borders
+    int2 pA, pB, pC, pD;
+    float2 hitA, hitB, hitC, hitD;
+    proj.ComputeHitPoints(*vol, proj_index, pA, pB, pC, pD);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pA.x, (float)pA.y, hitA.x, hitA.y);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pB.x, (float)pB.y, hitB.x, hitB.y);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pC.x, (float)pC.y, hitC.x, hitC.y);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pD.x, (float)pD.y, hitD.x, hitD.y);
+    pA.x = (int)hitA.x; pA.y = (int)hitA.y;
+    pB.x = (int)hitB.x; pB.y = (int)hitB.y;
+    pC.x = (int)hitC.x; pC.y = (int)hitC.y;
+    pD.x = (int)hitD.x; pD.y = (int)hitD.y;
+    cropKernel(proj_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
+
 	for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize())
 	{
 		float defocusAngle = defocus.GetAstigmatismAngle(proj_index) + (float)(proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0);
