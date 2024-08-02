@@ -17,12 +17,81 @@
 
 class CropBorderKernel : public Cuda::CudaKernel
 {
-public:
-    CropBorderKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
-    CropBorderKernel(CUmodule aModule);
+private:
+    float2* corners_h;
+    float* norm_h;
 
-    float operator()(Cuda::CudaPitchedDeviceVariable& image, float2 cutLength, float2 dimLength, int2 p1, int2 p2, int2 p3, int2 p4);
+public:
+    explicit CropBorderKernel(CUmodule aModule);
+    CropBorderKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
+    ~CropBorderKernel();
+
+    void CopyCornersToDevice(vector<float2>& aCorners, vector<float>& aNorm);
+
+    float operator()(Cuda::CudaPitchedDeviceVariable& image,
+                     uint2 projDim,
+                     float2 cutLength,
+                     float2 dimLength,
+                     vector<float2>& corners,
+                     vector<float>& norm);
+
+    float operator()(Cuda::CudaDeviceVariable& image,
+                     uint2 projDim,
+                     float2 cutLength,
+                     float2 dimLength,
+                     vector<float2>& corners,
+                     vector<float>& norm);
 };
+
+
+class CropBorderInvKernel : public Cuda::CudaKernel
+{
+private:
+    float2* corners_h;
+    float* norm_h;
+
+public:
+    explicit CropBorderInvKernel(CUmodule aModule);
+    CropBorderInvKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
+    ~CropBorderInvKernel();
+
+    void CopyCornersToDevice(vector<float2>& aCorners, vector<float>& aNorm);
+
+    float operator()(Cuda::CudaPitchedDeviceVariable& image,
+                     uint2 projDim,
+                     float2 cutLength,
+                     float2 dimLength,
+                     vector<float2>& corners,
+                     vector<float>& norm);
+
+    float operator()(Cuda::CudaDeviceVariable& image,
+                     uint2 projDim,
+                     float2 cutLength,
+                     float2 dimLength,
+                     vector<float2>& corners,
+                     vector<float>& norm);
+};
+
+
+
+//class CropBorderInvKernel : public Cuda::CudaKernel
+//{
+//public:
+//    CropBorderInvKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
+//    CropBorderInvKernel(CUmodule aModule);
+//
+//    float operator()(Cuda::CudaPitchedDeviceVariable& image,
+//                     uint2 projDim,
+//                     float2 cutLength,
+//                     float2 dimLength,
+//                     int2 p1, int2 p2, int2 p3, int2 p4);
+//    float operator()(Cuda::CudaDeviceVariable& image,
+//                     uint2 projDim,
+//                     float2 cutLength,
+//                     float2 dimLength,
+//                     int2 p1, int2 p2, int2 p3, int2 p4);
+//
+//};
 
 
 #endif //ARTIATOMI_CROPBORDERKERNEL_H

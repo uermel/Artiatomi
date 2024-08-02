@@ -341,4 +341,195 @@ void squareSlices2rect(int proj_x,
 }
 
 
+template<bool inIsPitched, bool add>
+__device__
+void copyOrAddPitched(const float* in,
+                      float* out,
+                      size_t stride,
+                      uint2 projDim)
+{
+    // Integer pixel coordinates
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    // Bounds
+    if (x >= projDim.x || y >= projDim.y)
+        return;
+
+    if (inIsPitched){
+        float inval = *(((float *) ((char *) in + stride * y)) + x);
+
+        if (add){
+            out[projDim.x * y + x] += inval;
+        } else {
+            out[projDim.x * y + x] = inval;
+        }
+
+    } else {
+        float inval = in[projDim.x * y + x];
+
+        if (add){
+            *(((float *) ((char *) out + stride * y)) + x) += inval;
+        } else {
+            *(((float *) ((char *) out + stride * y)) + x) = inval;
+        }
+    }
+}
+
+extern "C"
+__global__
+void copyToPitched(const float* in,
+                   float* out,
+                   size_t stride,
+                   uint2 projDim)
+{
+    copyOrAddPitched<false, false>(in,
+                                   out,
+                                   stride,
+                                   projDim);
+}
+
+extern "C"
+__global__
+void copyFromPitched(const float* in,
+                     float* out,
+                     size_t stride,
+                     uint2 projDim)
+{
+    copyOrAddPitched<true, false>(in,
+                                  out,
+                                  stride,
+                                  projDim);
+}
+
+extern "C"
+__global__
+void addToPitched(const float* in,
+                  float* out,
+                  size_t stride,
+                  uint2 projDim)
+{
+    copyOrAddPitched<false, true>(in,
+                                  out,
+                                  stride,
+                                  projDim);
+}
+
+extern "C"
+__global__
+void addFromPitched(const float* in,
+                    float* out,
+                    size_t stride,
+                    uint2 projDim)
+{
+    copyOrAddPitched<true, true>(in,
+                                 out,
+                                 stride,
+                                 projDim);
+}
+
+//extern "C"
+//__global__
+//void copyToPitched(const float* in,
+//                   float* out,
+//                   size_t stride,
+//                   uint2 projDim)
+//{
+//    // integer pixel coordinates
+//    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+//    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+//
+//    if (x >= projDim.x || y >= projDim.y)
+//        return;
+//
+//    *(((float *) ((char *) out + stride * y)) + x) = in[projDim.x * y + x];
+//}
+//
+//extern "C"
+//__global__
+//void copyFromPitched(float* in,
+//                     float* out,
+//                     size_t stride,
+//                     uint2 projDim)
+//{
+//    // integer pixel coordinates
+//    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+//    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+//
+//    if (x >= projDim.x || y >= projDim.y)
+//        return;
+//
+//    float val = *(((float *) ((char *) in + stride * y)) + x);
+//    //printf("%i %f \n", projDim.x * y + x, val);
+//
+//    out[projDim.x * y + x] = val;
+//}
+
+template<bool applyMask>
+__device__
+void slicesToSurfsbase(const float* in,
+                       const CUsurfObject* out,
+                       const float* mask,
+                       size_t maskStride,
+                       float maskScale,
+                       uint2 projDim,
+                       int slice_num)
+{
+    // integer pixel coordinates
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    // Bounds
+    if (x >= projDim.x || y >= projDim.y || z >= slice_num)
+        return;
+
+    float maskval = 1.f;
+    if (applyMask){
+        maskval = *(((float*)((char*)mask + maskStride * y)) + x) * maskScale;
+        //maskval = (maskval >= 1.f) ? 1.f : 0.f;
+        //maskval = max(maskval, 0.f);
+        //maskval = maskval / (maskval + 1.f);
+    }
+
+    // Write to stack
+    surf2Dwrite(in[projDim.x * projDim.y * z + projDim.x * y + x] * maskval, out[z], x * 4, y);
+}
+
+
+extern "C"
+__global__
+void slicesToSurfs(const float* in,
+                   const CUsurfObject* out,
+                   uint2 projDim,
+                   int slice_num)
+{
+    slicesToSurfsbase<false>(in,
+                             out,
+                             0,
+                             0,
+                             0,
+                             projDim,
+                             slice_num);
+}
+
+extern "C"
+__global__
+void slicesToSurfsMasked(const float* in,
+                         const CUsurfObject* out,
+                         const float* mask,
+                         size_t maskStride,
+                         float maskScale,
+                         uint2 projDim,
+                         int slice_num)
+{
+    slicesToSurfsbase<true>(in,
+                            out,
+                            mask,
+                            maskStride,
+                            maskScale,
+                            projDim,
+                            slice_num);
+}
+
 #endif

@@ -76,6 +76,8 @@ public:
 
 	//! Returns a pointer to the inner data array.
 	T* GetData();
+    int GetColNum();
+    int GetRowNum();
 
 	//! User friendly output.
 	//template<>
@@ -154,6 +156,18 @@ public:
 	//! Assignment operator
 	Matrix<T>& operator= (const Matrix<T>& aValue);
 
+    //! Conversion operator
+    explicit operator Matrix<float>();
+    explicit operator Matrix<double>();
+    //template<class Tout>
+    //explicit operator Matrix<Tout>();
+
+    //Matrix<T>& operator=(const Matrix<float>& aValue);
+    //Matrix<T>& operator=(const Matrix<double>& aValue);
+
+    //template Matrix<T>& operator= (const Matrix<float>& aValue);
+    //template Matrix<T>& operator= (const Matrix<double>& aValue);
+
 	////! Returns the values as a float2
 	//float2 GetAsFloat2();
 	////! Returns the values as a float3
@@ -169,6 +183,19 @@ public:
 	static Matrix<float> GetRotationMatrix3DY(float aAngle);
 	//! Returns a matrix representing a rotation by \p aAngle around the Z axis.
 	static Matrix<float> GetRotationMatrix3DZ(float aAngle);
+
+    //! Returns a matrix representing a rotation by \p aAngle around the X axis.
+    static Matrix<T> AffineRotation3DX(T aAngle);
+    //! Returns a matrix representing a rotation by \p aAngle around the Y axis.
+    static Matrix<T> AffineRotation3DY(T aAngle);
+    //! Returns a matrix representing a rotation by \p aAngle around the Z axis.
+    static Matrix<T> AffineRotation3DZ(T aAngle);
+
+    //! Returns a matrix representing a shift by shiftx, shifty, shiftz
+    static Matrix<T> AffineShift3D(T shiftx, T shifty, T shiftz);
+
+    //! Returns a matrix representing a scaling by scalefac
+    static Matrix<T> AffineScale3D(T scalex, T scaley, T scalez);
 
 	////! Rotate the float2 vector \p aVec by \p aAngle degrees.
 	//static float2 Rotate(const float2& aVec, float aAngle);

@@ -47,7 +47,7 @@ namespace Cuda
 		CUdevice	mHcuDevice;  //The CUDA Device linked to this CUDA Context
 		int			mDeviceID;   //The ID of the CUDA Device
 		int			mCtxFlags;   //Context creation flags
-				
+		CudaDeviceProperties* mProps;
 		//! CudaContext constructor
 		/*!
 			Creates a new CUDA Context bound to the CUDA Device with the ID \p deviceID

@@ -27,7 +27,7 @@
 namespace Cuda
 {
 	CudaArray1D::CudaArray1D(CUarray_format aFormat, size_t aSizeInElements, uint aNumChannels)
-		: mCUarray(0)
+		: mCUarray(0), mDescriptor({})
 	{
 		if (!(aNumChannels == 1 || aNumChannels == 2 || aNumChannels == 4))
 		{
@@ -43,10 +43,36 @@ namespace Cuda
 		cudaSafeCall(cuArrayCreate(&mCUarray, &mDescriptor));
 	}
 
+    CudaArray1D::CudaArray1D() : mCUarray(0), mDescriptor({})
+    {
+    }
+
 	CudaArray1D::~CudaArray1D()
 	{
 		cuArrayDestroy(mCUarray);
 	}
+
+    void CudaArray1D::Alloc(CUarray_format aFormat, size_t aSizeInElements, uint aNumChannels)
+    {
+        if (mCUarray != NULL)
+        {
+            cuArrayDestroy(mCUarray);
+            mCUarray = NULL;
+        }
+
+        if (!(aNumChannels == 1 || aNumChannels == 2 || aNumChannels == 4))
+        {
+            CudaException ex("Number of channels for a CUDA array must be 1, 2 or 4.");
+        }
+
+        memset(&mDescriptor, 0, sizeof(mDescriptor));
+        mDescriptor.Format = aFormat;
+        mDescriptor.Height = 0;
+        mDescriptor.Width = aSizeInElements;
+        mDescriptor.NumChannels = aNumChannels;
+
+        cudaSafeCall(cuArrayCreate(&mCUarray, &mDescriptor));
+    }
 
 	void CudaArray1D::CopyFromDeviceToArray(CudaDeviceVariable& aSource, size_t aOffsetInBytes)
 	{
@@ -79,7 +105,7 @@ namespace Cuda
 
 
 	CudaArray2D::CudaArray2D(CUarray_format aFormat, size_t aWidthInElements, size_t aHeightInElements, uint aNumChannels)
-		: mCUarray(0)
+		: mCUarray(0), mDescriptor({})
 	{
 		if (!(aNumChannels == 1 || aNumChannels == 2 || aNumChannels == 4))
 		{
@@ -94,6 +120,34 @@ namespace Cuda
 
 		cudaSafeCall(cuArrayCreate(&mCUarray, &mDescriptor));
 	}
+
+    CudaArray2D::CudaArray2D() : mCUarray(0), mDescriptor({})
+    {
+    }
+
+
+    void CudaArray2D::Alloc(CUarray_format aFormat, size_t aWidthInElements, size_t aHeightInElements, uint aNumChannels)
+    {
+        if (mCUarray != NULL)
+        {
+            cuArrayDestroy(mCUarray);
+            mCUarray = NULL;
+        }
+
+        if (!(aNumChannels == 1 || aNumChannels == 2 || aNumChannels == 4))
+        {
+            CudaException ex("Number of channels for a CUDA array must be 1, 2 or 4.");
+        }
+
+        memset(&mDescriptor, 0, sizeof(mDescriptor));
+        mDescriptor.Format = aFormat;
+        mDescriptor.Height = aHeightInElements;
+        mDescriptor.Width = aWidthInElements;
+        mDescriptor.NumChannels = aNumChannels;
+
+        cudaSafeCall(cuArrayCreate(&mCUarray, &mDescriptor));
+    }
+
 	CudaArray2D::~CudaArray2D()
 	{
 		cuArrayDestroy(mCUarray);
@@ -171,7 +225,7 @@ namespace Cuda
 
 
 	CudaArray3D::CudaArray3D(CUarray_format aFormat, size_t aWidthInElements, size_t aHeightInElements, size_t aDepthInElements, uint aNumChannels, uint aFlags)
-		: mCUarray(0)
+		: mCUarray(0), mDescriptor({})
 	{
 		if (!(aNumChannels == 1 || aNumChannels == 2 || aNumChannels == 4))
 		{
@@ -188,11 +242,57 @@ namespace Cuda
 
 		cudaSafeCall(cuArray3DCreate(&mCUarray, &mDescriptor));
 	}
+
+    CudaArray3D::CudaArray3D() : mCUarray(0), mDescriptor({})
+    {
+    }
+
 	CudaArray3D::~CudaArray3D()
 	{
 		cuArrayDestroy(mCUarray);
 	}
 
+    void CudaArray3D::Alloc(CUarray_format aFormat, size_t aWidthInElements, size_t aHeightInElements, size_t aDepthInElements, uint aNumChannels, uint aFlags)
+    {
+        if (mCUarray != NULL)
+        {
+            cuArrayDestroy(mCUarray);
+            mCUarray = NULL;
+        }
+
+        if (!(aNumChannels == 1 || aNumChannels == 2 || aNumChannels == 4))
+        {
+            CudaException ex("Number of channels for a CUDA array must be 1, 2 or 4.");
+        }
+
+        memset(&mDescriptor, 0, sizeof(mDescriptor));
+        mDescriptor.Format = aFormat;
+        mDescriptor.Height = aHeightInElements;
+        mDescriptor.Width = aWidthInElements;
+        mDescriptor.Depth = aDepthInElements;
+        mDescriptor.NumChannels = aNumChannels;
+        mDescriptor.Flags = aFlags;
+
+        cudaSafeCall(cuArray3DCreate(&mCUarray, &mDescriptor));
+    }
+
+    void CudaArray3D::CopyFromArrayToArray(CudaArray3D &aSource)
+    {
+        CUDA_MEMCPY3D params;
+        memset(&params, 0, sizeof(params));
+        params.srcArray = aSource.GetCUarray();
+        params.srcMemoryType = CU_MEMORYTYPE_ARRAY;
+        //params.srcHeight = mDescriptor.Height;
+        //params.srcPitch = mDescriptor.Width * mDescriptor.NumChannels * GetChannelSize(mDescriptor.Format);
+        params.dstArray = mCUarray;
+        params.dstMemoryType = CU_MEMORYTYPE_ARRAY;
+
+        params.Depth = mDescriptor.Depth;
+        params.Height = mDescriptor.Height;
+        params.WidthInBytes = mDescriptor.Width * mDescriptor.NumChannels * GetChannelSize(mDescriptor.Format);
+
+        cudaSafeCall(cuMemcpy3D(&params));
+    }
 	void CudaArray3D::CopyFromDeviceToArray(CudaDeviceVariable& aSource)
 	{
 		CUDA_MEMCPY3D params;
@@ -207,20 +307,24 @@ namespace Cuda
 		params.Height = mDescriptor.Height;
 		params.WidthInBytes = mDescriptor.Width * mDescriptor.NumChannels * GetChannelSize(mDescriptor.Format);
 
-		cudaSafeCall(cuMemcpy3D_v2(&params));
+		cudaSafeCall(cuMemcpy3D(&params));
 	}
 	void CudaArray3D::CopyFromArrayToDevice(CudaDeviceVariable& aDest)
 	{
 		CUDA_MEMCPY3D params;
 		memset(&params, 0, sizeof(params));
-		params.dstDevice = aDest.GetDevicePtr();
-		params.dstMemoryType = CU_MEMORYTYPE_DEVICE;
-		params.dstPitch = mDescriptor.Width * mDescriptor.NumChannels * GetChannelSize(mDescriptor.Format);
-		params.srcArray = mCUarray;
-		params.srcMemoryType = CU_MEMORYTYPE_ARRAY;
+
+        params.dstMemoryType = CU_MEMORYTYPE_DEVICE;
+        params.dstDevice = aDest.GetDevicePtr();
+        params.dstHeight = mDescriptor.Height;
+        params.dstPitch = mDescriptor.Width * mDescriptor.NumChannels * GetChannelSize(mDescriptor.Format);
+
+        params.srcMemoryType = CU_MEMORYTYPE_ARRAY;
+        params.srcArray = mCUarray;
+
 		params.Depth = mDescriptor.Depth;
 		params.Height = mDescriptor.Height;
-		params.WidthInBytes = params.srcPitch;
+		params.WidthInBytes = params.dstPitch;
 
 		cudaSafeCall(cuMemcpy3D(&params));
 	}

@@ -7,42 +7,45 @@
 using namespace Cuda;
 
 WbpWeightingKernel::WbpWeightingKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim)
-        : CudaKernel("wbpWeighting", aModule, aGridDim, aBlockDim, 0)
+        : CudaKernel("wbpWeightingNew", aModule, aGridDim, aBlockDim, 0)
 {
 
 }
 
 WbpWeightingKernel::WbpWeightingKernel(CUmodule aModule)
-        : CudaKernel("wbpWeighting", aModule, make_dim3(1, 1, 1), make_dim3(16, 16, 1), 0)
+        : CudaKernel("wbpWeightingNew", aModule, make_dim3(1, 1, 1), make_dim3(16, 16, 1), 0)
 {
 
 }
 
 
-float WbpWeightingKernel::operator()(CudaDeviceVariable& img, size_t stride, unsigned int pixelcount, float psiAngle, FilterMethod fm, int proj_index, int projectionCount, float thickness, Cuda::CudaDeviceVariable& tiltAngles)
+float WbpWeightingKernel::operator()(CudaDeviceVariable& img,
+                                     size_t stride,
+                                     uint2 imDim,
+                                     float2 asymCorrFac,
+                                     FilterMethod fm,
+                                     int projectionCount,
+                                     float thickness,
+                                     Matrix<double>& Mproj,
+                                     CudaDeviceVariable& Mdet)
 {
     CUdeviceptr img_dptr = img.GetDevicePtr();
-    CUdeviceptr tiltAngles_dptr = tiltAngles.GetDevicePtr();
-    float _angle = -psiAngle / 180.0f * (float)M_PI;
+    CUdeviceptr Mdet_dptr = Mdet.GetDevicePtr();
+    float3x3 Mp = MatrixTo3x3(Mproj);
 
     void** arglist = (void**)new void*[9];
 
     arglist[0] = &img_dptr;
     arglist[1] = &stride;
-    arglist[2] = &pixelcount;
-    arglist[3] = &_angle;
+    arglist[2] = &imDim;
+    arglist[3] = &asymCorrFac;
     arglist[4] = &fm;
-    arglist[5] = &proj_index;
-    arglist[6] = &projectionCount;
-    arglist[7] = &thickness;
-    arglist[8] = &tiltAngles_dptr;
+    arglist[5] = &projectionCount;
+    arglist[6] = &thickness;
+    arglist[7] = &Mp;
+    arglist[8] = &Mdet_dptr;
 
     float ms;
-
-    //CudaDeviceVariable filter(pixelcount*pixelcount*sizeof(float));
-
-    printf("pixelcount: %d \n", pixelcount);
-    printf("stride: %ld \n", stride);
 
     CUevent eventStart;
     CUevent eventEnd;

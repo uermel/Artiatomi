@@ -233,7 +233,6 @@ namespace Cuda
         //! PCI domain ID of the device
         int GetPCIDomainID();
 
-
         //! Prints detailed information on the CUdevice to std::cout
         void PrintProperties();
     };

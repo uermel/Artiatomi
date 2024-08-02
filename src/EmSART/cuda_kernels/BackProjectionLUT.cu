@@ -52,13 +52,14 @@
 #include "float.h"
 #include <builtin_types.h>
 #include <vector_functions.h>
-#include <device_functions.h>
+//#include <device_functions.h>
 #include "cubic_interpolation/cubicTex2D.cu"
 
 #include "Constants.h"
 #include "DeviceVariables.cuh"
 #include <cuda_fp16.h>
 #include <cooperative_groups.h>
+#include "common_types.h"
 
 
 //#include <curand_kernel.h>
@@ -77,16 +78,16 @@
 
 using namespace cooperative_groups;
 
-// transform vector by matrix
-__device__
-void MatrixVector3Mul(float4x4 M, float3* v)
-{
-    float3 erg;
-    erg.x = M.m[0].x * v->x + M.m[0].y * v->y + M.m[0].z * v->z + 1.f * M.m[0].w;
-    erg.y = M.m[1].x * v->x + M.m[1].y * v->y + M.m[1].z * v->z + 1.f * M.m[1].w;
-    erg.z = M.m[2].x * v->x + M.m[2].y * v->y + M.m[2].z * v->z + 1.f * M.m[2].w;
-    *v = erg;
-}
+//// transform vector by matrix
+//__device__
+//void MatrixVector3Mul(float4x4 M, float3* v)
+//{
+//    float3 erg;
+//    erg.x = M.m[0].x * v->x + M.m[0].y * v->y + M.m[0].z * v->z + 1.f * M.m[0].w;
+//    erg.y = M.m[1].x * v->x + M.m[1].y * v->y + M.m[1].z * v->z + 1.f * M.m[1].w;
+//    erg.z = M.m[2].x * v->x + M.m[2].y * v->y + M.m[2].z * v->z + 1.f * M.m[2].w;
+//    *v = erg;
+//}
 
 // transform vector by matrix
 __device__
@@ -1019,7 +1020,7 @@ void backProjectionLUTsliced(int proj_x,
 
     // Known voxel value
     float accumulator = 0.f;
-    surf3Dread(&accumulator, volume, x * 4, y, z);
+    //surf3Dread(&accumulator, volume, x * 4, y, z);
 
     // Loop over potentially covered pixels
     for (int osy = 0; osy < c_blockSupportSize.y; osy++) {
@@ -1065,43 +1066,412 @@ void backProjectionLUTsliced(int proj_x,
     surf3Dwrite(accumulator * lambda, volume, x * 4, y, z);
 }
 
+extern "C"
+__global__
+void backProjectionOrthoSliced(int proj_x,
+                               int proj_y,
+                               float lambda,
+                               CUtexObject* slices,
+                               CUsurfObject volume) {
+
+
+    float2 pixel;
+    float2 borderMin = make_float2(proj_x, proj_y);
+
+    // Vol coords
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    // Drop threads outside volume
+    if (x >= c_volumeDim.x || y >= c_volumeDim.y || z >= c_volumeDim.z) return;
+
+    float2 center2D;
+    float2 suppCenter2D;
+    float3 center3D;
+
+    // Voxel corner,
+    center3D = make_float3(c_bBoxMin.x + x * c_voxelSize.x, c_bBoxMin.y + y * c_voxelSize.y, c_bBoxMin.z + z * c_voxelSize.z);
+
+    // Distance to projection plane (for CTF slices)
+    float t;
+    int ts;
+    t = (c_projNorm.x * center3D.x + c_projNorm.y * center3D.y + c_projNorm.z * center3D.z);
+    t += (-c_projNorm.x * c_detektor.x - c_projNorm.y * c_detektor.y - c_projNorm.z * c_detektor.z);
+    t = abs(t) + DIST;
+
+    // Slice index
+    ts = (int)fminf(fmaxf(floorf((t - c_entry)/c_sliceThickness), 0), c_sliceNumber);
+    CUtexObject tex = slices[ts];
+
+    // Voxel center
+    //center3D = make_float3(center3D.x + c_voxelSize.x * 0.5f, center3D.y + c_voxelSize.y * 0.5f, center3D.z + c_voxelSize.z * 0.5f);
+
+    // Project Center
+    MatrixVector3Mul(c_DetectorMatrix, center3D, center2D);
+    MatrixVector3Mul(c_magAnisoInv, center2D.x, center2D.y, suppCenter2D.x, suppCenter2D.y);
+
+    // Lowest corner of the support of this voxel block
+    borderMin.x = fminf(borderMin.x, floorf(suppCenter2D.x - c_voxelSupportHalf));
+    borderMin.y = fminf(borderMin.y, floorf(suppCenter2D.y - c_voxelSupportHalf));
+
+    // Known voxel value
+    float accumulator = cubicTex2DSimple<float>(tex, suppCenter2D.x + 0.5, suppCenter2D.y + 0.5);
+
+//    // Loop over potentially covered pixels
+//    for (int osy = 0; osy < c_blockSupportSize.y; osy++) {
+//        // Non-oversampled pixel coordinate
+//        float projpixel_y = borderMin.y + osy * maxOverSampleInv;
+//
+//        // Skip if outside projection
+//        if (projpixel_y >= proj_y || projpixel_y < 0)
+//            continue;
+//
+//        // Oversampled pixel coordinate
+//        int idy = maxOverSample * borderMin.y + osy;
+//
+//        for (int osx = 0; osx < c_blockSupportSize.x; osx++) {
+//            // Non-oversampled pixel coordinate
+//            float projpixel_x = borderMin.x + osx * maxOverSampleInv;
+//
+//            // Skip if outside projection
+//            if (projpixel_x >= proj_x || projpixel_x < 0)
+//                continue;
+//
+//            // Oversampled pixel coordinate
+//            int idx = maxOverSample * borderMin.x + osx;
+//
+//            // Distance for this voxel
+//            float distx = (projpixel_x - suppCenter2D.x) * c_LUTstepinv + c_LUTcenter;
+//            float disty = (projpixel_y - suppCenter2D.y) * c_LUTstepinv + c_LUTcenter;
+//
+//            // Weight from LUT
+//            float weight = tex2D<float>(LUT, distx+0.5f, disty+0.5f);
+//
+//            //printf("%f %f %f %f\n", tex2D<float>(LUT, c_LUTcenter, c_LUTcenter), c_LUTcenter, tex2D<float>(LUT, 500, 500), tex2D<float>(LUT, 500.5, 500.5));
+//
+//            // Value from image
+//            float val = projection[ts * proj_y * proj_x + idy * proj_x + idx];//*(((float*)((char*)projection + stride * idy)) + idx);
+//            //float val = 0.f;
+//
+//            // Accumulate
+//            accumulator += val * weight;
+//        }
+//    }
+
+    surf3Dwrite(accumulator * lambda, volume, x * 4, y, z);
+}
+
+template<bool addToExisting, bool forceSingleSlice>
+__device__
+void backProjectionOrthoSimpleSliced(uint2 projDim,
+                                     uint3 volDim,
+                                     float lambda,
+                                     const ctfImageConstants imageConstants,
+                                     const float4x4 systemMatrix,
+                                     const CUtexObject* slices,
+                                     CUsurfObject volume,
+                                     int2 minmaxSlice)
+{
+    // Vol coords
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    // Drop threads outside volume
+    if (x >= volDim.x || y >= volDim.y || z >= volDim.z) return;
+
+    // Project Voxel
+    float3 center2D;
+    float3 center3D = make_float3((float)x, (float)y, (float)z);
+    MatrixVector3Mul(systemMatrix, center3D, center2D);
+
+    // Distance to projection plane (for CTF slices)
+    int ts = 0;
+    if(!forceSingleSlice) {
+        float distCenter = imageConstants.ctfCenter - center2D.z - imageConstants.entryPoint;
+        ts = min(max((int) floorf(distCenter / imageConstants.sliceThickness), 0), imageConstants.sliceNumber);
+
+        // If outside the current batch, return
+        if (ts < minmaxSlice.x || ts > minmaxSlice.y) return;
+
+        // If inside, adjust the slice index by the offset
+        ts = ts - minmaxSlice.x;
+    }
+
+    // Otherwise proceed.
+    CUtexObject tex = slices[ts];
+
+    // Interpolate from image
+    float accumulator = cubicTex2DSimple<float>(tex, center2D.x + 0.5f, center2D.y + 0.5f);
+
+    if (addToExisting){
+        float value = 0;
+        surf3Dread(&value, volume, x * 4, y, z);
+        surf3Dwrite(value + accumulator * lambda, volume, x * 4, y, z);
+    } else {
+        surf3Dwrite(accumulator * lambda, volume, x * 4, y, z);
+    }
+}
 
 extern "C"
 __global__
-void oversample(int proj_x,
-                int proj_y,
-                int maxOverSample,
-                float maxOverSampleInv,
-                float maxOverSampleInvH,
-                CUtexObject inprojection,
-                float* outprojection,
-                size_t out_stride)
+void bpOrthoAdd(uint2 projDim,
+                uint3 volDim,
+                float lambda,
+                const ctfImageConstants imageConstants,
+                const float4x4 systemMatrix,
+                const CUtexObject* slices,
+                CUsurfObject volume,
+                int2 minmaxSlice)
 {
-    // integer pixel coordinates
-    const unsigned int x = (blockIdx.x * blockDim.x) + threadIdx.x;
-    const unsigned int y = (blockIdx.y * blockDim.y) + threadIdx.y;
+    backProjectionOrthoSimpleSliced<true, false>(projDim,
+                                                 volDim,
+                                                 lambda,
+                                                 imageConstants,
+                                                 systemMatrix,
+                                                 slices,
+                                                 volume,
+                                                 minmaxSlice);
+}
 
-    if (x >= proj_x || y >= proj_y) return;
-    if (x < 0 || y < 0) return;
+extern "C"
+__global__
+void bpOrthoOverwrite(uint2 projDim,
+                      uint3 volDim,
+                      float lambda,
+                      const ctfImageConstants imageConstants,
+                      const float4x4 systemMatrix,
+                      const CUtexObject* slices,
+                      CUsurfObject volume,
+                      int2 minmaxSlice)
+{
+    backProjectionOrthoSimpleSliced<false, false>(projDim,
+                                                  volDim,
+                                                  lambda,
+                                                  imageConstants,
+                                                  systemMatrix,
+                                                  slices,
+                                                  volume,
+                                                  minmaxSlice);
+}
 
+extern "C"
+__global__
+void bpOrthoAddSS(uint2 projDim,
+                  uint3 volDim,
+                  float lambda,
+                  const ctfImageConstants imageConstants,
+                  const float4x4 systemMatrix,
+                  const CUtexObject* slices,
+                  CUsurfObject volume)
+{
+    backProjectionOrthoSimpleSliced<true, true>(projDim,
+                                                volDim,
+                                                lambda,
+                                                imageConstants,
+                                                systemMatrix,
+                                                slices,
+                                                volume,
+                                                make_int2(0, 0));
+}
+
+inline __device__ float bspline_deg1(float t)
+{
+    return fmaxf(0.f, 1.f-fabsf(t));
+}
+
+extern "C"
+__global__
+void multiplicity(float* vol,
+                  uint3 volDim,
+                  float3x3 Msys) {
+
+    // Image coords
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    // Drop threads outside volume
+    if (x >= volDim.x || y >= volDim.y || z >= volDim.z) return;
+
+    // FFT shift
+    //int i = ((int)x + (int)volDim.x / 2) % (int)volDim.x;
+    int j = ((int)y + (int)volDim.y / 2) % (int)volDim.y;
+    int k = ((int)z + (int)volDim.z / 2) % (int)volDim.z;
+
+    // Center
+    //auto xpos = (float) i - (float)volDim.x/2;;
+    float xpos = (float) x;
+    float ypos = (float) j - (float)volDim.y/2;
+    float zpos = (float) k - (float)volDim.z/2;
+
+    // Rotate
+    float3 rot = make_float3(xpos, ypos, zpos);
+    MatrixVector3Mul(Msys, &rot);
+
+    // No edge/corners
+    float dist = sqrt(xpos*xpos + ypos*ypos + zpos*zpos);
+
+    // Weight value 1
+    float weight = bspline_deg1(0.f - rot.z);
+    weight = (dist >= (float)volDim.x) ? 0 : weight;
+    vol[x + volDim.x * y + volDim.x * volDim.y * z] += weight;
+}
+
+template<bool complex>
+__device__
+void multNorm1Dbase(float* line,
+                    float2* lineComp,
+                    const float* mult,
+                    uint length,
+                    float threshold)
+{
+    // Line coords
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Drop threads outside volume
+    if (x >= length) return;
+
+    // Thresholded multiplicity
+    float multval = mult[x];
+    float multmask = (multval == 0) ? 0 : 1;
+    float multiplicity = max(threshold, multval);
+
+    // Apply
+    if (complex) {
+        float2 val = lineComp[x];
+        lineComp[x] = val / multiplicity * multmask;
+    } else{
+        float val = line[x];
+        line[x] = val / multiplicity * multmask;
+    }
+
+}
+
+extern "C"
+__global__
+void multNorm1D(float* line,
+                const float* mult,
+                uint length,
+                float threshold)
+{
+    multNorm1Dbase<false>(line,
+                          0,
+                          mult,
+                          length,
+                          threshold);
+}
+
+extern "C"
+__global__
+void multNorm1Dcomp(float2* lineComp,
+                    const float* mult,
+                    uint length,
+                    float threshold)
+{
+    multNorm1Dbase<true>(0,
+                         lineComp,
+                         mult,
+                         length,
+                         threshold);
+}
+
+
+template<bool complex>
+__device__
+void multNorm3Dbase(float* vol,
+                    float2* volComp,
+                    const float* mult,
+                    uint3 volDim,
+                    float threshold)
+{
+    // Image coords
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    // Drop threads outside volume
+    if (x >= volDim.x || y >= volDim.y || z >= volDim.z) return;
+
+    // Thresholded multiplicity
+    float multval = mult[x + volDim.x * y + volDim.x * volDim.y * z];
+    float multmask = (multval == 0) ? 0 : 1;
+    float multiplicity = max(threshold, multval);
+
+    // Apply
+    if (complex) {
+        float2 val = volComp[x + volDim.x * y + volDim.x * volDim.y * z];
+        volComp[x + volDim.x * y + volDim.x * volDim.y * z] = val / multiplicity * multmask;
+    } else{
+        float val = vol[x + volDim.x * y + volDim.x * volDim.y * z];
+        vol[x + volDim.x * y + volDim.x * volDim.y * z] = val / multiplicity * multmask;
+    }
+
+}
+
+extern "C"
+__global__
+void multNorm3D(float* vol,
+                const float* mult,
+                uint3 volDim,
+                float threshold)
+{
+    multNorm3Dbase<false>(vol,
+                          0,
+                          mult,
+                          volDim,
+                          threshold);
+}
+
+extern "C"
+__global__
+void multNorm3Dcomp(float2* volComp,
+                    const float* mult,
+                    uint3 volDim,
+                    float threshold)
+{
+    multNorm3Dbase<true>(0,
+                          volComp,
+                          mult,
+                          volDim,
+                          threshold);
+}
+
+
+extern "C"
+__global__
+void sampleFreqs(float* dst,
+                 CUtexObject src,
+                 uint dstLength,
+                 uint srcLength,
+                 float scaleFac,
+                 float extrapVal,
+                 SF_EXTRAP_MODE mode)
+{
+    // Line coords
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Drop threads outside volume
+    if (x >= dstLength) return;
+
+    // Convert
+    float freq = (float) x * scaleFac;
+
+    // Sample and write
     float val = 0.f;
-    for (float osy = 0; osy < maxOverSample; osy++) {
-        for (float osx = 0; osx < maxOverSample; osx++) {
-            unsigned int idx = maxOverSample * x + osx;
-            unsigned int idy = maxOverSample * y + osy;
-
-            float pixel_x = x + maxOverSampleInvH + osx * maxOverSampleInv;
-            float pixel_y = y + maxOverSampleInvH + osy * maxOverSampleInv;
-
-# if __CUDA_ARCH__>=200
-            //printf("%f %f\n", pixel_x, pixel_y);
-#endif
-
-            *(((float*)((char*)outprojection + out_stride * idy)) + idx) = cubicTex2D<float>(inprojection, pixel_x, pixel_y);
-            //val = cubicTex2D<float>(inprojection, pixel_x, pixel_y);
-            //surf2Dwrite(val, outprojection, idx * 4, idy);
+    switch (mode) {
+        case (SF_EXTRAP_TEX):{
+            val = tex1D<float>(src, freq + 0.5f);
+            break;
+        }
+        case (SF_EXTRAP_VAL): {
+            val = (freq < (float) srcLength) ? tex1D<float>(src, freq + 0.5f) : extrapVal;
+            break;
         }
     }
+
+    dst[x] = val;
 }
 
 #endif //BACKPROJECTIONSQUAREOS_CU

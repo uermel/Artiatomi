@@ -85,27 +85,27 @@ namespace Cuda
 		cudaSafeCall(cuMemcpyHtoD(dVarPtr, aValue, varSize));
 	}
 		
-	void CudaKernel::SetIntegerParameter(const int aValue)
-	{
-		mParamOffset = (mParamOffset + __alignof(aValue) - 1) & ~(__alignof(aValue) - 1);
-		cudaSafeCall(cuParamSeti(mFunction, mParamOffset, aValue));
-		mParamOffset += sizeof(aValue);
-	}
-
-	void CudaKernel::SetFloatParameter(const float aValue)
-	{
-		mParamOffset = (mParamOffset + __alignof(aValue) - 1) & ~(__alignof(aValue) - 1);
-		cudaSafeCall(cuParamSetf(mFunction, mParamOffset, aValue));
-		mParamOffset += sizeof(aValue);
-	}
-
-	void CudaKernel::SetDevicePtrParameter(CUdeviceptr aDevicePtr)
-	{
-		void* aPtr = (void*)(size_t)(aDevicePtr);
-		mParamOffset = (mParamOffset + __alignof(aPtr) - 1) & ~(__alignof(aPtr) - 1);
-		cudaSafeCall(cuParamSetv(mFunction, mParamOffset, &aPtr, sizeof(aPtr)));
-		mParamOffset += sizeof(aPtr);
-	}
+//	void CudaKernel::SetIntegerParameter(const int aValue)
+//	{
+//		mParamOffset = (mParamOffset + __alignof(aValue) - 1) & ~(__alignof(aValue) - 1);
+//		cudaSafeCall(cuParamSeti(mFunction, mParamOffset, aValue));
+//		mParamOffset += sizeof(aValue);
+//	}
+//
+//	void CudaKernel::SetFloatParameter(const float aValue)
+//	{
+//		mParamOffset = (mParamOffset + __alignof(aValue) - 1) & ~(__alignof(aValue) - 1);
+//		cudaSafeCall(cuParamSetf(mFunction, mParamOffset, aValue));
+//		mParamOffset += sizeof(aValue);
+//	}
+//
+//	void CudaKernel::SetDevicePtrParameter(CUdeviceptr aDevicePtr)
+//	{
+//		void* aPtr = (void*)(size_t)(aDevicePtr);
+//		mParamOffset = (mParamOffset + __alignof(aPtr) - 1) & ~(__alignof(aPtr) - 1);
+//		cudaSafeCall(cuParamSetv(mFunction, mParamOffset, &aPtr, sizeof(aPtr)));
+//		mParamOffset += sizeof(aPtr);
+//	}
 
 	void CudaKernel::ResetParameterOffset()
 	{
@@ -267,6 +267,11 @@ namespace Cuda
 	void CudaKernel::SetComputeSize(uint x, uint y, uint z)
 	{
 		SetComputeSize(dim3{ x, y, z });
-	}	
+	}
+
+    void CudaKernel::SetComputeSize(uint2 size)
+    {
+        SetComputeSize(dim3{ size.x, size.y, 1 });
+    }
 }
 #endif //USE_CUDA

@@ -119,13 +119,14 @@ namespace Configuration
 			int     fourFilterHP;
 			int     fourFilterHPS;
 			int     SIRTCount;
-			//float   ProjNormVal;
-			//bool    Filtered;
 			CTF_MODE CtfMode;
 			string  CtfFile;
 			float	BadPixelValue;
 			bool	CorrectBadPixels;
 			float4	CTFBetaFac;
+            float   AmplitudeContrast;
+            float   DeconvStrength;
+            int     CTFSliceBatch;
 			bool	FP16Volume;
 			bool	WriteVolumeAsFP16;
 			float	ProjectionScaleFactor;
@@ -145,11 +146,10 @@ namespace Configuration
 			bool	SwitchCTFDirectionForIMOD;
 			bool	PhaseFlipOnly;
 			float	WienerFilterNoiseLevel;
-            bool LimitToNyquist;
-            string LUTFile;
-            int LUTSize;
-            float LUTStep;
-            float support;
+            bool    LimitToNyquist;
+            bool    WriteDebug;
+            string  SNRFile;
+            string  ProjectionSubFile;
 			
 #ifdef REFINE_MODE
 			int SizeSubVol;
@@ -180,6 +180,7 @@ namespace Configuration
 			int SizeSubVol;
 			float VoxelSizeSubVol;
 			string MotiveList;
+            string MaskFile;
 			float ScaleMotivelistShift;
 			float ScaleMotivelistPosition;
 			string SubVolPath;
@@ -192,6 +193,11 @@ namespace Configuration
 			bool NormalizeMRCParticle;
 			float NormalizationRadius;
 			bool InvertMRCParticle;
+            bool SubvolsWithRotation;
+            string ReferenceEM;
+            string ReferenceMRC;
+            bool ContinueRec;
+            bool AverageOverlap;
 #endif
 
             static Config& GetConfig();

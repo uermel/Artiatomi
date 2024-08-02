@@ -24,7 +24,7 @@
 #ifndef WBPWEIGHTING_CU
 #define WBPWEIGHTING_CU
 
-//Includes for IntelliSense 
+//Includes for IntelliSense
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include <texture_fetch_functions.h>
@@ -33,6 +33,7 @@
 
 #include <stdio.h>
 #include "cufft.h"
+#include "DeviceVariables.cuh"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -67,7 +68,7 @@ void wbpWeighting(cuComplex* img, size_t stride, unsigned int pixelcount, float 
 	//compute x,y,z indiced
 	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;	
 	unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
-	
+
 	if (x >= pixelcount/2 + 1) return;
 	if (y >= pixelcount) return;
 
@@ -202,19 +203,161 @@ void wbpWeighting(cuComplex* img, size_t stride, unsigned int pixelcount, float 
 
 extern "C"
 __global__
-void fourierFilter(float2* img, size_t stride, int pixelcount, float lp, float hp, float lps, float hps)
+void wbpWeightingNew(cuComplex* img,
+                     size_t stride,
+                     uint2 pixelcount,
+                     float2 asymCorrFac,
+                     FilterMethod fm,
+                     int projectionCount,
+                     float thickness,
+                     const float3x3 Mproj,
+                     const float3x3* Mdet)
+{
+    //compute x,y,z indiced
+    unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (x >= pixelcount.x/2 + 1) return;
+    if (y >= pixelcount.y) return;
+
+    float3 pos = make_float3((float)x, (float)y, 0);
+    //auto xpos = (float)x;
+    //auto ypos = (float)y;
+    if (pos.y > (float)pixelcount.y * 0.5f)
+        pos.y = ((float)pixelcount.y - pos.y) * -1.0f;
+
+    pos.x *= asymCorrFac.x;
+    pos.y *= asymCorrFac.y;
+
+    // Rotated position
+    MatrixVector3Mul(Mproj, &pos);
+
+    // We tilt around x Axis, so for ramp:
+    float length = pos.y / ((float)max(pixelcount.x, pixelcount.y) / 2.0f);
+    float weight = 1;
+
+    switch (fm)
+    {
+        case FM_RAMP:
+            weight = fminf(abs(length), 1.0f);
+            break;
+        case FM_EXACT:
+        {
+            float w = 0;
+
+            for (int tilt = 0; tilt < projectionCount; tilt++)
+            {
+                // Rotate back by
+                float3 posback = pos;
+                MatrixVector3Mul(Mdet[tilt], &posback);
+
+                w += max((thickness - fabs(posback.z))/thickness, 0.f);
+            }
+            // Normalize, such that the center is 1 / number of projections, and
+            // the boundary is one!!
+            w += 1.0f;
+            w = 1.0f / w;
+
+            //Added normalization(zero frequencies set to zero)
+            if (pos.y == 0)
+            {
+                w = 0;
+            }
+            weight = w;
+        }
+            break;
+        case FM_CONTRAST2:
+        {//1.000528623371163   0.006455924123082   0.005311341463650   0.001511856638478 1024
+            //1.000654227857550   0.006008581017124   0.004159659493151   0.000975903396538 1856
+            const float p1 = 1.000654227857550f;
+            const float p2 = 0.006008581017124f;
+            const float p3 = 0.004159659493151f;
+            const float p4 = 0.000975903396538f;
+            if (length == 0)
+            {
+                weight = 0;
+            }
+            else
+            {
+                float logfl = logf(abs(length));
+                weight = p1 + p2 * logfl + p3 * logfl * logfl + p4 * logfl * logfl * logfl;
+            }
+            weight = fmaxf(0, fminf(weight, 1));
+        }
+            break;
+        case FM_CONTRAST10:
+        {//1.001771328635575   0.019634409648661   0.014871972759515   0.004962873817517 1024
+            //1.003784816598589   0.029016377161629   0.019582940715148   0.004559409669984 1856
+            const float p1 = 1.003784816598589f;
+            const float p2 = 0.029016377161629f;
+            const float p3 = 0.019582940715148f;
+            const float p4 = 0.004559409669984f;
+            if (length == 0)
+            {
+                weight = 0;
+            }
+            else
+            {
+                float logfl = logf(abs(length));
+                weight = p1 + p2 * logfl + p3 * logfl * logfl + p4 * logfl * logfl * logfl;
+            }
+            weight = fmaxf(0, fminf(weight, 1));
+        }
+            break;
+        case FM_CONTRAST30:
+        {//0.998187224092783   0.019542575617926   0.010359773048706   0.006975890938967 1024
+            //0.999884616010943   0.000307646262566   0.004742915272196   0.004806551368900 1856
+            const float p1 = 0.999884616010943f;
+            const float p2 = 0.000307646262566f;
+            const float p3 = 0.004742915272196f;
+            const float p4 = 0.004806551368900f;
+            if (length == 0)
+            {
+                weight = 0;
+            }
+            else
+            {
+                float logfl = logf(abs(length));
+                weight = p1 + p2 * logfl + p3 * logfl * logfl + p4 * logfl * logfl * logfl;
+            }
+            weight = fmaxf(0, fminf(weight, 1));
+        }
+            break;
+    }
+
+    cuComplex res = *(((cuComplex*)((char*)img + stride * y)) + x);
+    res.x *= weight;
+    res.y *= weight;
+
+    *(((cuComplex*)((char*)img + stride * y)) + x) = res;
+}
+
+
+extern "C"
+__global__
+void fourierFilter(float2* img,
+                   size_t stride,
+                   uint2 pixelcount,
+                   float2 asymCorrFac,
+                   float lp,
+                   float hp,
+                   float lps,
+                   float hps)
 {
 	//compute x,y indices 
-	int x = blockIdx.x * blockDim.x + threadIdx.x;
-	int y = blockIdx.y * blockDim.y + threadIdx.y;
+	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+	unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
 
-	if (x >= pixelcount / 2 + 1) return;
-	if (y >= pixelcount) return;
+	if (x >= pixelcount.x / 2 + 1) return;
+	if (y >= pixelcount.y) return;
 
-	float mx = (float)x;
-	float my = (float)y;
-	if (my > pixelcount * 0.5f)
-		my = (pixelcount - my) * -1.0f;
+	auto mx = (float)x;
+	auto my = (float)y;
+	if (my > (float)pixelcount.y * 0.5f)
+		my = ((float)pixelcount.y - my) * -1.0f;
+
+    mx *= asymCorrFac.x;
+    my *= asymCorrFac.y;
 
 	float dist = sqrtf(mx * mx + my * my);
 	float fil = 0;
@@ -228,7 +371,7 @@ void fourierFilter(float2* img, size_t stride, int pixelcount, float lp, float h
 	}
 	else
 	{
-		if (dist <= pixelcount / 2 - 1) fil = 1;
+		if (dist <= (float)max(pixelcount.x, pixelcount.y) / 2 - 1) fil = 1;
 	}
 	//Gauss
 	if (lps > 0)
@@ -474,24 +617,24 @@ void findPeak(float* img, size_t stride, char* maskInv, size_t strideMask, int p
 }
 
 
-texture<float, 3, cudaReadModeElementType> texVol;
-extern "C"
-__global__ void rot3d(int size, float3 rotMat0, float3 rotMat1, float3 rotMat2, float* outVol)
-{
-	const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
-	const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
-
-	float center = size / 2;
-
-	float3 vox = make_float3(x - center, y - center, z - center);
-	float3 rotVox;
-	rotVox.x = center + rotMat0.x * vox.x + rotMat1.x * vox.y + rotMat2.x * vox.z;
-	rotVox.y = center + rotMat0.y * vox.x + rotMat1.y * vox.y + rotMat2.y * vox.z;
-	rotVox.z = center + rotMat0.z * vox.x + rotMat1.z * vox.y + rotMat2.z * vox.z;
-
-	outVol[z * size * size + y * size + x] = tex3D(texVol, rotVox.x + 0.5f, rotVox.y + 0.5f, rotVox.z + 0.5f);
-}
+//texture<float, 3, cudaReadModeElementType> texVol;
+//extern "C"
+//__global__ void rot3d(int size, float3 rotMat0, float3 rotMat1, float3 rotMat2, float* outVol)
+//{
+//	const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+//	const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+//	const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+//
+//	float center = size / 2;
+//
+//	float3 vox = make_float3(x - center, y - center, z - center);
+//	float3 rotVox;
+//	rotVox.x = center + rotMat0.x * vox.x + rotMat1.x * vox.y + rotMat2.x * vox.z;
+//	rotVox.y = center + rotMat0.y * vox.x + rotMat1.y * vox.y + rotMat2.y * vox.z;
+//	rotVox.z = center + rotMat0.z * vox.x + rotMat1.z * vox.y + rotMat2.z * vox.z;
+//
+//	outVol[z * size * size + y * size + x] = tex3D(texVol, rotVox.x + 0.5f, rotVox.y + 0.5f, rotVox.z + 0.5f);
+//}
 
 extern "C"
 __global__ void sphericalMask3D(int size, float radius, float* outVol)
@@ -596,4 +739,71 @@ void restoreVolume(cudaSurfaceObject_t volume, const float* tempStore, int3 volm
 
     float data = tempStore[mask_idx];
     surf3Dwrite<float>(data, volume, volGrid.x * sizeof(float), volGrid.y, volGrid.z, cudaBoundaryModeTrap);
+}
+
+//template<class T>
+//__device__ void fftshift(int size, size_t stride, T* image_in, T* image_out)
+//{
+//    const int x = blockIdx.x * blockDim.x + threadIdx.x;
+//    const int y = blockIdx.y * blockDim.y + threadIdx.y;
+//
+//    if (x >= size) return;
+//    if (y >= size) return;
+//
+//    int i = (x + size / 2) % size;
+//    int j = (y + size / 2) % size;
+//
+//    printf("x, y, i, j %i %i %i %i\n", x, y, i, j);
+//
+//    T temp = *(((T *) ((char *) image_in + stride * j)) + i);
+//    *(((T *) ((char *) image_out + stride * y)) + x) = temp;
+//}
+//
+//// Typed functions
+//extern "C"
+//__global__
+//void fftshift_real(int size, size_t stride, float* image_in, float* image_out)
+//{
+//    fftshift<float>(size, stride, image_in, image_out);
+//}
+//
+//extern "C"
+//__global__
+//void fftshift_cplx(int size, size_t stride, float2* image_in, float2* image_out)
+//{
+//    fftshift<float2>(size, stride, image_in, image_out);
+//}
+
+extern "C"
+__global__
+void fftshift_real(int size, size_t stride_in, size_t stride_out, float* image_in, float* image_out, float scale_factor)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (x >= size) return;
+    if (y >= size) return;
+
+    int i = (x + size / 2) % size;
+    int j = (y + size / 2) % size;
+
+    float temp = *(((float *) ((char *) image_in + stride_in * j)) + i);
+    *(((float *) ((char *) image_out + stride_out * y)) + x) = temp * scale_factor;
+}
+
+extern "C"
+__global__
+void fftshift_complex2real(int size, size_t stride_in, size_t stride_out, float2* image_in, float* image_out)
+{
+    const int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (x >= size) return;
+    if (y >= size) return;
+
+    int i = (x + size / 2) % size;
+    int j = (y + size / 2) % size;
+
+    float2 temp = *(((float2 *) ((char *) image_in + stride_in * j)) + i);
+    *(((float *) ((char *) image_out + stride_out * y)) + x) = temp.x;
 }

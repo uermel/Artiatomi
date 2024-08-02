@@ -78,11 +78,14 @@ void SetConstantValues(CTFKernel& kernel, Projection& proj, int index, float cs,
 
     _pixelsize = _pixelsize * powf(10, -9);
     kernel.SetConstantValue("c_pixelsize", &_pixelsize);
-    float _pixelcount = (float)proj.GetMaxDimension();
+
+    float2 _pixelcount = make_float2((float)proj.GetWidth(), (float)proj.GetHeight());
     kernel.SetConstantValue("c_pixelcount", &_pixelcount);
+
     float _maxFreq = 1.0f / (_pixelsize * 2.0f);
     kernel.SetConstantValue("c_maxFreq", &_maxFreq);
-    float _freqStepSize = _maxFreq / (_pixelcount / 2.0f);
+
+    float2 _freqStepSize = make_float2(_maxFreq / (_pixelcount.x / 2.0f), _maxFreq / (_pixelcount.y / 2.0f));
     //printf("_freqStepSize: %f; _pixelsize: %f\n", _freqStepSize, _pixelsize);
     kernel.SetConstantValue("c_freqStepSize", &_freqStepSize);
 

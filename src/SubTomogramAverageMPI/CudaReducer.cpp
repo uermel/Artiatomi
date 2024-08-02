@@ -28,7 +28,7 @@ CudaReducer::CudaReducer(int aVoxelCount, CUstream aStream, CudaContext* context
 	: voxelCount(aVoxelCount), stream(aStream), ctx(context)
 {
 	// CUmodule cuMod = ctx->LoadModule("kernel.ptx_bu");
-    CUmodule cuMod = ctx->LoadModulePTX(SubTomogramAverageKernel, 0, false, false);
+    CUmodule cuMod = ctx->LoadModulePTX(ReducerKernels, 0, false, false);
 		
 	sum512 = new CudaKernel("_Z6reduceILj512EEvPfS0_j", cuMod);
 	sum256 = new CudaKernel("_Z6reduceILj256EEvPfS0_j", cuMod);

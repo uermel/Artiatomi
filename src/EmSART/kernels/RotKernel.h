@@ -19,7 +19,7 @@ class RotKernel : public Cuda::CudaKernel
 {
 private:
     int size;
-    Cuda::CudaTextureArray3D volTexArray;
+    Cuda::CudaTextureObject3D volTexArray;
     void computeRotMat(float phi, float psi, float theta, float rotMat[3][3]);
 
 public:

@@ -76,14 +76,15 @@ namespace Cuda
 		mDeviceName = std::string(devName);
 
 
-		cudaSafeCall(cuDeviceComputeCapability(&major, &minor, aDevice));
-		mComputeCapability = major + minor / 10.0f;
+        cudaSafeCall(cuDeviceGetAttribute(&major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, aDevice));
+        cudaSafeCall(cuDeviceGetAttribute(&minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, aDevice));
+        mComputeCapability = (float)major + (float)minor / 10.0f;
 
 
 		cudaSafeCall(cuDriverGetVersion(&major));
 		minor = major % 100;
 		major = major / 1000;
-		mDriverVersion = float(major) + (minor / 100.0f);
+		mDriverVersion = float(major) + ((float)minor / 100.0f);
 
 
 
@@ -115,8 +116,6 @@ namespace Cuda
 		cudaSafeCall(cuDeviceGetAttribute(&mTextureAlign, CU_DEVICE_ATTRIBUTE_TEXTURE_ALIGNMENT, aDevice));
 
 		cudaSafeCall(cuDeviceGetAttribute(&mClockRate, CU_DEVICE_ATTRIBUTE_CLOCK_RATE, aDevice));
-
-
 
 		if (mDriverVersion >= 2.0f)
 			cudaSafeCall(cuDeviceGetAttribute(&mGpuOverlap, CU_DEVICE_ATTRIBUTE_GPU_OVERLAP, aDevice));

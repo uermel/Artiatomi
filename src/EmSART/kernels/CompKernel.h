@@ -18,17 +18,52 @@
 
 class CompKernel : public Cuda::CudaKernel
 {
-public:
-    CompKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
-    CompKernel(CUmodule aModule);
+private:
+    float2* corners_h;
+    float* norm_h;
 
-    float operator()(Cuda::CudaPitchedDeviceVariable& real_raw,
-                     Cuda::CudaPitchedDeviceVariable& virtual_raw,
-                     Cuda::CudaPitchedDeviceVariable& vol_distance_map,
+public:
+    explicit CompKernel(CUmodule aModule);
+    CompKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
+    ~CompKernel();
+
+    void CopyCornersToDevice(vector<float2>& aCorners, vector<float>& aNorm);
+
+    float operator()(Cuda::CudaPitchedDeviceVariable& real_proj,
+                     Cuda::CudaPitchedDeviceVariable& fwd_proj,
+                     Cuda::CudaPitchedDeviceVariable& dist_proj,
+                     uint2 projDim, float2 cutLength, float2 dimLength,
                      float realLength,
-                     float4 crop,
-                     float4 cropDim,
-                     float projValScale);
+                     vector<float2>& corners,
+                     vector<float>& norm,
+                     float voxelSize);
+};
+
+class CompSpecialKernel : public Cuda::CudaKernel
+{
+private:
+    float2* corners_h;
+    float* norm_h;
+
+public:
+    explicit CompSpecialKernel(CUmodule aModule);
+    CompSpecialKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
+    ~CompSpecialKernel();
+
+    void CopyCornersToDevice(vector<float2>& aCorners, vector<float>& aNorm);
+
+    float operator()(Cuda::CudaPitchedDeviceVariable& real_proj,
+                     Cuda::CudaPitchedDeviceVariable& fwd_proj_parent,
+                     Cuda::CudaPitchedDeviceVariable& fwd_proj_child,
+                     Cuda::CudaPitchedDeviceVariable& dist_proj_parent,
+                     Cuda::CudaPitchedDeviceVariable& dist_proj_child,
+                     uint2 projDim, float2 cutLength, float2 dimLength,
+                     float maxDistParent,
+                     float maxDistChild,
+                     vector<float2>& corners,
+                     vector<float>& norm,
+                     float voxelSizeParent,
+                     float voxelSizeChild);
 };
 
 #endif //ARTIATOMI_COMPKERNEL_H

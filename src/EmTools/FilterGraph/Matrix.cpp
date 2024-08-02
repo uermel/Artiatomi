@@ -271,6 +271,17 @@ T* Matrix<T>::GetData()
 	return values;
 }
 
+template<class T>
+int Matrix<T>::GetColNum()
+{
+    return cols;
+}
+
+template<class T>
+int Matrix<T>::GetRowNum()
+{
+    return rows;
+}
 //template<class T>
 //float3 Matrix<T>::GetAsFloat3()
 //{
@@ -500,18 +511,49 @@ bool Matrix<T>::operator==(const Matrix<T>& aValue)
 template<class T>
 Matrix<T>& Matrix<T>::operator=(const Matrix<T>& aValue)
 {
-    T* temp = new T[aValue.cols * aValue.rows];
-    rows = aValue.rows;
-    cols = aValue.cols;
+    if (this != &aValue) {
+        rows = aValue.rows;
+        cols = aValue.cols;
 
-    if (values != NULL)
-        delete[] values;
+        if (values != NULL)
+            delete[] values;
 
-    values = temp;
-	memcpy(values, aValue.values, sizeof(T) * rows * cols);
+        values = new T[aValue.cols * aValue.rows];
 
+        for (uint x = 0; x < rows; x++)
+            for (uint y = 0; y < cols; y++) {
+                (*this)(x, y) = aValue(x, y);
+            }
+    }
 	return *this;
 }
+
+template<class T>
+Matrix<T>::operator Matrix<float>()
+{
+    Matrix<float> ret(rows, cols);
+
+    for (uint x = 0; x < rows; x++)
+        for (uint y = 0; y < cols; y++) {
+            ret(x, y) = (float)(*this)(x, y);
+        }
+
+    return ret;
+}
+
+template<class T>
+Matrix<T>::operator Matrix<double>()
+{
+    Matrix<double> ret(rows, cols);
+
+    for (uint x = 0; x < rows; x++)
+        for (uint y = 0; y < cols; y++) {
+            ret(x, y) = (double)(*this)(x, y);
+        }
+
+    return ret;
+}
+
 
 template<class T>
 bool Matrix<T>::operator!=(const Matrix<T>& aValue)
@@ -626,16 +668,17 @@ Matrix<T> Matrix<T>::Mul(const Matrix<T>& aValue)
 {
 	if (cols != aValue.rows) return *this;
 	Matrix<T> ret(rows, aValue.cols);
-	for (uint retx = 0; retx < ret.rows; retx++)
-	for (uint rety = 0; rety < ret.cols; rety++)
-	{
-		T val = 0;
-		for (uint i = 0; i < cols; i++)
-		{
-			val += (*this)(retx, i) * aValue(i, rety);
-		}
-		ret(retx,rety) = val;
-	}
+
+	for (uint retx = 0; retx < ret.rows; retx++) {
+        for (uint rety = 0; rety < ret.cols; rety++) {
+            T val = 0;
+            for (uint i = 0; i < cols; i++) {
+                val += (*this)(retx, i) * aValue(i, rety);
+            }
+            ret(retx, rety) = val;
+        }
+    }
+
 	return ret;
 }
 
@@ -841,6 +884,70 @@ Matrix<float> Matrix<T>::GetRotationMatrix3DZ(float aAngle)
 	rot(2,0) = 0          ; rot(2,1) = 0           ; rot(2,2) = 1;
 
 	return rot;
+}
+
+template <class T>
+Matrix<T> Matrix<T>::AffineRotation3DX(T aAngle)
+{
+    Matrix<T> rot(4,4);
+
+    rot(0,0) = 1; rot(0,1) = 0;               rot(0,2) = 0;               rot(0,3) = 0;
+    rot(1,0) = 0; rot(1,1) = cos(aAngle);  rot(1,2) = -sin(aAngle); rot(1,3) = 0;
+    rot(2,0) = 0; rot(2,1) = sin(aAngle);  rot(2,2) = cos(aAngle);  rot(2,3) = 0;
+    rot(3,0) = 0; rot(3,1) = 0;               rot(3,2) = 0;               rot(3,3) = 1;
+
+    return rot;
+}
+
+template <class T>
+Matrix<T> Matrix<T>::AffineRotation3DY(T aAngle)
+{
+    Matrix<T> rot(4,4);
+
+    rot(0,0) = cos(aAngle);  rot(0,1) = 0; rot(0,2) = sin(aAngle); rot(0,3) = 0;
+    rot(1,0) = 0;               rot(1,1) = 1; rot(1,2) = 0;              rot(1,3) = 0;
+    rot(2,0) = -sin(aAngle); rot(2,1) = 0; rot(2,2) = cos(aAngle); rot(2,3) = 0;
+    rot(3,0) = 0;               rot(3,1) = 0; rot(3,2) = 0;              rot(3,3) = 1;
+    return rot;
+}
+
+template <class T>
+Matrix<T> Matrix<T>::AffineRotation3DZ(T aAngle)
+{
+    Matrix<T> rot(4,4);
+
+    rot(0,0) = cos(aAngle); rot(0,1) = -sin(aAngle); rot(0,2) = 0; rot(0,3) = 0;
+    rot(1,0) = sin(aAngle); rot(1,1) = cos(aAngle);  rot(1,2) = 0; rot(1,3) = 0;
+    rot(2,0) = 0;              rot(2,1) = 0;               rot(2,2) = 1; rot(2,3) = 0;
+    rot(3,0) = 0;              rot(3,1) = 0;               rot(3,2) = 0; rot(3,3) = 1;
+
+    return rot;
+}
+
+template <class T>
+Matrix<T> Matrix<T>::AffineShift3D(T shiftx, T shifty, T shiftz)
+{
+    Matrix<T> shift(4,4);
+
+    shift(0,0) = 1; shift(0,1) = 0; shift(0,2) = 0; shift(0,3) = shiftx;
+    shift(1,0) = 0; shift(1,1) = 1; shift(1,2) = 0; shift(1,3) = shifty;
+    shift(2,0) = 0; shift(2,1) = 0; shift(2,2) = 1; shift(2,3) = shiftz;
+    shift(3,0) = 0; shift(3,1) = 0; shift(3,2) = 0; shift(3,3) = 1;
+
+    return shift;
+}
+
+template <class T>
+Matrix<T> Matrix<T>::AffineScale3D(T scalex, T scaley, T scalez)
+{
+    Matrix<T> scale(4,4);
+
+    scale(0,0) = scalex; scale(0,1) = 0;      scale(0,2) = 0;      scale(0,3) = 0;
+    scale(1,0) = 0;      scale(1,1) = scaley; scale(1,2) = 0;      scale(1,3) = 0;
+    scale(2,0) = 0;      scale(2,1) = 0;      scale(2,2) = scalez; scale(2,3) = 0;
+    scale(3,0) = 0;      scale(3,1) = 0;      scale(3,2) = 0;      scale(3,3) = 1;
+
+    return scale;
 }
 
 //template <class T>

@@ -5,7 +5,7 @@
 #ifndef STA_CUDAKERNELBINARYS_H
 #define STA_CUDAKERNELBINARYS_H
 
-#include "cuda_kernels/basicKernels.cu.h"
-#include "cuda_kernels/kernel.cu.h"
+#include "basicKernels.cu.h"
+#include "ReducerKernels.cu.h"
 
 #endif

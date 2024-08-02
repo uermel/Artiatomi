@@ -25,14 +25,14 @@
 
 #ifdef USE_CUDA
 Cuda::CudaContext::CudaContext(int deviceID, CUctx_flags ctxFlags) : 
-	mDeviceID(deviceID), mCtxFlags(ctxFlags), mHcuContext(0), mHcuDevice(0)
+	mDeviceID(deviceID), mCtxFlags(ctxFlags), mHcuContext(0), mHcuDevice(0), mProps()
 {
 	cudaSafeCall(cuDeviceGet(&mHcuDevice, deviceID));
 	cudaSafeCall(cuCtxCreate(&mHcuContext, mCtxFlags, mHcuDevice));
 }
 
 Cuda::CudaContext::CudaContext(int deviceID, bool primary) : 
-	mDeviceID(deviceID), mCtxFlags(0), mHcuContext(0), mHcuDevice(0)
+	mDeviceID(deviceID), mCtxFlags(0), mHcuContext(0), mHcuDevice(0), mProps()
 {
 	cudaSafeCall(cuDeviceGet(&mHcuDevice, deviceID));
 	cudaSafeCall(cuDevicePrimaryCtxRetain(&mHcuContext, mHcuDevice));
@@ -48,7 +48,7 @@ Cuda::CudaContext::~CudaContext()
 {
 	if (mHcuContext)
 	{
-		cudaSafeCall(cuCtxDetach(mHcuContext));
+		cudaSafeCall(cuCtxDestroy(mHcuContext));
 	}
 }
 	
@@ -339,8 +339,12 @@ void Cuda::CudaContext::ClearMemory(CUdeviceptr aPtr, unsigned int aValue, size_
 
 Cuda::CudaDeviceProperties* Cuda::CudaContext::GetDeviceProperties()
 {
-	Cuda::CudaDeviceProperties* props = new Cuda::CudaDeviceProperties(mHcuDevice, mDeviceID);
-	return props;
+    if (mProps != NULL){
+        delete mProps;
+    }
+
+	mProps = new Cuda::CudaDeviceProperties(mHcuDevice, mDeviceID);
+	return mProps;
 }
 
 //void Cuda::CudaContext::SetTextureProperties(CUtexref aHcuTexRef, const TextureProperties& aTexProps)

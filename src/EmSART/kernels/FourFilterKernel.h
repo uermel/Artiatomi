@@ -21,7 +21,11 @@ public:
     FourFilterKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
     FourFilterKernel(CUmodule aModule);
 
-    float operator()(Cuda::CudaDeviceVariable& img, size_t stride, int pixelcount, float lp, float hp, float lps, float hps);
+    float operator()(Cuda::CudaDeviceVariable& img,
+                     size_t stride,
+                     uint2 pixelcount,
+                     float2 asymCorrFac,
+                     float lp, float hp, float lps, float hps);
 };
 
 

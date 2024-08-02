@@ -26,14 +26,27 @@
 #include <algorithm>
 
 Projection::Projection(ProjectionSource* aPs, MarkerFile* aMarkers, bool aCompensateImageRotation)
-	: ps(aPs), markers(aMarkers), extraShifts(new float2[aPs->GetProjectionCount()]), compensateImageRotation(aCompensateImageRotation)
+	: ps(aPs),
+      markers(aMarkers),
+      extraShifts(new float2[aPs->GetProjectionCount()]),
+      compensateImageRotation(aCompensateImageRotation),
+      goodProjection(new bool[aPs->GetProjectionCount()])
 {
 	float2 zero;
 	zero.x = 0;
 	zero.y = 0;
-	for (size_t i = 0; i < aPs->GetProjectionCount(); i++)
+
+    goodProjectionCount = 0;
+
+    for (size_t i = 0; i < aPs->GetProjectionCount(); i++)
 	{
 		extraShifts[i] = zero;
+
+        projectionMatrices.push_back(ProjectionMatrix<double>(i));
+        detectorMatrices.push_back(DetectorMatrix<double>(i));
+
+        goodProjection[i] = markers->CheckIfProjIndexIsGood((int)i);
+        if (goodProjection[i]) goodProjectionCount++;
 	}
 }
 
@@ -44,6 +57,11 @@ Projection::~Projection()
 		delete[] extraShifts;
 		extraShifts = NULL;
 	}
+
+    if (goodProjection){
+        delete[] goodProjection;
+        goodProjection = NULL;
+    }
 }
 
 dim3 Projection::GetDimension()
@@ -54,6 +72,32 @@ dim3 Projection::GetDimension()
 	dim.z = 1;
 	return dim;
 }
+
+template<class T>
+T Projection::GetDim()
+{
+    T dim;
+    dim.x = ps->GetWidth();
+    dim.y = ps->GetHeight();
+    return dim;
+}
+template uint2 Projection::GetDim();
+template int2 Projection::GetDim();
+template float2 Projection::GetDim();
+template double2 Projection::GetDim();
+
+template<class T>
+T Projection::GetFFTDim()
+{
+    T dim;
+    dim.x = ps->GetWidth()/2+1;
+    dim.y = ps->GetHeight();
+    return dim;
+}
+template uint2 Projection::GetFFTDim();
+template int2 Projection::GetFFTDim();
+template float2 Projection::GetFFTDim();
+template double2 Projection::GetFFTDim();
 
 int Projection::GetWidth()
 {
@@ -68,6 +112,36 @@ int Projection::GetHeight()
 int Projection::GetMaxDimension()
 {
 	return max(ps->GetWidth(), ps->GetHeight());
+}
+
+int Projection::GetMaxShells()
+{
+    float2 fftDimF = GetFFTDim<float2>();
+    float max_x = fftDimF.x * GetAsymCorrFactor().x;
+    float max_y = fftDimF.y/2 * GetAsymCorrFactor().y;
+    float maxIndex = sqrt(max_x * max_x + max_y * max_y);
+    auto snrShells = (int)maxIndex;
+
+    return snrShells;
+}
+
+int Projection::GetPixelCount()
+{
+    return GetWidth() * GetHeight();
+}
+
+int Projection::GetFFTPixelCount()
+{
+    return (GetWidth()/2 + 1) * GetHeight();
+}
+
+float2 Projection::GetAsymCorrFactor()
+{
+    float2 corrFac;
+    corrFac.x = (float)GetMaxDimension() / (float)GetWidth();
+    corrFac.y = (float)GetMaxDimension() / (float)GetHeight();
+
+    return corrFac;
 }
 
 float Projection::GetPixelSize()
@@ -171,6 +245,298 @@ Matrix<float> Projection::RotateMatrix(uint aIndex, Matrix<float>& matrix)
 	//return (mPsi * (mAdjust.Transpose() * (mPhi.Transpose() * (mTheta * (mPhi * (mAdjust * matrix))))));
 }
 
+template <class T>
+Matrix<T> Projection::ProjectionMatrix(uint aIndex)
+{
+    double tiltAngle = ((double)(*markers)(MFI_TiltAngle, aIndex, 0) + (double)Configuration::Config::GetConfig().AddTiltAngle) / 180.0 * (double)M_PI;
+    double tiltXAngle = (Configuration::Config::GetConfig().AddTiltXAngle) / 180.0 * (double)M_PI;
+    double psiAngle  = -(*markers)(MFI_RotationPsi, aIndex, 0) / 180.0 * (double)M_PI;
+    if (Configuration::Config::GetConfig().UseFixPsiAngle)
+        psiAngle = -Configuration::Config::GetConfig().PsiAngle / 180.0 * (double)M_PI;
+    double phiAngle = Configuration::Config::GetConfig().PhiAngle / 180.0 * (double)M_PI;
+    double magAnisotropyAmount = Configuration::Config::GetConfig().MagAnisotropyAmount;
+    double magAnisotropyAngle = Configuration::Config::GetConfig().MagAnisotropyAngleInDeg / 180.0 * (double)M_PI;
+
+//    if (config.WBP_NoSART)
+//    {
+//        magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
+//        magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)index) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
+//    }
+
+
+    if (compensateImageRotation)
+    {
+        // Fix for WBP of rectangular images (otherwise stuff is rotated out too far)
+        if (abs(abs(psiAngle) - ((double)M_PI/2.)) < ((double)M_PI/4.)){
+            psiAngle = ((double)M_PI/2.);
+        } else {
+            psiAngle = 0;
+        }
+
+        magAnisotropyAngle = magAnisotropyAngle - this->GetImageRotationToCompensate(aIndex);
+    }
+
+    // Center
+    auto dimx = (double)this->GetWidth();
+    auto dimy = (double)this->GetHeight();
+    Matrix<double> mCenter = Matrix<double>::AffineShift3D(-0.5 * dimx, -0.5 * dimy, 0);
+
+    // Mag Anisotropy
+    Matrix<double> rotFwd = Matrix<double>::AffineRotation3DZ(magAnisotropyAngle);
+    Matrix<double> stretch = Matrix<double>::AffineScale3D(magAnisotropyAmount, 1, 1);
+    Matrix<double> rotBack = Matrix<double>::AffineRotation3DZ(-magAnisotropyAngle);
+    Matrix<double> mMA = rotBack * (stretch * rotFwd);
+
+    // Shift
+    auto shiftx = (double)(*markers)(MFI_X_Shift, (int)aIndex, 0);
+    auto shifty = (double)(*markers)(MFI_Y_Shift, (int)aIndex, 0);
+    Matrix<double> mShift = Matrix<double>::AffineShift3D(-shiftx, -shifty, 0);
+
+    // Coordinate transform
+    Matrix<double> mAdjust(4,4);
+
+    // Image Rotation
+    Matrix<double> mPsi = Matrix<double>::AffineRotation3DZ(psiAngle);//mPsi(3,3);
+
+    // Beam tilt
+    Matrix<double> mPhi = Matrix<double>::AffineRotation3DX(phiAngle);//mPhi(3,3);
+
+    // Tilt
+    Matrix<double> mTheta = Matrix<double>::AffineRotation3DY(tiltAngle);//mTheta(3,3);
+
+    // X-Tilt
+    Matrix<double> mXTilt = Matrix<double>::AffineRotation3DX(tiltXAngle);//mXTilt(3,3);
+
+    // Full Matrix
+    Matrix<double> mFull(4, 4);
+
+    Matrix<double> matrixD(3,1);
+    Matrix<double> resD(3,1);
+    Matrix<float> resF(3,1);
+
+//    matrixD(0,0) = matrix(0,0);// matrixD(0,1) = matrix(0,1); matrixD(0,2) = matrix(0,2);
+//    matrixD(1,0) = matrix(1,0); //matrixD(1,1) = matrix(1,1); matrixD(1,2) = matrix(1,2);
+//    matrixD(2,0) = matrix(2,0); //matrixD(2,1) = matrix(2,1); matrixD(2,2) = matrix(2,2);
+
+    mAdjust(0,0) = 0; mAdjust(0,1) = -1; mAdjust(0,2) = 0;  mAdjust(0,3) = 0;
+    mAdjust(1,0) = 1; mAdjust(1,1) = 0;  mAdjust(1,2) = 0;  mAdjust(1,3) = 0;
+    mAdjust(2,0) = 0; mAdjust(2,1) = 0;  mAdjust(2,2) = -1; mAdjust(2,3) = 0;
+    mAdjust(3,0) = 0; mAdjust(3,1) = 0;  mAdjust(3,2) = 0;  mAdjust(3,3) = 1;
+
+    mTheta = (mPhi * (mTheta * mPhi.Transpose()));
+
+    mFull = (mXTilt * (mTheta * (mPsi * (mAdjust * (mShift * (mMA * mCenter))))));
+
+
+    Matrix<T> ret(4, 4);
+    ret = mFull;
+
+    return ret;
+}
+
+template <class T>
+Matrix<T> Projection::DetectorMatrix(uint aIndex)
+{
+    Matrix<double> mProj = ProjectionMatrix<double>(aIndex);
+    Matrix<double> result(4, 4);
+    Matrix<T> ret(4, 4);
+    ////////////////////////////////////////////////////////////////////////////////
+    //from http://www.geometrictools.com//LibFoundation/Mathematics/Wm4Matrix4.inl:
+    ////////////////////////////////////////////////////////////////////////////////
+//    double3 uPitch;
+//    float3 uPitchf = GetPixelUPitch(aIndex);
+//    uPitch.x = (double)uPitchf.x / (double)os;
+//    uPitch.y = (double)uPitchf.y / (double)os;
+//    uPitch.z = (double)uPitchf.z / (double)os;
+//    double3 vPitch;
+//    float3 vPitchf = GetPixelVPitch(aIndex);
+//    vPitch.x = (double)vPitchf.x / (double)os;
+//    vPitch.y = (double)vPitchf.y / (double)os;
+//    vPitch.z = (double)vPitchf.z / (double)os;
+//    float3 detector = GetPosition(aIndex);
+//    float3 helper = GetNormalVector(aIndex);// make_float3(
+    //vPitch.y * uPitch.z - vPitch.z * uPitch.y,
+    //vPitch.z * uPitch.x - vPitch.x * uPitch.z,
+    //vPitch.x * uPitch.y - vPitch.y * uPitch.x );
+
+    double m_afEntry[16];
+    double aMatrix[16];
+    m_afEntry[0] =  mProj(0, 0);//uPitch.x;
+    m_afEntry[1] =  mProj(1, 0);//uPitch.y;
+    m_afEntry[2] =  mProj(2, 0);//uPitch.z;
+    m_afEntry[3] =  mProj(3, 0);//0.f;
+    m_afEntry[4] =  mProj(0, 1);//vPitch.x;
+    m_afEntry[5] =  mProj(1, 1);//vPitch.y;
+    m_afEntry[6] =  mProj(2, 1);//vPitch.z;
+    m_afEntry[7] =  mProj(3, 1);//0.f;
+    m_afEntry[8] =  mProj(0, 2);//helper.x;
+    m_afEntry[9] =  mProj(1, 2);//helper.y;
+    m_afEntry[10] = mProj(2, 2);//helper.z;
+    m_afEntry[11] = mProj(3, 2); //0.f;
+    m_afEntry[12] = mProj(0, 3);//detector.x;
+    m_afEntry[13] = mProj(1, 3);//detector.y;
+    m_afEntry[14] = mProj(2, 3);//detector.z;
+    m_afEntry[15] = mProj(3, 3);//1.f;
+
+
+    double fA0 = m_afEntry[ 0]*m_afEntry[ 5] - m_afEntry[ 1]*m_afEntry[ 4];
+    double fA1 = m_afEntry[ 0]*m_afEntry[ 6] - m_afEntry[ 2]*m_afEntry[ 4];
+    double fA2 = m_afEntry[ 0]*m_afEntry[ 7] - m_afEntry[ 3]*m_afEntry[ 4];
+    double fA3 = m_afEntry[ 1]*m_afEntry[ 6] - m_afEntry[ 2]*m_afEntry[ 5];
+    double fA4 = m_afEntry[ 1]*m_afEntry[ 7] - m_afEntry[ 3]*m_afEntry[ 5];
+    double fA5 = m_afEntry[ 2]*m_afEntry[ 7] - m_afEntry[ 3]*m_afEntry[ 6];
+    double fB0 = m_afEntry[ 8]*m_afEntry[13] - m_afEntry[ 9]*m_afEntry[12];
+    double fB1 = m_afEntry[ 8]*m_afEntry[14] - m_afEntry[10]*m_afEntry[12];
+    double fB2 = m_afEntry[ 8]*m_afEntry[15] - m_afEntry[11]*m_afEntry[12];
+    double fB3 = m_afEntry[ 9]*m_afEntry[14] - m_afEntry[10]*m_afEntry[13];
+    double fB4 = m_afEntry[ 9]*m_afEntry[15] - m_afEntry[11]*m_afEntry[13];
+    double fB5 = m_afEntry[10]*m_afEntry[15] - m_afEntry[11]*m_afEntry[14];
+
+    double fDet = fA0*fB5-fA1*fB4+fA2*fB3+fA3*fB2-fA4*fB1+fA5*fB0;
+    if (fDet == 0)
+    {
+        printf("Determinante of detector matrix is not 0! Can't inverse matrix.\n");
+        exit(1);
+    }
+
+    aMatrix[ 0] =
+            + m_afEntry[ 5]*fB5 - m_afEntry[ 6]*fB4 + m_afEntry[ 7]*fB3;
+    aMatrix[ 1] =
+            - m_afEntry[ 4]*fB5 + m_afEntry[ 6]*fB2 - m_afEntry[ 7]*fB1;
+    aMatrix[ 2] =
+            + m_afEntry[ 4]*fB4 - m_afEntry[ 5]*fB2 + m_afEntry[ 7]*fB0;
+    aMatrix[ 3] =
+            - m_afEntry[ 4]*fB3 + m_afEntry[ 5]*fB1 - m_afEntry[ 6]*fB0;
+    aMatrix[ 4] =
+            - m_afEntry[ 1]*fB5 + m_afEntry[ 2]*fB4 - m_afEntry[ 3]*fB3;
+    aMatrix[ 5] =
+            + m_afEntry[ 0]*fB5 - m_afEntry[ 2]*fB2 + m_afEntry[ 3]*fB1;
+    aMatrix[ 6] =
+            - m_afEntry[ 0]*fB4 + m_afEntry[ 1]*fB2 - m_afEntry[ 3]*fB0;
+    aMatrix[ 7] =
+            + m_afEntry[ 0]*fB3 - m_afEntry[ 1]*fB1 + m_afEntry[ 2]*fB0;
+    aMatrix[ 8] =
+            + m_afEntry[13]*fA5 - m_afEntry[14]*fA4 + m_afEntry[15]*fA3;
+    aMatrix[ 9] =
+            - m_afEntry[12]*fA5 + m_afEntry[14]*fA2 - m_afEntry[15]*fA1;
+    aMatrix[10] =
+            + m_afEntry[12]*fA4 - m_afEntry[13]*fA2 + m_afEntry[15]*fA0;
+    aMatrix[11] =
+            - m_afEntry[12]*fA3 + m_afEntry[13]*fA1 - m_afEntry[14]*fA0;
+    aMatrix[12] =
+            - m_afEntry[ 9]*fA5 + m_afEntry[10]*fA4 - m_afEntry[11]*fA3;
+    aMatrix[13] =
+            + m_afEntry[ 8]*fA5 - m_afEntry[10]*fA2 + m_afEntry[11]*fA1;
+    aMatrix[14] =
+            - m_afEntry[ 8]*fA4 + m_afEntry[ 9]*fA2 - m_afEntry[11]*fA0;
+    aMatrix[15] =
+            + m_afEntry[ 8]*fA3 - m_afEntry[ 9]*fA1 + m_afEntry[10]*fA0;
+
+    double fInvDet = (1.0f)/fDet;
+    aMatrix[ 0] *= fInvDet;
+    aMatrix[ 1] *= fInvDet;
+    aMatrix[ 2] *= fInvDet;
+    aMatrix[ 3] *= fInvDet;
+    aMatrix[ 4] *= fInvDet;
+    aMatrix[ 5] *= fInvDet;
+    aMatrix[ 6] *= fInvDet;
+    aMatrix[ 7] *= fInvDet;
+    aMatrix[ 8] *= fInvDet;
+    aMatrix[ 9] *= fInvDet;
+    aMatrix[10] *= fInvDet;
+    aMatrix[11] *= fInvDet;
+    aMatrix[12] *= fInvDet;
+    aMatrix[13] *= fInvDet;
+    aMatrix[14] *= fInvDet;
+    aMatrix[15] *= fInvDet;
+
+    result(0, 0) = aMatrix[ 0];
+    result(0, 1) = aMatrix[ 1];
+    result(0, 2) = aMatrix[ 2];
+    result(0, 3) = aMatrix[ 3];
+    result(1, 0) = aMatrix[ 4];
+    result(1, 1) = aMatrix[ 5];
+    result(1, 2) = aMatrix[ 6];
+    result(1, 3) = aMatrix[ 7];
+    result(2, 0) = aMatrix[ 8];
+    result(2, 1) = aMatrix[ 9];
+    result(2, 2) = aMatrix[10];
+    result(2, 3) = aMatrix[11];
+    result(3, 0) = aMatrix[12];
+    result(3, 1) = aMatrix[13];
+    result(3, 2) = aMatrix[14];
+    result(3, 3) = aMatrix[15];
+
+    ret = (Matrix<T>)result;
+
+    return ret;
+    //for (int i = 0; i < 16; i++)
+    //    aMatrix2[i] = (float)aMatrix[i];
+    /////////////////////////////////////////////////////////////////////////
+}
+template Matrix<float> Projection::DetectorMatrix(uint aIndex);
+template Matrix<double> Projection::DetectorMatrix(uint aIndex);
+
+float3x3 Projection::ProjectionMatrix3x3(uint aIndex){
+    return MatrixTo3x3(projectionMatrices[aIndex]);
+}
+float4x4 Projection::ProjectionMatrix4x4(uint aIndex){
+    return MatrixTo4x4(projectionMatrices[aIndex]);
+}
+
+float3x3 Projection::DetectorMatrix3x3(uint aIndex){
+    return MatrixTo3x3(detectorMatrices[aIndex]);
+}
+float4x4 Projection::DetectorMatrix4x4(uint aIndex){
+    return MatrixTo4x4(detectorMatrices[aIndex]);
+}
+
+float3x3 Projection::SystemMatrix3x3(uint aIndex, Matrix<double> volumeMatrix){
+
+    Matrix<double> ret(4,4);
+    ret = detectorMatrices[aIndex] * volumeMatrix;
+
+    return MatrixTo3x3(ret);
+}
+
+float4x4 Projection::SystemMatrix4x4(uint aIndex, Matrix<double> volumeMatrix){
+
+    Matrix<double> ret(4,4);
+    ret = detectorMatrices[aIndex] * volumeMatrix;
+
+    return MatrixTo4x4(ret);
+}
+
+float3x3 Projection::SystemMatrixInv3x3(uint aIndex, Matrix<double> volumeMatrixInv){
+
+    Matrix<double> ret(4,4);
+    ret = volumeMatrixInv * projectionMatrices[aIndex];
+
+    return MatrixTo3x3(ret);
+}
+
+float4x4 Projection::SystemMatrixInv4x4(uint aIndex, Matrix<double> volumeMatrixInv){
+
+    Matrix<double> ret(4,4);
+    ret = volumeMatrixInv * projectionMatrices[aIndex];
+
+    return MatrixTo4x4(ret);
+}
+
+
+
+bool Projection::IsGood(uint aIndex) {
+    return goodProjection[aIndex];
+}
+
+int Projection::GetProjCount(){
+    return ps->GetProjectionCount();
+}
+
+int Projection::GetGoodProjCount(){
+    return goodProjectionCount;
+}
+
 Matrix<float> Projection::float3ToMatrix(float3 val)
 {
 	Matrix<float> ret(3, 1); //column vector
@@ -235,7 +601,6 @@ float3 Projection::GetPosition(uint aIndex)
 	float3 vp = GetPixelVPitch(aIndex);
 	
 	return pos - up * shiftX - vp * shiftY;
-
 }
 
 float3 Projection::GetPixelUPitch(uint aIndex)
@@ -868,6 +1233,80 @@ void Projection::ComputeHitPoints(Volume<unsigned short>& vol, uint index, int2&
 	//if (pixelBordersB.x >= GetWidth()) pixelBordersB.x = GetWidth() - 1;
 	//if (pixelBordersB.y >= GetHeight()) pixelBordersB.y = GetHeight() - 1;
 }
+
+
+void Projection::ComputeHitPointsNew(Volume<float>& vol, uint index, vector<float2>& corners, vector<float>& normVals)
+{
+    // Volume corners global frame
+    Matrix<double> corn = vol.GetCorners();
+    Matrix<double> hitPoint(4, 8);
+
+    // Project onto image
+    hitPoint = detectorMatrices[index] * corn;
+
+    // Image Corners
+    vector<double2> imgvec = {make_double2(0, 0),
+                              make_double2(0, GetHeight()),
+                              make_double2(GetWidth(), GetHeight()),
+                              make_double2(GetWidth(), 0)};
+
+    // Projected volume and image polygons
+    ConvexPolygon poly_vol(hitPoint);
+    ConvexPolygon poly_img(imgvec);
+    ConvexPolygon overlap = poly_img.Intersect(poly_vol);
+
+    // Output overlap
+    overlap.GetPointsVecFloat(corners);
+    overlap.GetNormValsFloat(normVals);
+
+//    vector<double2> vecvol = poly_vol.GetPointsVec();
+//    vector<double2> vecimg = poly_img.GetPointsVec();
+//    vector<double2> vecovl = overlap.GetPointsVec();
+//
+//    printf("\npolyfin = [\n");
+//    for (auto pt : vecvol){
+//        printf("%f, %f;\n", pt.x, pt.y);
+//    }
+//    printf("%f, %f];\n", vecvol[0].x, vecvol[0].y);
+//
+//    printf("\npolyfinimg = [\n");
+//    for (auto pt : vecimg){
+//        printf("%f, %f;\n", pt.x, pt.y);
+//    }
+//    printf("%f, %f];\n", vecimg[0].x, vecimg[0].y);
+//
+//    printf("\npolyfinov = [\n");
+//    for (auto pt : vecovl){
+//        printf("%f, %f;\n", pt.x, pt.y);
+//    }
+//    printf("%f, %f];\n", vecovl[0].x, vecovl[0].y);
+}
+
+void Projection::ComputeHitPointsNew(Volume<unsigned short>& vol, uint index, vector<float2>& corners, vector<float>& normVals)
+{
+    // Volume corners global frame
+    Matrix<double> corn = vol.GetCorners();
+    Matrix<double> hitPoint(4, 8);
+
+    // Project onto image
+    hitPoint = detectorMatrices[index] * corn;
+
+    // Image Corners
+    vector<double2> imgvec = {make_double2(0, 0),
+                              make_double2(0, GetHeight()),
+                              make_double2(GetWidth(), GetHeight()),
+                              make_double2(GetWidth(), 0)};
+
+    // Projected volume and image polygons
+    ConvexPolygon poly_vol(hitPoint);
+    ConvexPolygon poly_img(imgvec);
+    ConvexPolygon overlap = poly_img.Intersect(poly_vol);
+
+    // Output overlap
+    overlap.GetPointsVecFloat(corners);
+    overlap.GetNormValsFloat(normVals);
+}
+
 
 void Projection::ComputeHitPoints(Volume<float>& vol, uint index, int2& pA, int2& pB, int2& pC, int2& pD)
 {

@@ -28,8 +28,7 @@ CudaSub::CudaSub(int aVolSize, CUstream aStream, CudaContext* context)
 	: volSize(aVolSize), stream(aStream), ctx(context), blockSize(32, 16, 1), 
 	  gridSize(aVolSize / 32, aVolSize / 16, aVolSize)
 {
-	// CUmodule cuMod = ctx->LoadModule("basicKernels.ptx");
-    CUmodule cuMod = ctx->LoadModulePTX(SubTomogramAverageBasicKernel, 0, false, false);
+    CUmodule cuMod = ctx->LoadModulePTX(basicKernels, 0, false, false);
 	
 	add = new CudaKernel("add", cuMod);
 	sub = new CudaKernel("sub", cuMod);
@@ -141,7 +140,7 @@ CudaMakeCplxWithSub::CudaMakeCplxWithSub(int aVolSize, CUstream aStream, CudaCon
 	  gridSize(aVolSize / 32, aVolSize / 16, aVolSize)
 {
 	// CUmodule cuMod = ctx->LoadModule("basicKernels.ptx");
-    CUmodule cuMod = ctx->LoadModulePTX(SubTomogramAverageBasicKernel, 0, false, false);
+    CUmodule cuMod = ctx->LoadModulePTX(basicKernels, 0, false, false);
 	
 	makeReal = new CudaKernel("makeReal", cuMod);
 	makeCplxWithSub = new CudaKernel("makeCplxWithSub", cuMod);
@@ -225,7 +224,7 @@ CudaBinarize::CudaBinarize(int aVolSize, CUstream aStream, CudaContext* context)
 	  gridSize(aVolSize / 32, aVolSize / 16, aVolSize)
 {
 	// CUmodule cuMod = ctx->LoadModule("basicKernels.ptx");
-    CUmodule cuMod = ctx->LoadModulePTX(SubTomogramAverageBasicKernel, 0, false, false);
+    CUmodule cuMod = ctx->LoadModulePTX(basicKernels, 0, false, false);
 	
 	binarize = new CudaKernel("binarize", cuMod);
 }
@@ -263,7 +262,7 @@ CudaMul::CudaMul(int aVolSize, CUstream aStream, CudaContext* context)
 	  gridSize(aVolSize / 32, aVolSize / 16, aVolSize)
 {
 	// CUmodule cuMod = ctx->LoadModule("basicKernels.ptx");
-    CUmodule cuMod = ctx->LoadModulePTX(SubTomogramAverageBasicKernel, 0, false, false);
+    CUmodule cuMod = ctx->LoadModulePTX(basicKernels, 0, false, false);
 	
 	mulVol = new CudaKernel("mulVol", cuMod);
 	mulVolCplx = new CudaKernel("mulVolCplx", cuMod);
@@ -341,7 +340,7 @@ CudaFFT::CudaFFT(int aVolSize, CUstream aStream, CudaContext* context)
 	  gridSize(aVolSize / 32, aVolSize / 16, aVolSize)
 {
 	// CUmodule cuMod = ctx->LoadModule("basicKernels.ptx");
-    CUmodule cuMod = ctx->LoadModulePTX(SubTomogramAverageBasicKernel, 0, false, false);
+    CUmodule cuMod = ctx->LoadModulePTX(basicKernels, 0, false, false);
 	
 	conv = new CudaKernel("conv", cuMod);
 	correl = new CudaKernel("correl", cuMod);
@@ -580,7 +579,7 @@ CudaMax::CudaMax(CUstream aStream, CudaContext* context)
 	  gridSize(1, 1, 1)
 {
 	// CUmodule cuMod = ctx->LoadModule("basicKernels.ptx");
-    CUmodule cuMod = ctx->LoadModulePTX(SubTomogramAverageBasicKernel, 0, false, false);
+    CUmodule cuMod = ctx->LoadModulePTX(basicKernels, 0, false, false);
 	
 	max = new CudaKernel("findmax", cuMod);
 	maxWithCertainty = new CudaKernel("findmaxWithCertainty", cuMod);
@@ -651,7 +650,7 @@ CudaWedgeNorm::CudaWedgeNorm(int aVolSize, CUstream aStream, CudaContext* contex
 	gridSize(aVolSize / 32, aVolSize / 16, aVolSize)
 {
 	// CUmodule cuMod = ctx->LoadModule("basicKernels.ptx");
-    CUmodule cuMod = ctx->LoadModulePTX(SubTomogramAverageBasicKernel, 0, false, false);
+    CUmodule cuMod = ctx->LoadModulePTX(basicKernels, 0, false, false);
 
 	wedge = new CudaKernel("wedgeNorm", cuMod);
 }

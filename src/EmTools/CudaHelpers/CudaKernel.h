@@ -108,7 +108,7 @@ namespace Cuda
 			\param aValue The value to set.
 		*/
 		//Set an integer kernel launch paramter.
-		void SetIntegerParameter(const int aValue);
+		//void SetIntegerParameter(const int aValue);
 
 		//! Set a float kernel launch paramter.
 		/*!
@@ -116,7 +116,7 @@ namespace Cuda
 			\param aValue The value to set.
 		*/
 		//Set a float kernel launch paramter.
-		void SetFloatParameter(const float aValue);
+		//void SetFloatParameter(const float aValue);
 
 		//! Set a device pointer kernel launch paramter.
 		/*!
@@ -124,7 +124,7 @@ namespace Cuda
 			\param aDevicePtr The value to set.
 		*/
 		//Set a device pointer kernel launch paramter.
-		void SetDevicePtrParameter(CUdeviceptr aDevicePtr);
+		//void SetDevicePtrParameter(CUdeviceptr aDevicePtr);
 
 		//! Manually reset the parameter offset counter
 		//Manually reset the parameter offset counter
@@ -227,6 +227,10 @@ namespace Cuda
 		//!Set the kernels block grid dimensions before first launch according to work load dimensions and block sizes
 		//Set the kernels block grid dimensions before first launch according to work load dimensions and block sizes
 		void SetComputeSize(uint x, uint y = 1, uint z = 1);
+
+        //!Set the kernels block grid dimensions before first launch according to work load dimensions and block sizes
+        //Set the kernels block grid dimensions before first launch according to work load dimensions and block sizes
+        void SetComputeSize(uint2 size = {1, 1});
 	};
 }
 #endif //USE_CUDA

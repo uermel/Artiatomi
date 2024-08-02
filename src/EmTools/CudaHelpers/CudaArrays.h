@@ -55,9 +55,12 @@ namespace Cuda
 			\param aNumChannels Number of array channels. Must be 1, 2 or 4.
 		*/
 		CudaArray1D(CUarray_format aFormat, size_t aSizeInElements, uint aNumChannels);
+        CudaArray1D();
 
 		//! CudaArray1D destructor
 		~CudaArray1D();
+
+        void Alloc(CUarray_format aFormat, size_t aSizeInElements, uint aNumChannels);
 
 		//! Copy data from device memory to this array
 		/*!
@@ -131,9 +134,12 @@ namespace Cuda
 			\param aNumChannels Number of array channels. Must be 1, 2 or 4.
 		*/
 		CudaArray2D(CUarray_format aFormat, size_t aWidthInElements, size_t aHeightInElements, uint aNumChannels);
+        CudaArray2D();
 
 		//! CudaArray2D destructor
 		~CudaArray2D();
+
+        void Alloc(CUarray_format aFormat, size_t aWidthInElements, size_t aHeightInElements, uint aNumChannels);
 
 		//! Copy data from device memory to this array
 		/*!
@@ -204,10 +210,21 @@ namespace Cuda
 			\param aNumChannels Number of array channels. Must be 1, 2 or 4.
 			\param aFlags Array creation flags.
 		*/
+        CudaArray3D();
 		CudaArray3D(CUarray_format aFormat, size_t aWidthInElements, size_t aHeightInElements, size_t aDepthInElements, uint aNumChannels, uint aFlags = 0);
 
 		//! CudaArray3D destructor
 		~CudaArray3D();
+
+        void Alloc(CUarray_format aFormat, size_t aWidthInElements, size_t aHeightInElements, size_t aDepthInElements, uint aNumChannels, uint aFlags = 0);
+
+
+        //! Copy data from device memory to this array
+        /*!
+            Copies the data given by \p aSource in device memory to this array.
+            \param aSource Data source in device memory
+        */
+        void CopyFromArrayToArray(CudaArray3D& aSource);
 
 
 		//! Copy data from device memory to this array

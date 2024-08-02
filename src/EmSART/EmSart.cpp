@@ -41,10 +41,11 @@
 #include <cufft.h>
 #include <npp.h>
 #include <algorithm>
+#include <iomanip>
 #include "utils/SimpleLogger.h"
 #include "Reconstructor.h"
 #include "kernels/kernels.h"
-
+#include "ncurses.h"
 
 using namespace std;
 using namespace Cuda;
@@ -63,31 +64,31 @@ using namespace Cuda;
 
 void WaitForInput(int exitCode)
 {
-	char c;
-	cout << ("\nPress <Enter> to exit...");
-	c = cin.get();
-	exit(exitCode);
+    char c;
+    cout << ("\nPress <Enter> to exit...");
+    c = cin.get();
+    exit(exitCode);
 }
 
 int main(int argc, char* argv[])
 {
-	int mpi_part = 0;
-	
-	int mpi_size = 1;
-	const int mpi_max_name_size = 256;
-	char mpi_name[mpi_max_name_size];
-	int mpi_sizename = mpi_max_name_size;
-	int mpi_host_id = 0;
-	int mpi_host_rank = 0;
-	int mpi_offset = 0;
+    int mpi_part = 0;
+
+    int mpi_size = 1;
+    const int mpi_max_name_size = 256;
+    char mpi_name[mpi_max_name_size];
+    int mpi_sizename = mpi_max_name_size;
+    int mpi_host_id = 0;
+    int mpi_host_rank = 0;
+    int mpi_offset = 0;
 
 #ifdef USE_MPI
-	MPI_Init(&argc, &argv);
+    MPI_Init(&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &mpi_part);
 	MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 	MPI_Get_processor_name(mpi_name, &mpi_sizename);
 
-	
+
 	vector<string> hostnames;
 	vector<string> singlehostnames;
     //printf("MPI process %d of %d on PC %s\n", mpi_part, mpi_size, mpi_name);
@@ -118,7 +119,7 @@ int main(int argc, char* argv[])
 
 		//sort host names alphabetically to obtain deterministic host IDs
 		sort(singlehostnames.begin(), singlehostnames.end());
-		
+
 		for (int i = 1; i < mpi_size; i++)
 		{
 			int host_id;
@@ -134,7 +135,7 @@ int main(int argc, char* argv[])
 					host_id = h;
 					break;
 				}
-			}	
+			}
 
 			for (int h = 0; h < i; h++)
 			{
@@ -142,7 +143,7 @@ int main(int argc, char* argv[])
 				{
 					host_rank++;
 				}
-			}		
+			}
 
 			for (int h = 0; h < host_id; h++)
 			{
@@ -159,7 +160,7 @@ int main(int argc, char* argv[])
 			MPI_Send(&host_rank, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
 			MPI_Send(&offset, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
 		}
-		
+
 		for (int h = 0; h < singlehostnames.size(); h++)
 		{
 			if (singlehostnames[h] == string(mpi_name))
@@ -168,7 +169,7 @@ int main(int argc, char* argv[])
 				break;
 			}
 		}
-				
+
 
 		for (int h = 0; h < mpi_host_id; h++)
 		{
@@ -186,44 +187,44 @@ int main(int argc, char* argv[])
 	else
 	{
 		MPI_Send(mpi_name, mpi_max_name_size, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
-		
+
 		MPI_Recv(&mpi_host_id, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 		MPI_Recv(&mpi_host_rank, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 		MPI_Recv(&mpi_offset, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 	}
 
 	printf("Host ID: %d; host rank: %d; offset: %d; global rank: %d; name: %s\n", mpi_host_id, mpi_host_rank, mpi_offset, mpi_part, mpi_name);fflush(stdout);
-	
+
 	MPI_Barrier(MPI_COMM_WORLD);
 #endif
 
     clock_t start, stop;
     double runtime = 0.0;
-	CudaContext* cuCtx;
+    CudaContext* cuCtx;
 
-	string logfile;
-	bool doLog = false;
-	if (mpi_part == 0)
-	{
-		for (int arg = 0; arg < argc - 1; arg++)
-		{
-			if (string(argv[arg]) == "-log")
-			{
-				logfile = string(argv[arg+1]);
-				doLog = true;
-			}
-		}
-	}
+    string logfile;
+    bool doLog = false;
+    if (mpi_part == 0)
+    {
+        for (int arg = 0; arg < argc - 1; arg++)
+        {
+            if (string(argv[arg]) == "-log")
+            {
+                logfile = string(argv[arg+1]);
+                doLog = true;
+            }
+        }
+    }
 
-	SimpleLogger log(logfile, SimpleLogger::LOG_ERROR, !doLog);
+    SimpleLogger log(logfile, SimpleLogger::LOG_ERROR, !doLog);
 
-	try
-	{
-	    if (mpi_part == 0) printf("\n\n                                EmSART 2.0\n\n\n");
-	    if (mpi_part == 0) printf("Read configuration file ");
-		//Load configuration files
-		Configuration::Config aConfig = Configuration::Config::GetConfig(CONFFILE, argc, argv, mpi_part, NULL);
-		if (mpi_part == 0) printf("Done\n");fflush(stdout);
+    try
+    {
+        if (mpi_part == 0) printf("\n\n                                EmSART 2.0\n\n\n");
+        if (mpi_part == 0) printf("Read configuration file ");
+        //Load configuration files
+        Configuration::Config aConfig = Configuration::Config::GetConfig(CONFFILE, argc, argv, mpi_part, NULL);
+        if (mpi_part == 0) printf("Done\n");fflush(stdout);
 
         if (mpi_part == 0) printf("Projection source: %s\n", aConfig.ProjectionFile.c_str());
         if (mpi_part == 0) printf("Marker source: %s\n", aConfig.MarkerFile.c_str());
@@ -233,89 +234,91 @@ int main(int argc, char* argv[])
         if (mpi_part == 0) printf("Iterations: %i\n\n", aConfig.Iterations);
 
 #ifdef USE_MPI
-		log << "Running on " << mpi_size << " GPUs in " << (int)singlehostnames.size() << " Hosts:" << endl;
+        log << "Running on " << mpi_size << " GPUs in " << (int)singlehostnames.size() << " Hosts:" << endl;
 		for (int i = 0; i < singlehostnames.size(); i++)
 		{
 			log << "Host " << i << ": " << singlehostnames[i] << endl;
 		}
 #else
-		log << "Running in single GPU (no MPI) mode" << endl;
+        log << "Running in single GPU (no MPI) mode" << endl;
 #endif
-				
-		log << "Configuration file: " << aConfig.GetConfigFileName() << endl;
-		log << "Projection source: " <<aConfig.ProjectionFile << endl;
-		log << "Marker source: " << aConfig.MarkerFile << endl;
-		log << "Volume file name: " << aConfig.OutVolumeFile << endl;
-		log << "Volume shifts: " << aConfig.VolumeShift << endl;
-		log << "Lambda: " << aConfig.Lambda << endl;
-		log << "Iterations: " << aConfig.Iterations << endl;
-		log << "Performing CTF correction: " << (aConfig.CtfMode != Configuration::Config::CTFM_NO ? "TRUE" : "FALSE") << endl;
-		if (aConfig.CtfMode != Configuration::Config::CTFM_NO)
-		{
-			log << "Ignore volume Z-shift for CTF correction: " << (aConfig.IgnoreZShiftForCTF ? "TRUE" : "FALSE") << endl;
-			log << "Slice thickness for CTF correction in nm: " << aConfig.CTFSliceThickness << endl;
-		}
-		
-		CtfFile* defocus = NULL;
-		
-		if (aConfig.CtfMode == Configuration::Config::CTFM_YES)
+
+        log << "Configuration file: " << aConfig.GetConfigFileName() << endl;
+        log << "Projection source: " <<aConfig.ProjectionFile << endl;
+        log << "Marker source: " << aConfig.MarkerFile << endl;
+        log << "Volume file name: " << aConfig.OutVolumeFile << endl;
+        log << "Volume shifts: " << aConfig.VolumeShift << endl;
+        log << "Lambda: " << aConfig.Lambda << endl;
+        log << "Iterations: " << aConfig.Iterations << endl;
+        log << "Performing CTF correction: " << (aConfig.CtfMode != Configuration::Config::CTFM_NO ? "TRUE" : "FALSE") << endl;
+        if (aConfig.CtfMode != Configuration::Config::CTFM_NO)
         {
-			defocus = new CtfFile(aConfig.CtfFile);
-		}
-		
+            log << "Ignore volume Z-shift for CTF correction: " << (aConfig.IgnoreZShiftForCTF ? "TRUE" : "FALSE") << endl;
+            log << "Slice thickness for CTF correction in nm: " << aConfig.CTFSliceThickness << endl;
+        }
 
-		//Check volume dimensions:
-		bool recDimOK = true;
-		if (aConfig.RecDimensions.x % 4 != 0)
-		{
-			printf("Error: RecDimensions.x (%d) is not a multiple of 4\n", aConfig.RecDimensions.x);
-			recDimOK = false;
+        CtfFile* defocus = NULL;
 
-			log << SimpleLogger::LOG_ERROR;
-			log << "RecDimensions.x (" << aConfig.RecDimensions.x << ") is not a multiple of 4" << endl;
-		}
-		if (aConfig.RecDimensions.y % 2 != 0)
-		{
-			printf("Error: RecDimensions.y (%d) is not even\n", aConfig.RecDimensions.y);
-			recDimOK = false;
+        if (aConfig.CtfMode == Configuration::Config::CTFM_YES)
+        {
+            defocus = new CtfFile(aConfig.CtfFile);
+        }
 
-			log << SimpleLogger::LOG_ERROR;
-			log << "RecDimensions.y (" << aConfig.RecDimensions.y << ") is not even" << endl;
-		}
-		
-		if (!recDimOK) WaitForInput(-1);
 
-	    printf("Create CUDA context on device %d ... \n", aConfig.CudaDeviceIDs[mpi_offset + mpi_host_rank]);fflush(stdout);
-		//Create CUDA context
-		cuCtx = Cuda::CudaContext::CreateInstance(aConfig.CudaDeviceIDs[mpi_offset + mpi_host_rank]);
-        
+        //Check volume dimensions:
+        bool recDimOK = true;
+        if (aConfig.RecDimensions.x % 4 != 0)
+        {
+            printf("Error: RecDimensions.x (%d) is not a multiple of 4\n", aConfig.RecDimensions.x);
+            recDimOK = false;
+
+            log << SimpleLogger::LOG_ERROR;
+            log << "RecDimensions.x (" << aConfig.RecDimensions.x << ") is not a multiple of 4" << endl;
+        }
+        if (aConfig.RecDimensions.y % 2 != 0)
+        {
+            printf("Error: RecDimensions.y (%d) is not even\n", aConfig.RecDimensions.y);
+            recDimOK = false;
+
+            log << SimpleLogger::LOG_ERROR;
+            log << "RecDimensions.y (" << aConfig.RecDimensions.y << ") is not even" << endl;
+        }
+
+        if (!recDimOK) WaitForInput(-1);
+
+        printf("Create CUDA context on device %d ... \n", aConfig.CudaDeviceIDs[mpi_offset + mpi_host_rank]);fflush(stdout);
+        //Create CUDA context
+        cuCtx = Cuda::CudaContext::CreateInstance(aConfig.CudaDeviceIDs[mpi_offset + mpi_host_rank]);
+
         printf("Using CUDA device %s\n", cuCtx->GetDeviceProperties()->GetDeviceName().c_str());fflush(stdout);
+
+        printf("Compute Capability: %f\n", cuCtx->GetDeviceProperties()->GetComputeCapability());fflush(stdout);
 
         printf("Available Memory on device: %llu MB\n", cuCtx->GetFreeMemorySize() / 1024 / 1024);fflush(stdout);
 
         ProjectionSource* projSource;
-		//Load projection data file
-		if (mpi_part == 0)
-		{
-			if (aConfig.GetFileReadMode() == Configuration::Config::FRM_DM4 ||
-				aConfig.GetFileReadMode() == Configuration::Config::FRM_MRC)
-			{
-				printf("\nLoading projections...\n");
-				projSource = new FileSource(aConfig.ProjectionFile);
-				
+        //Load projection data file
+        if (mpi_part == 0)
+        {
+            if (aConfig.GetFileReadMode() == Configuration::Config::FRM_DM4 ||
+                aConfig.GetFileReadMode() == Configuration::Config::FRM_MRC)
+            {
+                printf("\nLoading projections...\n");
+                projSource = new FileSource(aConfig.ProjectionFile);
 
-				printf("\nLoaded %d projections.\n\n", projSource->GetProjectionCount());
-			}
-			else
-			{
-				printf("Error: Projection file format not supported. Supported formats are: DM4 file series, MRC stacks, ST stacks.");
-				log << SimpleLogger::LOG_ERROR;
-				log << "Projection file format not supported. Supported formats are: DM4 file series, MRC stacks, ST stacks." << endl;
-				WaitForInput(-1);
-			}
+
+                printf("\nLoaded %d projections.\n\n", projSource->GetProjectionCount());
+            }
+            else
+            {
+                printf("Error: Projection file format not supported. Supported formats are: DM4 file series, MRC stacks, ST stacks.");
+                log << SimpleLogger::LOG_ERROR;
+                log << "Projection file format not supported. Supported formats are: DM4 file series, MRC stacks, ST stacks." << endl;
+                WaitForInput(-1);
+            }
 
 #ifdef USE_MPI
-			float pixelsize = projSource->GetPixelSize();
+            float pixelsize = projSource->GetPixelSize();
 			int dims[4];
 			dims[0] = projSource->GetWidth();
 			dims[1] = projSource->GetHeight();
@@ -323,220 +326,166 @@ int main(int argc, char* argv[])
 			dims[3] = *((int*)&pixelsize);
 			MPI_Bcast(dims, 4, MPI_INT, 0, MPI_COMM_WORLD);
 #endif
-		}
+        }
 #ifdef USE_MPI
-		else
+        else
 		{
 			int dims[4];
 			MPI_Bcast(dims, 4, MPI_INT, 0, MPI_COMM_WORLD);
 			projSource = new MPISource(dims[0], dims[1], dims[2], *((float*)&(dims[3])));
 		}
 #endif
-		
-		//Load marker/alignment file
-		MarkerFile markers(aConfig.MarkerFile, aConfig.ReferenceMarker);
 
-		//Create projection object to handle projection data
-		Projection proj(projSource, &markers, aConfig.WBP_NoSART);
+        //Load marker/alignment file
+        MarkerFile markers(aConfig.MarkerFile, aConfig.ReferenceMarker);
 
-		//Create volume dataset (host)
-		Volume<unsigned short> *volFP16 = NULL;
-		Volume<float> *vol = NULL;
+        //Create projection object to handle projection data
+        //Projection proj(projSource, &markers, aConfig.WBP_NoSART);
+        Projection proj(projSource, &markers, false);
+
+        //Create volume dataset (host)
+        Volume<float> *vol = NULL;
 #ifdef USE_MPI
-		if (aConfig.FP16Volume)
+        if (aConfig.FP16Volume)
 			volFP16 = new Volume<unsigned short>(aConfig.RecDimensions, mpi_size, mpi_part);
 		else
 			vol = new Volume<float>(aConfig.RecDimensions, mpi_size, mpi_part);
 #else
-		if (aConfig.FP16Volume)
-			volFP16 = new Volume<unsigned short>(aConfig.RecDimensions);
-		else
-			vol = new Volume<float>(aConfig.RecDimensions);
+        vol = new Volume<float>(aConfig.RecDimensions);
 #endif
-		
 
+        vol->PositionInSpace(aConfig.VoxelSize, aConfig.VolumeShift, proj.GetMinimumTiltShift(), 0, 0, 0);
+        log << "Using FP32 internal storage format for volume";
 
+        if (aConfig.FP16Volume && !aConfig.WriteVolumeAsFP16)
+            log << "; Convert to FP32 when saving to file";
+        log << endl;
 
-		if (aConfig.FP16Volume)
-		{
-			volFP16->PositionInSpace(aConfig.VoxelSize, aConfig.VolumeShift, proj.GetMinimumTiltShift());
-			log << "Using FP16 internal storage format for volume";
-		}
-		else
-		{
-			vol->PositionInSpace(aConfig.VoxelSize, aConfig.VolumeShift, proj.GetMinimumTiltShift());
-			log << "Using FP32 internal storage format for volume";
-		}
-		if (aConfig.FP16Volume && !aConfig.WriteVolumeAsFP16)
-			log << "; Convert to FP32 when saving to file";
-		log << endl;
+        float3 subVolDim;
+        subVolDim = vol->GetSubVolumeDimension(mpi_part);
 
-		float3 subVolDim;
-		if (aConfig.FP16Volume)
-			subVolDim = volFP16->GetSubVolumeDimension(mpi_part);
-		else
-			subVolDim = vol->GetSubVolumeDimension(mpi_part);
-		
         size_t sizeDataType;
-		if (aConfig.FP16Volume)
-		{
-			sizeDataType = sizeof(unsigned short);
-		}
-		else
-		{
-			sizeDataType = sizeof(float);
-		}
+        sizeDataType = sizeof(float);
+
         if (mpi_part == 0) printf("Memory space required by volume data: %llu MB\n", (size_t)aConfig.RecDimensions.x * (size_t)aConfig.RecDimensions.y * (size_t)aConfig.RecDimensions.z * sizeDataType / 1024 / 1024);
         if (mpi_part == 0) printf("Memory space required by partial volume: %llu MB\n", (size_t)aConfig.RecDimensions.x * (size_t)aConfig.RecDimensions.y * (size_t)subVolDim.z * sizeDataType / 1024 / 1024);
 
-		//Load Kernels
-		KernelModuls modules(cuCtx);
+        //Load Kernels
+        KernelModules modules(cuCtx);
 
-		//Alloc device variables
-		float3 volSize;
-		CUarray_format arrayFormat;
-		if (aConfig.FP16Volume)
-		{
-			volSize = volFP16->GetSubVolumeDimension(mpi_part);
-			arrayFormat = CU_AD_FORMAT_HALF;
-		}
-		else
-		{
-			volSize = vol->GetSubVolumeDimension(mpi_part);
-			arrayFormat = CU_AD_FORMAT_FLOAT;
-		}
+        //Alloc device variables
+        float3 volSize;
+        CUarray_format arrayFormat;
 
-		CudaArray3D vol_Array(arrayFormat, (int)volSize.x, (int)volSize.y, (int)volSize.z, 1, 2);
-        CudaArray3D out_Array(arrayFormat, (int)volSize.x, (int)volSize.y, (int)volSize.z, 1, 2);
-		CudaTextureObject3D texObj(CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_ADDRESS_MODE_CLAMP, CU_TR_FILTER_MODE_LINEAR, 0, &vol_Array);
-		CudaSurfaceObject3D surfObj(&vol_Array);
-        CudaSurfaceObject3D surfObj_out(&out_Array);
+        volSize = vol->GetSubVolumeDimension(mpi_part);
+        arrayFormat = CU_AD_FORMAT_FLOAT;
+
+        uint3 volDimU = make_uint3((uint)volSize.x, (uint)volSize.y, (uint)volSize.z);
+        DeviceVolume deviceVolume(volDimU, modules);
+
 
         if (mpi_part == 0) printf("Copy volume to device ... ");
 
         bool volumeIsEmpty = false;
 
-		if (aConfig.FP16Volume)
-		{
-			vol_Array.CopyFromHostToArray(volFP16->GetPtrToSubVolume(mpi_part));
-			log << "Volume dimensions: " << volFP16->GetDimension() << endl;
-			log << "Sub-Volume dimensions: " << endl;
-			for (int sv = 0; sv < volFP16->GetSubVolumeCount(); sv++)
-				log << "Sub-Volume " << sv << ": " << volFP16->GetSubVolumeDimension(sv) << endl;
-		}
-		else
-		{
-			vol_Array.CopyFromHostToArray(vol->GetPtrToSubVolume(mpi_part));
-			log << "Volume dimensions: " << vol->GetDimension() << endl;
-			log << "Sub-Volume dimensions: " << endl;
-			for (int sv = 0; sv < vol->GetSubVolumeCount(); sv++)
-				log << "Sub-Volume " << sv << ": " << vol->GetSubVolumeDimension(sv) << endl;
-		}
 
-		if (mpi_part == 0) printf("Done\n");fflush(stdout);
+        log << "Volume dimensions: " << vol->GetDimension() << endl;
+        log << "Sub-Volume dimensions: " << endl;
+        for (int sv = 0; sv < vol->GetSubVolumeCount(); sv++)
+            log << "Sub-Volume " << sv << ": " << vol->GetSubVolumeDimension(sv) << endl;
 
 
-		int* indexList;
-		int projCount;
-		proj.CreateProjectionIndexList(PLT_RANDOM_START_ZERO_TILT, &projCount, &indexList);
-		//proj.CreateProjectionIndexList(PLT_RANDOM, &projCount, &indexList);
-		//proj.CreateProjectionIndexList(PLT_NORMAL, &projCount, &indexList);
-		
-		
-		if (mpi_part == 0)
-		{
-			printf("Projection index list:\n");
-			log << "Projection index list:" << endl;
-			for (int i = 0; i < projCount; i++)
-			{
-				printf("%3d,", indexList[i]);
-				log << indexList[i];
-				if (i < projCount - 1)
-					log << ", ";
-			}
-			log << endl;
-			printf("\b \n\n");
+        if (mpi_part == 0) printf("Done\n");fflush(stdout);
 
-		}
 
-		Reconstructor reconstructor(aConfig, proj, projSource, markers, *defocus, modules, mpi_part, mpi_size);
+        int* indexList;
+        int projCount;
+        proj.CreateProjectionIndexList(PLT_RANDOM_START_ZERO_TILT, &projCount, &indexList);
 
+        if (mpi_part == 0)
+        {
+            printf("Projection index list:\n");
+            log << "Projection index list:" << endl;
+            for (int i = 0; i < projCount; i++)
+            {
+                printf("%3d,", indexList[i]);
+                log << indexList[i];
+                if (i < projCount - 1)
+                    log << ", ";
+            }
+            log << endl;
+            printf("\b \n\n");
+
+        }
+
+        Reconstructor reconstructor(aConfig, proj, projSource, markers, *defocus, modules, mpi_part, mpi_size);
+        reconstructor.PlanCTFCorrection(vol, markers.GetProjectionCount(), projSource->GetProjectionCount(), indexList);
 
         if (mpi_part == 0) printf("Free Memory on device after allocations: %llu MB\n", cuCtx->GetFreeMemorySize() / 1024 / 1024);
+
 /////////////////////////////////////
 /// Filter Projections
 /////////////////////////////////////
-		if (mpi_part == 0)
+        if (mpi_part == 0)
         {
-			float lp = aConfig.fourFilterLP, hp = aConfig.fourFilterHP, lps = aConfig.fourFilterLPS, hps = aConfig.fourFilterHPS;			
-			bool skipFilter = aConfig.SkipFilter;
 
-			if (!reconstructor.ComputeFourFilter() && !skipFilter)
-			{
-				log << SimpleLogger::LOG_ERROR;
-				log << "Invalid filter parameters: Skiping filter." << endl;
-				printf("Invalid filter parameters. Skiping filter...\n");
-				log << SimpleLogger::LOG_INFO;
-				skipFilter = true;
-			}
+            float lp = aConfig.fourFilterLP, hp = aConfig.fourFilterHP, lps = aConfig.fourFilterLPS, hps = aConfig.fourFilterHPS;
+            bool skipFilter = aConfig.SkipFilter;
 
-			log << "Bandpass filter for projections applied: " << (skipFilter ? "false" : "true") << endl;
-			log << "Bandpass filter values (lp, lps, hp, hps): " << lp << ", " << lps << ", " << hp << ", " << hps << endl;
+            log << "Bandpass filter for projections applied: " << (skipFilter ? "false" : "true") << endl;
+            log << "Bandpass filter values (lp, lps, hp, hps): " << lp << ", " << lps << ", " << hp << ", " << hps << endl;
 
+            log << "Projection datatype: " << projSource->GetDataType() << endl;
 
-			log << "Projection datatype: " << projSource->GetDataType() << endl;
+            if (aConfig.ProjectionNormalization == Configuration::Config::PNM_STANDARD_DEV)
+                log << "Normalizing projections by standard deviation [im = (im - mean) / std]" << endl;
+            else
+                log << "Normalizing projections by mean [im = (im - mean) / mean]" << endl;
 
-			if (aConfig.ProjectionNormalization == Configuration::Config::PNM_STANDARD_DEV)
-				log << "Normalizing projections by standard deviation [im = (im - mean) / std]" << endl;
-			else
-				log << "Normalizing projections by mean [im = (im - mean) / mean]" << endl;
+            log << "Scaling projection values by: " << aConfig.ProjectionScaleFactor << endl;
+            log << "Pixel size is: " << proj.GetPixelSize() << " nm" << endl;
 
-			log << "Scaling projection values by: " << aConfig.ProjectionScaleFactor << endl;
-			log << "Pixel size is: " << proj.GetPixelSize() << " nm" << endl;
+            log << "Projection statistics:" << endl;
 
-			log << "Projection statistics:" << endl;
-			
-			printf("\r\n");
-			for (int i = 0; i < projSource->GetProjectionCount(); i++)
-			{
-				if (!markers.CheckIfProjIndexIsGood(i))
-				{
-					continue;
-				}
+            printf("\r\n");
+            for (int i = 0; i < projSource->GetProjectionCount(); i++)
+            {
+                if (!markers.CheckIfProjIndexIsGood(i))
+                {
+                    continue;
+                }
 
-				printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
-				printf("Filtering projection: %i", i);
-				log << "Projection " << i;
-				fflush(stdout);
+                //printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+                printf("\r");
+                printf("Filtering projection: %i", i);
+                log << "Projection " << i;
+                fflush(stdout);
 
-				//projSource->GetProjection(i) always points to an array with an element size of 4 bytes,
-				//Even if original data is stored in shorts! We can therfor cast data and keep the same pointer.
-				char* imgUS = projSource->GetProjection(i);
-				/*float tilt = projSource->TiltAlpha[i];
-				float weight = 1.0f / cos(tilt / 180.0f * M_PI);*/
-				
-				//Check if data format is supported
-				if (projSource->GetDataType() != DT_SHORT &&
-					projSource->GetDataType() != DT_USHORT && 
-					projSource->GetDataType() != DT_INT &&
-					projSource->GetDataType() != DT_UINT &&
-					projSource->GetDataType() != DT_FLOAT)
-				{
-					cerr << "Projections have wrong data type: supported types are: short, ushort, int, uint and float.";
-					log << SimpleLogger::LOG_ERROR;
-					log << "Projections have wrong data type: supported types are: short, ushort, int, uint and float." << endl;
-					WaitForInput(-1);
-				}
+                //projSource->GetProjection(i) always points to an array with an element size of 4 bytes,
+                //Even if original data is stored in shorts! We can therefore cast data and keep the same pointer.
+                char* imgUS = projSource->GetProjection(i);
 
-				float meanValue, stdValue;
-				int badPixels;
-				reconstructor.PrepareProjection(imgUS, i, meanValue, stdValue, badPixels);
-				
-				printf(" Bad Pixels: %d Mean: %f Std: %f", badPixels, meanValue, stdValue);
-				log << ": Bad Pixels: " << badPixels << " Mean: " << meanValue << " Std. dev.: " << stdValue << endl;
-			}
+                //Check if data format is supported
+                if (projSource->GetDataType() != DT_SHORT &&
+                    projSource->GetDataType() != DT_USHORT &&
+                    projSource->GetDataType() != DT_INT &&
+                    projSource->GetDataType() != DT_UINT &&
+                    projSource->GetDataType() != DT_FLOAT)
+                {
+                    cerr << "Projections have wrong data type: supported types are: short, ushort, int, uint and float.";
+                    log << SimpleLogger::LOG_ERROR;
+                    log << "Projections have wrong data type: supported types are: short, ushort, int, uint and float." << endl;
+                    WaitForInput(-1);
+                }
+
+                float meanValue, stdValue;
+                int badPixels;
+                reconstructor.PrepareProjection(imgUS, i, meanValue, stdValue, badPixels);
+
+                printf(" Bad Pixels: %d Mean: %f Std: %f", badPixels, meanValue, stdValue);
+                log << ": Bad Pixels: " << badPixels << " Mean: " << meanValue << " Std. dev.: " << stdValue << endl;
+            }
         }
-
 
 /////////////////////////////////////
 /// End Filter Projections
@@ -546,12 +495,12 @@ int main(int argc, char* argv[])
         if (mpi_part == 0)printf("\nPixel size is: %f nm, Cs: %.2f mm, Voltage: %.2f kV\n", proj.GetPixelSize(), aConfig.Cs, aConfig.Voltage);
 
         int SIRTcount = aConfig.SIRTCount;
-		if (aConfig.WBP_NoSART)
-			SIRTcount = 1;
-		if (aConfig.WBP_NoSART)
-			aConfig.Iterations = 1;
+        if (aConfig.WBP_NoSART)
+            SIRTcount = 1;
+        if (aConfig.WBP_NoSART)
+            aConfig.Iterations = 1;
 
-		
+
         float** SIRTBuffer = new float*[SIRTcount];
         for (int i = 0; i < SIRTcount; i++)
         {
@@ -560,358 +509,178 @@ int main(int argc, char* argv[])
             memset(SIRTBuffer[i], 0, size * 4);
         }
 
-        // Lookup table
-        auto LUTBuffer = new float*[projSource->GetProjectionCount()];
-        auto LUTstack = new EmFile(aConfig.LUTFile);
-        LUTstack->OpenAndRead();
-        // Pointer arithmetic
-        for (int i = 0; i < projSource->GetProjectionCount(); i++)
-        {
-            //int index = indexList[i];
-            uint pos = i * aConfig.LUTSize * aConfig.LUTSize;
-            LUTBuffer[i] = (float*)LUTstack->GetData() + pos;
-
-            {
-                stringstream DP;
-                DP << "real_" << i <<".em";
-                emwrite(DP.str(), (float*)projSource->GetProjection(i), proj.GetWidth(),
-                        proj.GetHeight());
-            }
-        }
-
-//        {
-//            stringstream DP;
-//            DP << "LUT_" << 20  <<".em";
-//            emwrite(DP.str(), LUTBuffer[20], aConfig.LUTSize,
-//                    aConfig.LUTSize);
-//        }
-
-        reconstructor.PlanCTFCorrection(vol, markers.GetProjectionCount(), projSource->GetProjectionCount(), indexList);
-
-        //vol->LoadFromFile(aConfig.OutVolumeFile, mpi_part);
-        //vol_Array.CopyFromHostToArray(vol->GetPtrToSubVolume(mpi_part));
-
         if (mpi_part == 0)printf("\n\nStart reconstruction ...\n\n");
-		fflush(stdout);
+        fflush(stdout);
         start = clock();
 
-        for (int iter = 0; iter < aConfig.Iterations; iter++)
-        {			
-			for (int SIRTstep = 0; SIRTstep < (projCount + SIRTcount - 1) / SIRTcount; SIRTstep++)
-			{
-				if (!aConfig.WBP_NoSART)//normal SART/SIRT reconstruction
-				{
-					for (int i = 0; i < SIRTcount; i++)
-					{
-						if (SIRTstep * SIRTcount + i >= projCount) continue;
-						int index = indexList[SIRTstep * SIRTcount + i];
+        auto dist = new float[proj.GetProjCount() * proj.GetWidth() * proj.GetHeight()];
 
-						if (mpi_part == 0)
-						{
-							printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
-							printf("Iter. %3i on proj. %3i/%3i, index %3i. FP  ", iter + 1, SIRTstep * SIRTcount + i + 1, projCount, index);
-							fflush(stdout);
-						}
+        // Whether or not to use
+        bool initialize_adhoc = true;
 
-
-						reconstructor.ResetProjectionsDevice();
-                        reconstructor.CopyLUTToDevice(LUTBuffer[index]);
-
-
-						if (aConfig.FP16Volume)
-						{
-							reconstructor.ForwardProjection(volFP16, texObj, index, volumeIsEmpty);
-							if (mpi_part == 0)
-							{
-								reconstructor.Compare(volFP16, projSource->GetProjection(index), index);
-							}
-						}
-						else
-						{
-							reconstructor.ForwardProjectionLUT(vol, surfObj, index, volumeIsEmpty, iter);
-							if (mpi_part == 0)
-							{
-                                {
-                                    auto img = new float[proj.GetWidth()*proj.GetHeight()];
-                                    reconstructor.CopyProjectionToHost(img);
-                                    stringstream DP;
-                                    DP << "forward_" << index << "_" << iter <<".em";
-                                    emwrite(DP.str(), img, proj.GetWidth(),
-                                            proj.GetHeight());
-                                    delete[] img;
-                                }
-
-                                {
-                                    auto img = new float[proj.GetWidth()*proj.GetHeight()];
-                                    reconstructor.CopyDistanceImageToHost(img);
-                                    stringstream DP;
-                                    DP << "distance_" << index << "_" << iter <<".em";
-                                    emwrite(DP.str(), img, proj.GetWidth(),
-                                            proj.GetHeight());
-                                    delete[] img;
-                                }
-
-								reconstructor.Compare(vol, projSource->GetProjection(index), index);
-
-                                {
-                                    auto img = new float[proj.GetWidth()*proj.GetHeight()];
-                                    reconstructor.CopyProjectionToHost(img);
-                                    stringstream DP;
-                                    DP << "comp_" << index << "_" << iter <<".em";
-                                    emwrite(DP.str(), img, proj.GetWidth(),
-                                            proj.GetHeight());
-                                    delete[] img;
-                                }
-							}
-						}
-						if (mpi_part == 0)
-						{
-							reconstructor.CopyProjectionToHost(SIRTBuffer[i]);
-						}
-					}
-				}
-				else
-				{
-					if (mpi_part == 0)
-					{
-						//Do WBP: spread filtered projection
-						int index = indexList[SIRTstep * (uint)SIRTcount + 0];
-						memcpy(SIRTBuffer[0], projSource->GetProjection(index), (size_t)proj.GetWidth() * (size_t)proj.GetHeight() * sizeof(float));
-					}
-				}
-			
-				//As compare step or file loading in WBP happens only on node 0, spread the content to all other nodes:
-				reconstructor.MPIBroadcast(SIRTBuffer, SIRTcount);
-
-
-                for (int i = 0; i < SIRTcount; i++)
-                {
-                    if (SIRTstep * SIRTcount + i >= projCount) continue;
-                    volumeIsEmpty = false;
-
-					reconstructor.CopyProjectionToDevice(SIRTBuffer[i]);
-                    
-                    int index = indexList[SIRTstep * SIRTcount + i];
-
-					if (mpi_part == 0)
-					{
-						printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
-						printf("Iter. %3i on proj. %3i/%3i, index %3i. BP  ", iter + 1, SIRTstep * SIRTcount + i + 1, projCount, index);
-						fflush(stdout);
-					}
-
-					if (aConfig.FP16Volume)
-					{
-						reconstructor.BackProjection(volFP16, surfObj, index, (float)SIRTcount);
-					}
-					else
-					{
-//                        {
-//                            auto img = new float[proj.GetWidth()*proj.GetHeight()];
-//                            reconstructor.CopyProjectionToHost(img);
-//                            stringstream DP;
-//                            DP << "before_bp_" << index << "_" << iter <<".em";
-//                            emwrite(DP.str(), img, proj.GetWidth(),
-//                                    proj.GetHeight());
-//                            delete[] img;
-//                        }
-//                        reconstructor.BackProjection(vol, surfObj, index, (float)SIRTcount);
-//
-//                        {
-//                            auto img = new float[vol->GetSubVolumeSizeInVoxels(0)];
-//                            vol_Array.CopyFromArrayToHost(img);
-//                            stringstream DP;
-//                            DP << "volume_" << 3 <<".em";
-//                            emwrite(DP.str(), img, vol->GetDimension().x,
-//                                    vol->GetDimension().y, vol->GetDimension().z);
-//                            delete[] img;
-//                        }
-//
-//                        vol_Array.CopyFromHostToArray(vol->GetPtrToSubVolume(mpi_part));
-//                        reconstructor.CopyProjectionToDevice(SIRTBuffer[i]);
-//
-//
-//
-//						reconstructor.BackProjectionLUT(vol, surfObj, index, (float)SIRTcount, 0);
-//
-//                        {
-//                            auto img = new float[vol->GetSubVolumeSizeInVoxels(0)];
-//                            vol_Array.CopyFromArrayToHost(img);
-//                            stringstream DP;
-//                            DP << "volume_" << 0 <<".em";
-//                            emwrite(DP.str(), img, vol->GetDimension().x,
-//                                    vol->GetDimension().y, vol->GetDimension().z);
-//                            delete[] img;
-//                        }
-//
-//                        vol_Array.CopyFromHostToArray(vol->GetPtrToSubVolume(mpi_part));
-//                        reconstructor.CopyProjectionToDevice(SIRTBuffer[i]);
-//
-//                        reconstructor.BackProjectionLUT(vol, surfObj, index, (float)SIRTcount, 1);
-//
-//                        {
-//                            auto img = new float[vol->GetSubVolumeSizeInVoxels(0)];
-//                            vol_Array.CopyFromArrayToHost(img);
-//                            stringstream DP;
-//                            DP << "volume_" << 1 <<".em";
-//                            emwrite(DP.str(), img, vol->GetDimension().x,
-//                                    vol->GetDimension().y, vol->GetDimension().z);
-//                            delete[] img;
-//                        }
-//
-//                        vol_Array.CopyFromHostToArray(vol->GetPtrToSubVolume(mpi_part));
-//                        reconstructor.CopyProjectionToDevice(SIRTBuffer[i]);
-//
-//                        reconstructor.BackProjectionLUT(vol, surfObj, index, (float)SIRTcount, 2);
-//
-//                        {
-//                            auto img = new float[vol->GetSubVolumeSizeInVoxels(0)];
-//                            vol_Array.CopyFromArrayToHost(img);
-//                            stringstream DP;
-//                            DP << "volume_" << 2 <<".em";
-//                            emwrite(DP.str(), img, vol->GetDimension().x,
-//                                    vol->GetDimension().y, vol->GetDimension().z);
-//                            delete[] img;
-//                        }
-//
-//                        vol_Array.CopyFromHostToArray(vol->GetPtrToSubVolume(mpi_part));
-//                        reconstructor.CopyProjectionToDevice(SIRTBuffer[i]);
-//
-//                        reconstructor.BackProjectionLUT(vol, surfObj, index, (float)SIRTcount, 4);
-//
-//                        {
-//                            auto img = new float[vol->GetSubVolumeSizeInVoxels(0)];
-//                            vol_Array.CopyFromArrayToHost(img);
-//                            stringstream DP;
-//                            DP << "volume_" << 4 <<".em";
-//                            emwrite(DP.str(), img, vol->GetDimension().x,
-//                                    vol->GetDimension().y, vol->GetDimension().z);
-//                            delete[] img;
-//                        }
-//
-//                        vol_Array.CopyFromHostToArray(vol->GetPtrToSubVolume(mpi_part));
-                        reconstructor.CopyProjectionToDevice(SIRTBuffer[i]);
-
-//                        {
-//                            stringstream DP;
-//                            DP << "realproj.em";
-//                            emwrite(DP.str(), SIRTBuffer[i], proj.GetWidth(), proj.GetHeight());
-//                        }
-
-                        //reconstructor.PlanCTFCorrection(vol, 1, 41, indexList);
-                        reconstructor.BackProjectionLUT(vol, surfObj, index, (float)SIRTcount, iter);
-
-//                        {
-//                            auto img = new float[vol->GetSubVolumeSizeInVoxels(0)];
-//                            vol_Array.CopyFromArrayToHost(img);
-//                            stringstream DP;
-//                            DP << "volume_" << 5 <<".em";
-//                            emwrite(DP.str(), img, vol->GetDimension().x,
-//                                    vol->GetDimension().y, vol->GetDimension().z);
-//                            delete[] img;
-//                        }
-
-
-					}
-                }
+        if (aConfig.WBP_NoSART){
+            if (!aConfig.SNRFile.empty()){
+                string type = "volume";
+                reconstructor.LoadSNR(aConfig.SNRFile, type);
+                initialize_adhoc = false;
             }
         }
 
-//        reconstructor.ResetProjectionsDevice();
-//        reconstructor.CopyLUTToDevice(LUTBuffer[20]);
-//
-//        reconstructor.ForwardProjectionLUT(vol, surfObj, 20, volumeIsEmpty, 2);
-//        reconstructor.Compare(vol, projSource->GetProjection(20), 20);
-//        {
-//            auto img = new float[proj.GetWidth()*proj.GetHeight()];
-//            reconstructor.CopyProjectionToHost(img);
-//            stringstream DP;
-//            DP << "COMPARISON_AFTER_0.em";
-//            emwrite(DP.str(), img, proj.GetWidth(),
-//                    proj.GetHeight());
-//            delete[] img;
-//        }
-//        reconstructor.BackProjectionLUT(vol, surfObj, 20, (float)SIRTcount, 2);
-//
-//
-//        reconstructor.ResetProjectionsDevice();
-//        reconstructor.CopyLUTToDevice(LUTBuffer[20]);
-//
-//        reconstructor.ForwardProjectionLUT(vol, surfObj, 20, volumeIsEmpty, 2);
-//        reconstructor.Compare(vol, projSource->GetProjection(20), 20);
-//        {
-//            auto img = new float[proj.GetWidth()*proj.GetHeight()];
-//            reconstructor.CopyProjectionToHost(img);
-//            stringstream DP;
-//            DP << "COMPARISON_AFTER_1.em";
-//            emwrite(DP.str(), img, proj.GetWidth(),
-//                    proj.GetHeight());
-//            delete[] img;
-//        }
-//        reconstructor.BackProjectionLUT(vol, surfObj, 20, (float)SIRTcount, 2);
-//
-//        reconstructor.ResetProjectionsDevice();
-//        reconstructor.CopyLUTToDevice(LUTBuffer[20]);
-//
-//        reconstructor.ForwardProjectionLUT(vol, surfObj, 20, volumeIsEmpty, 2);
-//        reconstructor.Compare(vol, projSource->GetProjection(20), 20);
-//        {
-//            auto img = new float[proj.GetWidth()*proj.GetHeight()];
-//            reconstructor.CopyProjectionToHost(img);
-//            stringstream DP;
-//            DP << "COMPARISON_AFTER_2.em";
-//            emwrite(DP.str(), img, proj.GetWidth(),
-//                    proj.GetHeight());
-//            delete[] img;
-//        }
-//        reconstructor.BackProjectionLUT(vol, surfObj, 20, (float)SIRTcount, 2);
-//
-//        reconstructor.ResetProjectionsDevice();
-//        reconstructor.CopyLUTToDevice(LUTBuffer[20]);
-//
-//        reconstructor.ForwardProjectionLUT(vol, surfObj, 20, volumeIsEmpty, 2);
-//        reconstructor.Compare(vol, projSource->GetProjection(20), 20);
-//        {
-//            auto img = new float[proj.GetWidth()*proj.GetHeight()];
-//            reconstructor.CopyProjectionToHost(img);
-//            stringstream DP;
-//            DP << "COMPARISON_AFTER_3.em";
-//            emwrite(DP.str(), img, proj.GetWidth(),
-//                    proj.GetHeight());
-//            delete[] img;
-//        }
-//        reconstructor.BackProjectionLUT(vol, surfObj, 20, (float)SIRTcount, 2);
-//
-//        reconstructor.ResetProjectionsDevice();
-//        reconstructor.CopyLUTToDevice(LUTBuffer[20]);
-//
-//        reconstructor.ForwardProjectionLUT(vol, surfObj, 20, volumeIsEmpty, 2);
-//        reconstructor.Compare(vol, projSource->GetProjection(20), 20);
-//        {
-//            auto img = new float[proj.GetWidth()*proj.GetHeight()];
-//            reconstructor.CopyProjectionToHost(img);
-//            stringstream DP;
-//            DP << "COMPARISON_AFTER_4.em";
-//            emwrite(DP.str(), img, proj.GetWidth(),
-//                    proj.GetHeight());
-//            delete[] img;
-//        }
-//        reconstructor.BackProjectionLUT(vol, surfObj, 20, (float)SIRTcount, 2);
+/////////////////////////////////////
+/// Begin Reconstruction
+/////////////////////////////////////
+
+        stringstream output;
+        output << std::fixed;
+        output << std::setprecision(2);
+        float total_steps = (float)aConfig.Iterations * (float)proj.GetGoodProjCount();
+
+        for (int iter = 0; iter < aConfig.Iterations; iter++) {//2; iter++){//aConfig.Iterations; iter++) {
+            for (uint projIdx = 0; projIdx < projCount; projIdx++) {//3;projIdx++){//projCount; projIdx++) {
+                // Index in stack
+                int stackIdx = indexList[projIdx];
+
+                // On first iteration or in case of WBP without prior knowledge we need to initialize the volume using
+                // an ad-hoc wiener factor.
+                bool useSNR = true;
+                if (iter < 1 && initialize_adhoc) useSNR = false;
+
+                // Some terminal output
+                float progress = (float)(iter * proj.GetGoodProjCount() + projIdx) / total_steps * 100;
+                output.str(std::string());
+                output << "Progress: " << progress <<"%"
+                       << " | Iteration: " << iter + 1
+                       << " | Step: " << projIdx + 1 << " | ";
 
 
-        CubicResampleKernel resample(modules.modFPLUT);
-        resample.SetComputeSize((int)volSize.x, (int)volSize.y, (int)volSize.z);
-        resample(texObj, surfObj_out, vol);
-        //vol_Array.Co
+                reconstructor.ResetProjectionsDevice();
+
+                // Forward projection only when doing SART
+                if (!aConfig.WBP_NoSART) {
+                    // Forward projection
+                    reconstructor.ForwardProjectionParent(vol,
+                                                          deviceVolume,
+                                                          stackIdx, false, iter, output);
+
+
+                    // Distance projection
+                    cout << "\r\e[K" << flush;
+                    cout << output.str() << "Ds " << stackIdx << flush;
+
+                    float *distp = dist + stackIdx * proj.GetHeight() * proj.GetWidth();
+                    if (iter < 1) {
+                        reconstructor.DistanceParent(vol, stackIdx, false, iter, false);
+                        reconstructor.CopyDistanceImageToHost(distp);
+                    } else {
+                        reconstructor.CopyDistanceImageToDevice(distp);
+                    }
+
+                    if (aConfig.WriteDebug) {
+                        {
+                            auto img = new float[proj.GetWidth() * proj.GetHeight()];
+                            reconstructor.CopyProjectionToHost(img);
+                            stringstream DP;
+                            DP << "forward_" << stackIdx << "_" << iter << ".em";
+                            emwrite(DP.str(), img, proj.GetWidth(),
+                                    proj.GetHeight());
+                            delete[] img;
+                        }
+
+                        {
+                            auto img = new float[proj.GetWidth() * proj.GetHeight()];
+                            reconstructor.CopyDistanceImageToHost(img);
+                            stringstream DP;
+                            DP << "distance_" << stackIdx << "_" << iter << ".em";
+                            emwrite(DP.str(), img, proj.GetWidth(),
+                                    proj.GetHeight());
+                            delete[] img;
+                        }
+                    }
+
+                }
+
+                if (aConfig.WriteDebug) {
+                    {
+                        stringstream DP;
+                        DP << "real_" << stackIdx << "_" << iter << ".em";
+                        emwrite(DP.str(), (float *) projSource->GetProjection(stackIdx), proj.GetWidth(),
+                                proj.GetHeight());
+                    }
+                }
+
+                // Compare
+                cout << "\r\e[K" << flush;
+                cout << output.str() << "Df " << stackIdx << flush;
+
+                // Compare only when doing SART
+                if (!aConfig.WBP_NoSART) {
+                    reconstructor.Compare(vol, projSource->GetProjection(stackIdx), stackIdx, true, iter);
+
+                    if (aConfig.WriteDebug) {
+                        auto img = new float[proj.GetWidth()*proj.GetHeight()];
+                        reconstructor.CopyProjectionToHost(img);
+                        stringstream DP;
+                        DP << "comp_" << stackIdx << "_" << iter <<".em";
+                        emwrite(DP.str(), img, proj.GetWidth(),
+                                proj.GetHeight());
+                        delete[] img;
+                    }
+
+                } else {
+                    reconstructor.PrepareForWBP(vol, projSource->GetProjection(stackIdx), stackIdx, iter);
+
+                    if (aConfig.WriteDebug) {
+                        {
+                            auto img = new float[proj.GetWidth() * proj.GetHeight()];
+                            reconstructor.CopyProjectionToHost(img);
+                            stringstream DP;
+                            DP << "wbp_prepped_" << stackIdx << "_" << iter << ".em";
+                            emwrite(DP.str(), img, proj.GetWidth(),
+                                    proj.GetHeight());
+                            delete[] img;
+                        }
+                    }
+                }
+
+                // Back projection
+                reconstructor.BackProjectionParent(vol,
+                                                   deviceVolume,
+                                                   stackIdx, 1, iter, output, useSNR);
+            }
+
+
+            if (aConfig.WriteDebug) {
+                auto img = new float[vol->GetSubVolumeSizeInVoxels(0)];
+                deviceVolume.array_card().CopyFromArrayToHost(img);
+                for (int i=0; i<vol->GetSubVolumeSizeInVoxels(0); i++){
+                    img[i] = img[i] * -1.f;
+                }
+                stringstream DP;
+                DP << "volume_"  << iter << ".em";
+                emwrite(DP.str(), img, vol->GetDimension().x,
+                        vol->GetDimension().y, vol->GetDimension().z);
+                delete[] img;
+            }
+        }
+
+/////////////////////////////////////
+/// End Reconstruction
+/////////////////////////////////////
+
+/////////////////////////////////////
+/// Begin Saving
+/////////////////////////////////////
+
+        if (!aConfig.SNRFile.empty() && !aConfig.WBP_NoSART){
+            string type = "volume";
+            reconstructor.SaveSNR(aConfig.SNRFile, type);
+        }
 
 		if (!(aConfig.FP16Volume && !aConfig.WriteVolumeAsFP16))
 		{
 			if (mpi_part == 0) printf("\n\nCopying Data back to host ... ");fflush(stdout);
 
-			if (aConfig.FP16Volume)
-				out_Array.CopyFromArrayToHost(volFP16->GetPtrToSubVolume(mpi_part));
-			else
-                vol_Array.CopyFromArrayToHost(vol->GetPtrToSubVolume(mpi_part));
+            deviceVolume.CardToHost(vol->GetPtrToSubVolume(mpi_part));
 
 			if (mpi_part == 0) printf("Done\n");
 		}
@@ -932,15 +701,10 @@ int main(int argc, char* argv[])
 				printf("Write Volume to disk (part 0) ... ");fflush(stdout);
 				Configuration::Config::FILE_SAVE_MODE fsm = aConfig.GetFileSaveMode();
 				float3 dims;
-				if (aConfig.FP16Volume)
-				{
-					dims = volFP16->GetDimension();
-				}
-				else
-				{
-					dims = vol->GetDimension();
-					vol->Invert();
-				}
+
+                dims = vol->GetDimension();
+                vol->Invert();
+
 
 				size_t sizeDataType = sizeof(float);
 				if (fsm == Configuration::Config::FSM_MRC)
@@ -1005,36 +769,15 @@ int main(int argc, char* argv[])
 				}
 
 
-				if (aConfig.FP16Volume && !aConfig.WriteVolumeAsFP16)
-				{
-					printf("   ");fflush(stdout);
-					float3 dim = volFP16->GetSubVolumeDimension(mpi_part);
-					size_t dimI = (size_t)dim.x * (size_t)dim.y * sizeof(float);
 
-					float* volTemp_h = new float[aConfig.RecDimensions.x * aConfig.RecDimensions.y];
-					for (int zSlice = 0; zSlice < dim.z; zSlice++)
-					{
-						reconstructor.ConvertVolumeFP16(volTemp_h, surfObj, zSlice);
-						mVol->write((char*)volTemp_h, dimI);
-						mVol->flush();
-					
-						printf("\b\b\b\b% 3d%%", (zSlice+1) * 100 / (int)volFP16->GetDimension().z); fflush(stdout);
-					}
-					mVol->close();fflush(stdout);
-					delete[] volTemp_h;
-				}
-				else
-				{
-					//close file. It will be reopened in WriteToFile-method
-					mVol->flush();
-					mVol->close();
-					if (aConfig.FP16Volume)
-						volFP16->WriteToFile(aConfig.OutVolumeFile, mpi_part);
-					else
-						vol->WriteToFile(aConfig.OutVolumeFile, mpi_part);
+                //close file. It will be reopened in WriteToFile-method
+                mVol->flush();
+                mVol->close();
 
-					printf("Done\n");fflush(stdout);
-				}
+                vol->WriteToFile(aConfig.OutVolumeFile, mpi_part);
+
+                printf("Done\n");fflush(stdout);
+
 #ifdef USE_MPI
 				int ack = 0;
 				if (mpi_size > 1)
@@ -1104,6 +847,11 @@ int main(int argc, char* argv[])
 		}
 #endif
 	}
+
+/////////////////////////////////////
+/// End Saving
+/////////////////////////////////////
+
 	catch (exception& e)
 	{
 		log << SimpleLogger::LOG_ERROR;

@@ -29,8 +29,11 @@
 #include <mpi.h>
 #endif
 #include "EmSartDefault.h"
+#include "KernelModules.h"
 #include "Projection.h"
 #include "Volume.h"
+#include "DeviceVolume.h"
+#include "CTF.h"
 #include "kernels/kernels.h"
 #include <CudaArrays.h>
 #include <CudaContext.h>
@@ -52,34 +55,6 @@
 #include <npp.h>
 #include <algorithm>
 
-class KernelModuls
-{
-private:
-	bool compilerOutput;
-	bool infoOutput;
-
-public:
-	KernelModuls(Cuda::CudaContext* aCuCtx);
-	CUmodule modFP;
-	CUmodule modSlicer;
-	CUmodule modVolTravLen;
-	CUmodule modComp;
-	CUmodule modWBP;
-	CUmodule modBP;
-	CUmodule modCTF;
-	CUmodule modCTS;
-    CUmodule modFPLUT;
-    CUmodule modBPLUT;
-    CUmodule modSplines;
-};
-
-//typedef struct {
-//    float3 m[3];
-//} float3x3;
-//
-//typedef struct {
-//	float4 m[4];
-//} float4x4;
 
 class Reconstructor
 {
@@ -91,12 +66,14 @@ private:
 	SubEKernel subEKernel;
 	WbpWeightingKernel wbp;
 	CropBorderKernel cropKernel;
-	CropSlicesKernel cropslicesKernel;
+    CropBorderInvKernel cropInvKernel;
+	CropSlicesKernel cropSlicesKernel;
+    CropSlicesInvKernel cropSlicesInvKernel;
 	BPKernel bpKernel;
 	ConvVolKernel convVolKernel;
 	ConvVol3DKernel convVol3DKernel;
 	CTFKernel ctf;
-	CTFSlicedKernel ctfs;
+    PostFilterSumKernel postFilterSum;
 	CopyToSquareKernel cts;
 	//CopyToSquareSlicesKernel ctss;
 	//CopyToRectSlicesKernel ctrs;
@@ -110,19 +87,42 @@ private:
 	PCKernel pcKernel;
 	MaxShiftKernel maxShiftKernel;
 	DimBordersKernel dimBordersKernel;
-	SplinePrefilter2DX prefilter2DX;
-	SplinePrefilter2DY prefilter2DY;
-	FPLUTKernel fplutKernel;
-	FPLUTSlicedKernel fplutslicedKernel;
-	FPDistSlicedKernel fpdistslicedKernel;
-	BPLUTKernel bplutKernel;
-	BPLUTBWKernel bplutbwKernel;
-	BPLUTBWCGKernel bplutbwcgKernel;
-	BPLUTBlockKernel bplutblockKernel;
-	BPLUTBlockNoDivKernel bplutblocknodivKernel;
-	BPLUTVBlockSlicedKernel bplutvblockslicedKernel;
-	BPLUTSlicedKernel bplutslicedKernel;
-	OversampleKernel osKernel;
+    SplinePrefilter3DXSurf prefilter3DX;
+    SplinePrefilter3DYSurf prefilter3DY;
+    SplinePrefilter3DZSurf prefilter3DZ;
+    SplinePrefilter3DXSurf postfilter3DX;
+    SplinePrefilter3DYSurf postfilter3DY;
+    SplinePrefilter3DZSurf postfilter3DZ;
+    FPOrthoKernel fpOrthoKernel;
+    FPOrthoSSKernel fpOrthoSSKernel;
+    FPOrthoOVKernel fpOrthoOVKernel;
+    FPDistOrthoKernel distOrthoKernel;
+    CubicResampleKernel2D sample2D;
+    CubicResampleKernel3D sample3D;
+    BoxSplineDualBKernel postFilterBox;
+    BoxSplineDualBReflKernel preFilterBox;
+    CopyToPitchedKernel copyToPitched;
+    CopyFromPitchedKernel copyFromPitched;
+    AddToPitchedKernel addToPitched;
+    PostFilterKernel postFilter;
+    //PreFilterSpreadKernel preFilterSpread;
+    SlicesToArraysKernel slicesToArrays;
+    MaskedSlicesToArraysKernel maskedSlicesToArrays;
+    BPOrthoSlicedKernel bpOrthoKernel;
+    BPOrthoSlicedAddKernel bpOrthoAdd;
+    BPOrthoSlicedAddSSKernel bpOrthoAddSS;
+    Add3DKernel add3D;
+    Set3DKernel set3D;
+    Add3DMaskedKernel add3Dmasked;
+    Mask3DKernel mask3D;
+    RadialSumAbsKernel radialSum;
+    PreFilterSpreadAdHocKernel preFilterSpreadAdHoc;
+    PreFilterSpreadSNRKernel preFilterSpreadSNR;
+    CompSpecialKernel compSpecialKernel;
+    Mask3DTransformKernel mask3DTransform;
+    Add3DTransformKernel add3DTransform;
+    Norm3DOverlapKernel norm3Doverlap;
+    Multiplicity3DKernel multiplicity3D;
 #ifdef REFINE_MODE
 	MaxShiftWeightedKernel maxShiftWeightedKernel;
 	FindPeakKernel findPeakKernel;
@@ -136,38 +136,105 @@ private:
 	NppiRect roiDestCC1, roiDestCC2, roiDestCC3, roiDestCC4;
 #endif
 
-	Cuda::CudaPitchedDeviceVariable realprojUS_d;
-	Cuda::CudaPitchedDeviceVariable proj_d;
-    //Cuda::CudaPitchedDeviceVariable osproj_d;
-	Cuda::CudaPitchedDeviceVariable realproj_d;
-	Cuda::CudaPitchedDeviceVariable dist_d;
-	Cuda::CudaPitchedDeviceVariable filterImage_d;
-	
+    // START Utility vars
+    // Dimensions of the projection
+    uint2 projDim;
+    float2 projDimF;
 
+    // Dimensions of the FFT and correction for pixelsize
+    uint2 fftDim;
+    float2 fftDimF;
+    float2 asymCorrFac;
+
+    // Number of elements in projection
+    size_t projSize;
+    size_t projSizeF32;
+
+    // Number of elements in FFT
+    size_t fftSize;
+    size_t fftSizeFC32;
+
+    // Pitch/Stride/Step for F32/Char projection and FFT
+    size_t projPitchChar;
+    size_t projPitchFloat;
+    size_t fftPitchComplex;
+    // END Utility vars
+
+    // START Projections
+    // unsigned real proj
+	Cuda::CudaPitchedDeviceVariable realprojUS_d;
+	// projection/comparison result
+    Cuda::CudaPitchedDeviceVariable proj_d;
+    Cuda::CudaPitchedDeviceVariable proj_children_d;
+    // projection without pitch
+    Cuda::CudaDeviceVariable proj_dv_d;
+    // float real proj
+	Cuda::CudaPitchedDeviceVariable realproj_d;
+    // distance image
+	Cuda::CudaPitchedDeviceVariable dist_d;
+    Cuda::CudaPitchedDeviceVariable dist_children_d;
+    // Temp storage
+	Cuda::CudaPitchedDeviceVariable filterImage_d;
+    // END Projections
+
+    // START complex projections
 	Cuda::CudaPitchedDeviceVariable ctf_d;
 	Cuda::CudaDeviceVariable        fft_d;
+    Cuda::CudaDeviceVariable        fft_d2;
 	Cuda::CudaDeviceVariable		projSquare_d;
 	Cuda::CudaPitchedDeviceVariable badPixelMask_d;
 	Cuda::CudaPitchedDeviceVariable volTemp_d;
 
-    Cuda::CudaPitchedDeviceVariable LUT_d_0;
-    Cuda::CudaArray2D LUT_d;
+    // START basis function lookup tables
+    Cuda::CudaDeviceVariable d_prefilter_fft;
+    // END basis function lookup tables
 
-    Cuda::CudaPitchedDeviceVariable osproj_d_0;
-    Cuda::CudaPitchedDeviceVariable osproj_v;
-    Cuda::CudaArray2D osproj_arr;
-    Cuda::CudaSurfaceObject2D surfProj;
+    // START SNR computation
+    // 1D Arrays for storage
+    Cuda::CudaDeviceVariable signal_power_d;
+    Cuda::CudaDeviceVariable noise_power_d;
+    Cuda::CudaDeviceVariable multiplicity_d;
+    Cuda::CudaDeviceVariable fourier_contrib_d;
+    int snrShells;
 
-	Cuda::CudaTextureObject2D		texImage;
-    Cuda::CudaTextureObject2D		texLUT;
-    Cuda::CudaTextureObject2D       texOS;
+    // Arrays for interpolation
+    Cuda::CudaArray1D signal_power_arr_d;
+    Cuda::CudaArray1D noise_power_arr_d;
+
+    Cuda::CudaTextureObject1D texSP;
+    Cuda::CudaTextureObject1D texNP;
+
+    float* sp_stack;
+    float* np_stack;
+
+    // Setup for halfsets
+    std::vector<Cuda::CudaArray1D> signal_power_arr_d_HS = {Cuda::CudaArray1D(), Cuda::CudaArray1D()};
+    std::vector<Cuda::CudaArray1D> noise_power_arr_d_HS = {Cuda::CudaArray1D(), Cuda::CudaArray1D()};
+
+    std::vector<Cuda::CudaTextureObject1D> texSP_HS = {Cuda::CudaTextureObject1D(), Cuda::CudaTextureObject1D()};
+    std::vector<Cuda::CudaTextureObject1D> texNP_HS = {Cuda::CudaTextureObject1D(), Cuda::CudaTextureObject1D()};
+
+    std::vector<float*> sp_stack_HS = {nullptr, nullptr};
+    std::vector<float*> np_stack_HS = {nullptr, nullptr};
+
+    bool snr_loaded = false;
+    // END SNR computation
+
+    //START Exact Filter computation
+    Cuda::CudaDeviceVariable det_mats_d;
+    //END Exact Filter computation
+
+    //START Distance buffer
+    float* proj_distance;
+    //END Distance buffer
+
+	Cuda::CudaTextureObject2D texImage;
 
 	cufftHandle handleR2C;
 	cufftHandle handleC2R;
 
 	NppiSize roiAll;
 	NppiSize roiFFT;
-	//NppiSize roiBorderSquare;
 	NppiSize roiSquare;
 
 	Cuda::CudaDeviceVariable meanbuffer;
@@ -179,6 +246,7 @@ private:
 	CtfFile& defocus;
 	MarkerFile& markers;
 	Configuration::Config& config;
+    CTF ctfHandler;
 
 	int mpi_part;
 	int mpi_size;
@@ -193,128 +261,235 @@ private:
 
 	float LUTcenter = 0;
 	int maxSliceNumber = 0;
+    int sliceBatchSize = 0;
 	float sliceThickness = 999999999999.0f;
-	vector<int>* sliceNumbers = nullptr;
-	vector<float>* entryPoints = nullptr;
-	vector<vector<float>>* minDefs = nullptr;
-	vector<vector<float>>* maxDefs = nullptr;
-    vector<vector<float>>* defOffsets = nullptr;
-	vector<cufftHandle>* FFThandlesR2C = nullptr;
-    vector<cufftHandle>* FFThandlesC2R = nullptr;
+    vector<Cuda::CudaArray2D*> BPArrays;
+    vector<Cuda::CudaSurfaceObject2D*> BPSurfaces;
+    vector<Cuda::CudaTextureObject2D*> BPTextures;
 
     cufftHandle FFThandleR2Call;
     cufftHandle FFThandleC2Rall;
 
-	Cuda::CudaDeviceVariable CTFbuffer_realSquare;
     Cuda::CudaDeviceVariable CTFbuffer_realRect;
-	Cuda::CudaDeviceVariable CTFbuffer_comp;
+	Cuda::CudaDeviceVariable CTFbuffer_comp1;
+    Cuda::CudaDeviceVariable CTF_compute_buffer;
 
-	template<typename TVol>
-	void ForwardProjectionCTF(Volume<TVol>* vol, Cuda::CudaTextureObject3D& tevVol, int index, bool volumeIsEmpty, bool noSync);
-	template<typename TVol>
-	void ForwardProjectionNoCTF(Volume<TVol>* vol, Cuda::CudaTextureObject3D& tevVol, int index, bool volumeIsEmpty, bool noSync);
-
-    template<typename TVol>
-    void ForwardProjectionLUTCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int index, bool volumeIsEmpty, int iter, bool noSync);
-    template<typename TVol>
-    void ForwardProjectionLUTNoCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& tevVol, int index, bool volumeIsEmpty, int iter, bool noSync);
-
-    template<typename TVol>
-	void ForwardProjectionCTFROI(Volume<TVol>* vol, Cuda::CudaTextureObject3D& tevVol, int index, bool volumeIsEmpty, int2 roiMin, int2 roiMax, bool noSync);
-	template<typename TVol>
-	void ForwardProjectionNoCTFROI(Volume<TVol>* vol, Cuda::CudaTextureObject3D& tevVol, int index, bool volumeIsEmpty, int2 roiMin, int2 roiMax, bool noSync);
-		
-	template<typename TVol>
-	void BackProjectionNoCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
-	template<typename TVol>
-	void BackProjectionCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
-
-    template<typename TVol>
-    void BackProjectionLUTNoCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount, int type);
-    template<typename TVol>
-    void BackProjectionLUTCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount, int type);
-
-#ifdef SUBVOLREC_MODE
-	template<typename TVol>
-	void BackProjectionNoCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& subVolumes, vector<float2>& vecExtraShifts, vector<Cuda::CudaArray3D*>& vecArrays, int proj_index);
-	template<typename TVol>
-	void BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& subVolumes, vector<float2>& vecExtraShifts, vector<Cuda::CudaArray3D*>& vecArrays, int proj_index);
-#endif
 
 	template<typename TVol>
 	void GetDefocusDistances(float& t_in, float& t_out, int index, Volume<TVol>* vol);
 
 	void GetDefocusMinMax(float ray, int index, float& defocusMin, float& defocusMax);
 
-	void GetCTFSlices(Volume<float>* vol, int index, int& sliceNumber, vector<float>& minDefocus, vector<float>& maxDefocus, vector<float>& defocusOffsets, float& entry, float& thick);
-
-
 
 public:
 	Reconstructor(Configuration::Config& aConfig, Projection& aProj, ProjectionSource* aProjectionSource,
-		 MarkerFile& aMarkers, CtfFile& aDefocus, KernelModuls& modules, int aMpi_part, int aMpi_size);
+		 MarkerFile& aMarkers, CtfFile& aDefocus, KernelModules& modules, int aMpi_part, int aMpi_size,
+         bool doHalfsets = false);
 	~Reconstructor();
 
 	Matrix<float> GetMagAnistropyMatrix(float aAmount, float angleInDeg, float dimX, float dimY);
 
-	//If returns true, ctf_d contains the fourier Filter mask as defined by coefficients given in config file.
-	bool ComputeFourFilter();
 	//img_h can be of any supported type. After the call, the type is float! Make sure the array is large enough!
 	void PrepareProjection(void* img_h, int proj_index, float& meanValue, float& StdValue, int& BadPixels);
+    void ExactFilter(int aIndex);
 
     void PlanCTFCorrection(Volume<float>* vol, int goodProjNumber, int fullProjNumber, const int* indexList);
 
 	template<typename TVol>
 	void PrintGeometry(Volume<TVol>* vol, int index);
 
+    void ConjoinChildren(Volume<float>* parentVol,
+                         std::vector<Volume<float>*>& childVols,
+                         DeviceVolume& parentDevVol,
+                         DeviceVolumeBuf& maskDevVol);
+
+    // If computeSNR, expects signal power in signal_power_d
 	template<typename TVol>
-	void ForwardProjection(Volume<TVol>* vol, Cuda::CudaTextureObject3D& texVol, int index, bool volumeIsEmpty, bool noSync = false);
+	void Compare(Volume<TVol>* vol, char* originalImage, uint aIndex, bool computeSNR, int iter, bool normForLength = true, float length = 1.f);
 
-    template<typename TVol>
-    void ForwardProjectionLUT(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& texVol, int index, bool volumeIsEmpty, int iter, bool noSync = false);
+//    void CompareParticles(Volume<float>* vol,
+//                          char* originalImage,
+//                          uint aIndex,
+//                          bool computeSNR,
+//                          int iter,
+//                          float numParts,
+//                          bool normForLength = true,
+//                          float length = 1.f);
 
-    template<typename TVol>
-	void ForwardProjectionROI(Volume<TVol>* vol, Cuda::CudaTextureObject3D& texVol, int index, bool volumeIsEmpty, int2 roiMin, int2 roiMax, bool noSync = false);
+    void CompareChildren(char* originalImage,
+                          Volume<float>* vol,
+                          std::vector<Volume<float>*>&  childVols,
+                          DeviceVolumeFFT& childDevVol,
+                          DeviceVolumeBuf& maskDevVol,
+                          uint stackIdx,
+                          bool computeSNR,
+                          int iter);
 
-	template<typename TVol>
-	void ForwardProjectionDistanceOnly(Volume<TVol>* vol, int index);
+//    void CompareSpecial(Volume<float>* parentVol, Volume<float>* childVol, char* originalImage, uint stackIdx, bool computeSNR, int iter);
+    void PrepareForWBP(Volume<float>* parentVol,
+                       std::vector<Volume<float>*>&  childVols,
+                       char* originalImage,
+                       uint stackIdx, int iter);
 
-	template<typename TVol>
-	void Compare(Volume<TVol>* vol, char* originalImage, int index);
+    void MultiplicityChildren(std::vector<Volume<float>*>&  childVols,
+                              DeviceVolumeBuf& multDevVol,
+                              uint stackIdx, int iter);
+
+    void PowerChildren(std::vector<Volume<float>*>&  childVols,
+                       DeviceVolumeFFT& childDevVol,
+                       DeviceVolumeBuf& maskDevVol,
+                       uint stackIdx,
+                       int iter);
+
+    void PowerChildrenHS(std::vector<Volume<float>*>&  childVols,
+                         DeviceVolumeFFT& childDevVol,
+                         std::vector<DeviceVolumeFFT*>& childDevHalfs,
+                         DeviceVolumeBuf& maskDevVol,
+                         uint stackIdx,
+                         int iter);
+
+    void PowerOrphans(std::vector<Volume<float>*>&  childVols,
+                      DeviceVolumeFFT& childDevVol,
+                      DeviceVolumeBuf& maskDevVol,
+                      uint stackIdx,
+                      int iter);
+
+    void PowerOrphansHS(std::vector<Volume<float>*>&  childVols,
+                        DeviceVolumeFFT& childDevVol,
+                        std::vector<DeviceVolumeFFT*>& childDevHalfs,
+                        DeviceVolumeBuf& maskDevVol,
+                        uint stackIdx,
+                        int iter);
 
 	void SubtractError(float* error);
 
-	//Assumes image to back project stored in proj_d. SIRTCount is overridable to config-file!
-	template<typename TVol>
-	void BackProjection(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount);
+    void BackProjectionChildren(Volume<float>* parentVol,
+                                     std::vector<Volume<float>*>& childVols,
+                                     DeviceVolumeFFT& childDevVol,
+                                     DeviceVolumeBuf& maskDevVol,
+                                     DeviceVolumeBuf& multDevVol,
+                                     int stackIdx, float SIRTCount, int iter, std::stringstream& output, bool useSNR = false);
 
-    template<typename TVol>
-    void BackProjectionLUT(Volume<TVol>* vol, Cuda::CudaSurfaceObject3D& surface, int proj_index, float SIRTCount, int type);
-#ifdef SUBVOLREC_MODE
-	//Assumes image to back project stored in proj_d.
-	template<typename TVol>
-	void BackProjection(Volume<TVol>* vol, vector<Volume<TVol>*>& subVolumes, vector<float2>& vecExtraShifts, vector<Cuda::CudaArray3D*>& vecArrays, int proj_index);
-#endif
+    void BackProjectionChildrenHS(Volume<float>* parentVol,
+                                  std::vector<Volume<float>*>&  childVols,
+                                  DeviceVolumeFFT& childDevVol,
+                                  std::vector<DeviceVolumeFFT*>& childDevHalfVols,
+                                  DeviceVolumeBuf& maskDevVol,
+                                  DeviceVolumeBuf& multDevVol,
+                                  int stackIdx, float SIRTCount, int iter,
+                                  stringstream& output, bool useSNR);
 
-	/*template<typename TVol>
-	void BackProjectionWithPriorWBPFilter(Volume<TVol>* vol, int proj_index, char* originalImage, float* MPIBuffer);
+    void ForwardProjectionChildren(Volume<float>* parentVol,
+                                        std::vector<Volume<float>*>& childVols,
+                                        DeviceVolumeFFT& childDevVol,
+                                        DeviceVolumeBuf& maskDevVol,
+                                        int stackIdx, bool volumeIsEmpty, int iter, bool noSync,
+                                        std::stringstream& output);
 
-	template<typename TVol>
-	void RemoveProjectionFromVol(Volume<TVol>* vol, int proj_index, char* originalImage, float* MPIBuffer);
+    void ForwardProjectionChildrenHS(Volume<float>* parentVol,
+                                     std::vector<Volume<float>*>& childVols,
+                                     std::vector<DeviceVolumeFFT*>& childDevVols,
+                                     DeviceVolumeBuf& maskDevVol,
+                                     int stackIdx, bool volumeIsEmpty, int iter, bool noSync,
+                                     std::stringstream& output);
 
-	template<typename TVol>
-	void OneSARTStep(Volume<TVol>* vol, Cuda::CudaTextureObject3D& texVol, Cuda::CudaSurfaceObject3D& surface, int index, bool volumeIsEmpty, char* originalImage, float SIRTCount, float* MPIBuffer);
-	*/
+    void ForwardProjectionConjoinedChildren(Volume<float>* parentVol,
+                                            std::vector<Volume<float>*>& childVols,
+                                            DeviceVolume& overlapDevVol,
+                                            DeviceVolumeFFT& childDevVol,
+                                            DeviceVolumeBuf& maskDevVol,
+                                            int stackIdx, bool volumeIsEmpty, int iter, bool noSync,
+                                            stringstream& output);
 
-	void ResetProjectionsDevice();
-	void CopyProjectionToHost(float* buffer);
+    void ForwardProjectionConjoinedChildrenHS(Volume<float>* parentVol,
+                                              std::vector<Volume<float>*>& childVols,
+                                              DeviceVolume& overlapDevVol,
+                                              std::vector<DeviceVolumeFFT*>& childDevVols,
+                                              DeviceVolumeBuf& maskDevVol,
+                                              int stackIdx, bool volumeIsEmpty, int iter, bool noSync,
+                                              stringstream& output);
+
+    void BackProjectionSiblings(Volume<float>* parentVol,
+                                std::vector<Volume<float>*>&  childVols,
+                                std::vector<DeviceVolumeBuf*>& childDevVols,
+                                DeviceVolumeBuf& maskDevVol,
+                                DeviceVolumeBuf& multDevVol,
+                                int stackIdx, float SIRTCount, int iter, std::stringstream& output, bool useSNR);
+
+    void BackProjectionOrphans(Volume<float>* parentVol,
+                               std::vector<Volume<float>*>&  childVols,
+                               DeviceVolumeFFT& childDevVol,
+                               DeviceVolumeBuf& maskDevVol,
+                               DeviceVolumeBuf& multDevVol,
+                               int stackIdx, float SIRTCount, int iter,
+                               stringstream& output, bool useSNR);
+
+    void BackProjectionOrphansHS(Volume<float>* parentVol,
+                                 std::vector<Volume<float>*>&  childVols,
+                                 DeviceVolumeFFT& childDevVol,
+                                 std::vector<DeviceVolumeFFT*>& childDevHalfVols,
+                                 DeviceVolumeBuf& maskDevVol,
+                                 DeviceVolumeBuf& multDevVol,
+                                 int stackIdx, float SIRTCount, int iter,
+                                 stringstream& output, bool useSNR);
+
+    void BackProjectionParent(Volume<float>* parentVol,
+                                   DeviceVolume& parentDevVol,
+                                   int stackIdx, float SIRTCount, int iter, std::stringstream& output, bool useSNR = false);
+
+    void ForwardProjectionParent(Volume<float>* parentVol,
+                                      DeviceVolume& parentDevVol,
+                                      int stackIdx, bool volumeIsEmpty, int iter, std::stringstream& output);
+
+    void ForwardProjectionParentMasked(Volume<float>* parentVol,
+                                       std::vector<Volume<float>*>& childVols,
+                                       DeviceVolume& parentDevVol,
+                                       DeviceVolumeBuf& maskInvDevVol,
+                                       int stackIdx, bool volumeIsEmpty, int iter, bool noSync, std::stringstream& output);
+
+
+//    void BackProjectionFamily(Volume<float>* parentVol,
+//                              std::vector<Volume<float>*>&  childVols,
+//                              DeviceVolume& childDevVol,
+//                              DeviceVolume& maskDevVol,
+//                              DeviceVolume& parentDevVol,
+//                              int stackIdx, float SIRTCount, int iter, bool useSNR = false);
+//
+//    void ForwardProjectionFamily(Volume<float>* parentVol,
+//                                 std::vector<Volume<float>*>& childVols,
+//                                 DeviceVolume& childDevVol,
+//                                 DeviceVolume& maskDevVol,
+//                                 DeviceVolume& maskInvDevVol,
+//                                 DeviceVolume& parentDevVol,
+//                                 int stackIdx, bool volumeIsEmpty, int iter, bool noSync);
+
+    void DistanceChildren(Volume<float>* parentVol,
+                          std::vector<Volume<float>*>& childVols,
+                          DeviceVolume& maskDevVol,
+                          int stackIdx, bool volumeIsEmpty, int iter, bool noSync);
+
+    void DistanceParent(Volume<float>* parentVol,
+                        int stackIdx, bool volumeIsEmpty, int iter, bool noSync);
+
+
+    void computePostFilter(Volume<float>* aVol, int projIndex, int dim_x, int dim_y, float degree);
+    void computePreFilter(int projIndex, int dim_x, int dim_y, float degree);
+
+    void SaveSNR(string& aFile, string suffix = std::string());
+    void LoadSNR(string& aFile, string suffix = std::string());
+
+    void ResetProjectionsDevice();
+    void ResetChildProj();
+    void CopyProjectionToHost(float* buffer);
+    void CopyChildProjectionToHost(float* buffer);
 	void CopyDistanceImageToHost(float* buffer);//For Debugging...
+    void CopyChildDistanceImageToHost(float * buffer);
 	void CopyRealProjectionToHost(float* buffer);//For Debugging...
 	void CopyProjectionToDevice(float* buffer);
-	void CopyLUTToDevice(float* buffer);
 	void CopyDistanceImageToDevice(float* buffer);//For Debugging...
 	void CopyRealProjectionToDevice(float* buffer);//For Debugging...
 	void MPIBroadcast(float** buffers, int bufferCount);
+
 #ifdef REFINE_MODE
 	void GetCroppedProjection(float *outImage, int2 roiMin, int2 roiMax);
     void GetCroppedProjection(float *outImage, float *inImage, int2 roiMin, int2 roiMax);
@@ -331,6 +506,8 @@ public:
 	void ConvertVolume3DFP16(float* volume, Cuda::CudaSurfaceObject3D& surf);
 	void MatrixVector3Mul(float4x4 M, float3* v);
     void MatrixVector3Mul(float3x3& M, float xIn, float yIn, float& xOut, float& yOut);
+    void MatrixVector3Mul(float3x3& M, float2& val);
+    void MatrixScalarMul(float4x4 &M, float v);
 };
 
 #endif // !RECONSTRUCTOR_H

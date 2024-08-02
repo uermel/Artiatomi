@@ -31,7 +31,15 @@ public:
     WbpWeightingKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim);
     WbpWeightingKernel(CUmodule aModule);
 
-    float operator()(Cuda::CudaDeviceVariable& img, size_t stride, unsigned int pixelcount, float psiAngle, FilterMethod fm, int proj_index, int projectionCount, float thickness, Cuda::CudaDeviceVariable& tiltAngles);
+    float operator()(Cuda::CudaDeviceVariable& img,
+                     size_t stride,
+                     uint2 imDim,
+                     float2 asymCorrFac,
+                     FilterMethod fm,
+                     int projectionCount,
+                     float thickness,
+                     Matrix<double>& Mproj,
+                     Cuda::CudaDeviceVariable& Mdet);
 };
 
 

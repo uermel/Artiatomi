@@ -27,18 +27,19 @@ namespace Cuda
         bool mCleanUp; //Indicates if the cuda array was created by the object itself
 
     public:
+        CudaSurfaceObject2D();
         explicit CudaSurfaceObject2D(CudaArray2D* aArray);
         CudaSurfaceObject2D(CudaPitchedDeviceVariable* aVariable,
                             CUarray_format aDataFormat,
                             uint aNumChannels);
-        CudaSurfaceObject2D();
+        ~CudaSurfaceObject2D();
 
         void Bind(CudaArray2D* aArray);
         void Bind(CudaPitchedDeviceVariable* aVariable,
                   CUarray_format aDataFormat,
                   uint aNumChannels);
 
-        ~CudaSurfaceObject2D();
+
 
         CudaArray2D* GetArray();
 
@@ -56,9 +57,11 @@ namespace Cuda
         bool mCleanUp; //Indicates if the cuda array was created by the object itself
 
     public:
+        CudaSurfaceObject3D();
         explicit CudaSurfaceObject3D(CudaArray3D* aArray);
-
         ~CudaSurfaceObject3D();
+
+        void Bind(CudaArray3D* aArray);
 
         CudaArray3D* GetArray();
 

@@ -32,7 +32,7 @@ CudaRot::CudaRot(int aVolSize, CUstream aStream, CudaContext* context, bool line
 	  dataTexCplx(CU_AD_FORMAT_FLOAT, aVolSize, aVolSize, aVolSize, 2, 0),
 	  oldphi(0), oldpsi(0), oldtheta(0)
 {
-	CUmodule cuMod = ctx->LoadModulePTX(SubTomogramAverageBasicKernel, 0, false, false);
+	CUmodule cuMod = ctx->LoadModulePTX(basicKernels, 0, false, false);
 	// CUmodule cuMod = ctx->LoadModule("basicKernels.ptx");
 
 	shift = new CudaKernel("shift", cuMod);

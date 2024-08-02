@@ -51,6 +51,8 @@ following papers:
 #define _TEXTYPE 2
 #endif
 
+#include "../../cutil_math.h"
+
 //! Bicubic interpolated texture lookup, using unnormalized coordinates.
 //! Fast implementation, using 4 bilinear lookups.
 //! @param tex  2D texture

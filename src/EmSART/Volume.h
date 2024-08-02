@@ -25,6 +25,8 @@
 #define VOLUME_H
 
 #include "EmSartDefault.h"
+#include <Matrix.h>
+#include "MotiveListe.h"
 #define MEMSIZE (4UL * 1024UL * 1024UL * 1024UL) //2 GB
 
 template<typename tVoxel>
@@ -39,9 +41,12 @@ private:
 	uint3*		_dimensionSubVolume;
 	float3		_voxelSize;
 	int			_bitResolution;
+    Matrix<double> _volumeMatrix;
+    Matrix<double> _volumeMatrixInv;
+    int         _halfset;
 
 public:
-	Volume(uint3 aDim);
+	explicit Volume(uint3 aDim, bool alloc = true);
 	Volume(uint3 aDim, int aSubVolCount, int aSubVol);
 	~Volume();
 
@@ -62,8 +67,39 @@ public:
 	float3 GetSubVolumeBBoxMax(uint aIndex);
 	float3 GetSubVolumeBBoxRcp(uint aIndex);
 	tVoxel* GetPtrToSubVolume(uint aIndex);
-	void PositionInSpace(float3 aVoxelSize, float3 aShiftZ, float2 aShiftXY = make_float2(0,0));
-	void PositionInSpace(float3 aVoxelSize, float aVoxelSizeClick, Volume<tVoxel>& vol, float3 aSubVolumePosition, float3 aSubVolumeShift);
+	void PositionInSpace(float3 aVoxelSize,
+                         float3 aShiftZ,
+                         float2 aShiftXY = make_float2(0,0));
+
+    void PositionInSpace(float3 aVoxelSize,
+                         float aVoxelSizeClick,
+                         Volume<tVoxel>& vol,
+                         float3 aSubVolumePosition,
+                         float3 aSubVolumeShift);
+
+    void PositionInSpace(float3 aVoxelSize,
+                         float3 aVolShift,
+                         float2 aShiftXY,
+                         float phi,
+                         float theta,
+                         float psi);
+
+    void PositionInSpace(Volume<tVoxel>* parentVol,
+                         float3 aVoxelSize,
+                         float3 aVolShift,
+                         motive particle);
+
+    Matrix<double> GetFromSpace(Matrix<double> matrix);
+    int GetHalfSet();
+
+    Matrix<double> VolumeMatrix();
+    Matrix<double> VolumeMatrixNorm();
+    Matrix<double> VolumeMatrixInv();
+    Matrix<double> VolumeMatrixInvNorm();
+
+    Matrix<double> GetCorners();
+    Matrix<double>  GetSubVolumeCorners(uint aIndex);
+
 	void Invert();
 	void InvertMakeFloat();
 	void InvertMirrorMakeFloat();

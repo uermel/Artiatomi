@@ -25,11 +25,20 @@
 #include <limits>
 
 template<typename tVoxel>
-Volume<tVoxel>::Volume(uint3 aDim)
-	: _countSubVolumes(0), _data(NULL), _positionVolume(make_float3(0)), _positionSubVolume(NULL), _dimension(aDim),
-	_dimensionSubVolume(NULL), _voxelSize(make_float3(1)), _bitResolution(sizeof(tVoxel))
+Volume<tVoxel>::Volume(uint3 aDim, bool alloc):
+    _countSubVolumes(0),
+    _data(NULL),
+    _positionVolume(make_float3(0)),
+    _positionSubVolume(NULL),
+    _dimension(aDim),
+	_dimensionSubVolume(NULL),
+    _voxelSize(make_float3(1)),
+    _bitResolution(sizeof(tVoxel)),
+    _volumeMatrix(4, 4),
+    _volumeMatrixInv(4, 4),
+    _halfset(0)
 {
-	_countSubVolumes = 1;//(int)ceil((double)sizeVol / (double)MEMSIZE);
+	_countSubVolumes = 1;
 	int sizeZ = (int)ceil((double)aDim.z / (double)_countSubVolumes);
 	int rest =  aDim.z - sizeZ * (_countSubVolumes-1);
 
@@ -47,9 +56,12 @@ Volume<tVoxel>::Volume(uint3 aDim)
 	_positionSubVolume = new float3[_countSubVolumes];
 	_data = new tVoxel*[_countSubVolumes];
 
-	int i = 0;
-	_data[i] = new tVoxel[GetSubVolumeSizeInVoxels(i)];
-	memset(_data[i], 0, GetSubVolumeSizeInBytes(i));
+    if (alloc) {
+        _data[0] = new tVoxel[GetSubVolumeSizeInVoxels(0)];
+        memset(_data[0], 0, GetSubVolumeSizeInBytes(0));
+    } else {
+        _data[0] = NULL;
+    }
 }
 
 float GetNoise()
@@ -79,9 +91,17 @@ float GetNoise()
 
 
 template<typename tVoxel>
-Volume<tVoxel>::Volume(uint3 aDim, int aSubVolCount, int aSubVol)
-	: _countSubVolumes(aSubVolCount), _data(NULL), _positionVolume(make_float3(0)), _positionSubVolume(NULL), _dimension(aDim),
-	_dimensionSubVolume(NULL), _voxelSize(make_float3(1)), _bitResolution(sizeof(tVoxel))
+Volume<tVoxel>::Volume(uint3 aDim, int aSubVolCount, int aSubVol):
+    _countSubVolumes(aSubVolCount),
+    _data(NULL),
+    _positionVolume(make_float3(0)),
+    _positionSubVolume(NULL),
+    _dimension(aDim),
+	_dimensionSubVolume(NULL),
+    _voxelSize(make_float3(1)),
+    _bitResolution(sizeof(tVoxel)),
+    _volumeMatrix(4, 4),
+    _volumeMatrixInv(4, 4)
 {
 	int sizeZ = (int)ceil((double)aDim.z / (double)_countSubVolumes);
 	int rest =  aDim.z - sizeZ * (_countSubVolumes-1);
@@ -271,7 +291,7 @@ void Volume<tVoxel>::PositionInSpace(float3 aVoxelSize, float3 aVolShift, float2
 {
 	_voxelSize = aVoxelSize;
 
-	_positionVolume.x = _voxelSize.x * (-0.5f * _dimension.x) +aShiftXY.x - aVolShift.x;
+	_positionVolume.x = _voxelSize.x * (-0.5f * _dimension.x) + aShiftXY.x - aVolShift.x;
 	// The projection is flipped in y direction, so change sign!
 	_positionVolume.y = _voxelSize.y * (-0.5f * _dimension.y) + aShiftXY.y - aVolShift.y;
 	_positionVolume.z = _voxelSize.z * (-0.5f * _dimension.z) - aVolShift.z;
@@ -284,6 +304,331 @@ void Volume<tVoxel>::PositionInSpace(float3 aVoxelSize, float3 aVolShift, float2
 		old_volumeParts += _dimensionSubVolume[i].z;
 	}
 }
+
+template<typename tVoxel>
+void Volume<tVoxel>::PositionInSpace(float3 aVoxelSize, float3 aVolShift, float2 aShiftXY, float phi, float theta, float psi)
+{
+    // Voxelsize
+    Matrix<double> Mscale = Matrix<double>::AffineScale3D(aVoxelSize.x, aVoxelSize.y, aVoxelSize.z);
+
+    // Center
+    Matrix<double> Mcenter = Matrix<double>::AffineShift3D(-0.5 * aVoxelSize.x *_dimension.x,
+                                                           -0.5 * aVoxelSize.y *_dimension.y,
+                                                           -0.5 * aVoxelSize.z *_dimension.z);
+
+    // Rotation
+    Matrix<double> Mphi = Matrix<double>::AffineRotation3DZ(DEG2RAD(phi));
+    Matrix<double> Mtheta = Matrix<double>::AffineRotation3DX(DEG2RAD(theta));
+    Matrix<double> Mpsi = Matrix<double>::AffineRotation3DZ(DEG2RAD(psi));
+
+    // ShiftXY
+    Matrix<double> MshiftXY = Matrix<double>::AffineShift3D(aShiftXY.x,
+                                                            aShiftXY.y,
+                                                            0);
+
+    // Shift
+    Matrix<double> Mshift = Matrix<double>::AffineShift3D(-aVolShift.x,
+                                                          -aVolShift.y,
+                                                          -aVolShift.z);
+
+    // Final
+    Matrix<double> Mvol = (Mshift * (MshiftXY * (Mpsi * (Mtheta * (Mphi * (Mcenter * Mscale))))));
+
+    _volumeMatrix = Mvol;
+    _volumeMatrixInv = GetFromSpace(Mvol);
+
+    _voxelSize = aVoxelSize;
+
+    _positionVolume.x = _voxelSize.x * (-0.5f * _dimension.x) + aShiftXY.x - aVolShift.x;
+    // The projection is flipped in y direction, so change sign!
+    _positionVolume.y = _voxelSize.y * (-0.5f * _dimension.y) + aShiftXY.y - aVolShift.y;
+    _positionVolume.z = _voxelSize.z * (-0.5f * _dimension.z) - aVolShift.z;
+
+    int old_volumeParts = 0;
+    for (int i = 0; i < _countSubVolumes; i++)
+    {
+        _positionSubVolume[i] = _positionVolume;
+        _positionSubVolume[i].z += _voxelSize.z * old_volumeParts;
+        old_volumeParts += _dimensionSubVolume[i].z;
+    }
+}
+
+template<typename tVoxel>
+void Volume<tVoxel>::PositionInSpace(Volume<tVoxel>* parentVol,
+                                     float3 aVoxelSize,
+                                     float3 aVolShift,
+                                     motive particle)
+{
+    // Halfset
+    _halfset = (int)particle.partNr - 1;
+
+    // Pixel coordinates in parent vol to global coords
+    // Parent transform
+    Matrix<double> Mparent = parentVol->VolumeMatrix();
+
+    // Pixel coords
+    Matrix<double> partPos(4, 1);
+    partPos(0,0) = particle.x_Coord - 1;
+    partPos(1,0) = particle.y_Coord - 1;
+    partPos(2,0) = particle.z_Coord - 1;
+    partPos(3,0) = 1;
+
+    // Global coords
+    partPos = Mparent * partPos;
+
+    // Voxelsize
+    Matrix<double> Mscale = Matrix<double>::AffineScale3D(aVoxelSize.x,
+                                                          aVoxelSize.y,
+                                                          aVoxelSize.z);
+
+    // Center
+    Matrix<double> Mcenter = Matrix<double>::AffineShift3D(-0.5 * aVoxelSize.x *_dimension.x,
+                                                           -0.5 * aVoxelSize.y *_dimension.y,
+                                                           -0.5 * aVoxelSize.z *_dimension.z);
+
+    // Rotation
+    Matrix<double> Mphi = Matrix<double>::AffineRotation3DZ(DEG2RAD(particle.phi));
+    Matrix<double> Mtheta = Matrix<double>::AffineRotation3DX(DEG2RAD(particle.theta));
+    Matrix<double> Mpsi = Matrix<double>::AffineRotation3DZ(DEG2RAD(particle.psi));
+
+    // ShiftXY
+    Matrix<double> MshiftXY = Matrix<double>::AffineShift3D(0,0,0);
+
+    // Shift
+    Matrix<double> Mshift = Matrix<double>::AffineShift3D(-aVolShift.x + partPos(0, 0),
+                                                          -aVolShift.y + partPos(1, 0),
+                                                          -aVolShift.z + partPos(2, 0));
+
+    // Final
+    Matrix<double> Mvol = (Mshift * (MshiftXY * (Mpsi * (Mtheta * (Mphi * (Mcenter * Mscale))))));
+
+    _volumeMatrix = Mvol;
+    _volumeMatrixInv = GetFromSpace(Mvol);
+
+    _voxelSize = aVoxelSize;
+
+    _positionVolume.x = _voxelSize.x * (-0.5f * _dimension.x) + 0 - aVolShift.x;
+    // The projection is flipped in y direction, so change sign!
+    _positionVolume.y = _voxelSize.y * (-0.5f * _dimension.y) + 0 - aVolShift.y;
+    _positionVolume.z = _voxelSize.z * (-0.5f * _dimension.z) - aVolShift.z;
+
+    int old_volumeParts = 0;
+    for (int i = 0; i < _countSubVolumes; i++)
+    {
+        _positionSubVolume[i] = _positionVolume;
+        _positionSubVolume[i].z += _voxelSize.z * old_volumeParts;
+        old_volumeParts += _dimensionSubVolume[i].z;
+    }
+}
+
+template<typename tVoxel>
+Matrix<double> Volume<tVoxel>::GetFromSpace(Matrix<double> matrix)
+{
+    Matrix<double> ret(4, 4);
+    ////////////////////////////////////////////////////////////////////////////////
+    //from http://www.geometrictools.com//LibFoundation/Mathematics/Wm4Matrix4.inl:
+    ////////////////////////////////////////////////////////////////////////////////
+
+    double m_afEntry[16];
+    double aMatrix[16];
+    m_afEntry[0] =  matrix(0, 0);
+    m_afEntry[1] =  matrix(1, 0);
+    m_afEntry[2] =  matrix(2, 0);
+    m_afEntry[3] =  matrix(3, 0);
+    m_afEntry[4] =  matrix(0, 1);
+    m_afEntry[5] =  matrix(1, 1);
+    m_afEntry[6] =  matrix(2, 1);
+    m_afEntry[7] =  matrix(3, 1);
+    m_afEntry[8] =  matrix(0, 2);
+    m_afEntry[9] =  matrix(1, 2);
+    m_afEntry[10] = matrix(2, 2);
+    m_afEntry[11] = matrix(3, 2);
+    m_afEntry[12] = matrix(0, 3);
+    m_afEntry[13] = matrix(1, 3);
+    m_afEntry[14] = matrix(2, 3);
+    m_afEntry[15] = matrix(3, 3);
+
+
+    double fA0 = m_afEntry[ 0]*m_afEntry[ 5] - m_afEntry[ 1]*m_afEntry[ 4];
+    double fA1 = m_afEntry[ 0]*m_afEntry[ 6] - m_afEntry[ 2]*m_afEntry[ 4];
+    double fA2 = m_afEntry[ 0]*m_afEntry[ 7] - m_afEntry[ 3]*m_afEntry[ 4];
+    double fA3 = m_afEntry[ 1]*m_afEntry[ 6] - m_afEntry[ 2]*m_afEntry[ 5];
+    double fA4 = m_afEntry[ 1]*m_afEntry[ 7] - m_afEntry[ 3]*m_afEntry[ 5];
+    double fA5 = m_afEntry[ 2]*m_afEntry[ 7] - m_afEntry[ 3]*m_afEntry[ 6];
+    double fB0 = m_afEntry[ 8]*m_afEntry[13] - m_afEntry[ 9]*m_afEntry[12];
+    double fB1 = m_afEntry[ 8]*m_afEntry[14] - m_afEntry[10]*m_afEntry[12];
+    double fB2 = m_afEntry[ 8]*m_afEntry[15] - m_afEntry[11]*m_afEntry[12];
+    double fB3 = m_afEntry[ 9]*m_afEntry[14] - m_afEntry[10]*m_afEntry[13];
+    double fB4 = m_afEntry[ 9]*m_afEntry[15] - m_afEntry[11]*m_afEntry[13];
+    double fB5 = m_afEntry[10]*m_afEntry[15] - m_afEntry[11]*m_afEntry[14];
+
+    double fDet = fA0*fB5-fA1*fB4+fA2*fB3+fA3*fB2-fA4*fB1+fA5*fB0;
+    if (fDet == 0)
+    {
+        printf("Determinante of detector matrix is not 0! Can't inverse matrix.\n");
+        exit(1);
+    }
+
+    aMatrix[ 0] =
+            + m_afEntry[ 5]*fB5 - m_afEntry[ 6]*fB4 + m_afEntry[ 7]*fB3;
+    aMatrix[ 1] =
+            - m_afEntry[ 4]*fB5 + m_afEntry[ 6]*fB2 - m_afEntry[ 7]*fB1;
+    aMatrix[ 2] =
+            + m_afEntry[ 4]*fB4 - m_afEntry[ 5]*fB2 + m_afEntry[ 7]*fB0;
+    aMatrix[ 3] =
+            - m_afEntry[ 4]*fB3 + m_afEntry[ 5]*fB1 - m_afEntry[ 6]*fB0;
+    aMatrix[ 4] =
+            - m_afEntry[ 1]*fB5 + m_afEntry[ 2]*fB4 - m_afEntry[ 3]*fB3;
+    aMatrix[ 5] =
+            + m_afEntry[ 0]*fB5 - m_afEntry[ 2]*fB2 + m_afEntry[ 3]*fB1;
+    aMatrix[ 6] =
+            - m_afEntry[ 0]*fB4 + m_afEntry[ 1]*fB2 - m_afEntry[ 3]*fB0;
+    aMatrix[ 7] =
+            + m_afEntry[ 0]*fB3 - m_afEntry[ 1]*fB1 + m_afEntry[ 2]*fB0;
+    aMatrix[ 8] =
+            + m_afEntry[13]*fA5 - m_afEntry[14]*fA4 + m_afEntry[15]*fA3;
+    aMatrix[ 9] =
+            - m_afEntry[12]*fA5 + m_afEntry[14]*fA2 - m_afEntry[15]*fA1;
+    aMatrix[10] =
+            + m_afEntry[12]*fA4 - m_afEntry[13]*fA2 + m_afEntry[15]*fA0;
+    aMatrix[11] =
+            - m_afEntry[12]*fA3 + m_afEntry[13]*fA1 - m_afEntry[14]*fA0;
+    aMatrix[12] =
+            - m_afEntry[ 9]*fA5 + m_afEntry[10]*fA4 - m_afEntry[11]*fA3;
+    aMatrix[13] =
+            + m_afEntry[ 8]*fA5 - m_afEntry[10]*fA2 + m_afEntry[11]*fA1;
+    aMatrix[14] =
+            - m_afEntry[ 8]*fA4 + m_afEntry[ 9]*fA2 - m_afEntry[11]*fA0;
+    aMatrix[15] =
+            + m_afEntry[ 8]*fA3 - m_afEntry[ 9]*fA1 + m_afEntry[10]*fA0;
+
+    double fInvDet = (1.0f)/fDet;
+    aMatrix[ 0] *= fInvDet;
+    aMatrix[ 1] *= fInvDet;
+    aMatrix[ 2] *= fInvDet;
+    aMatrix[ 3] *= fInvDet;
+    aMatrix[ 4] *= fInvDet;
+    aMatrix[ 5] *= fInvDet;
+    aMatrix[ 6] *= fInvDet;
+    aMatrix[ 7] *= fInvDet;
+    aMatrix[ 8] *= fInvDet;
+    aMatrix[ 9] *= fInvDet;
+    aMatrix[10] *= fInvDet;
+    aMatrix[11] *= fInvDet;
+    aMatrix[12] *= fInvDet;
+    aMatrix[13] *= fInvDet;
+    aMatrix[14] *= fInvDet;
+    aMatrix[15] *= fInvDet;
+
+    ret(0, 0) = aMatrix[ 0];
+    ret(0, 1) = aMatrix[ 1];
+    ret(0, 2) = aMatrix[ 2];
+    ret(0, 3) = aMatrix[ 3];
+    ret(1, 0) = aMatrix[ 4];
+    ret(1, 1) = aMatrix[ 5];
+    ret(1, 2) = aMatrix[ 6];
+    ret(1, 3) = aMatrix[ 7];
+    ret(2, 0) = aMatrix[ 8];
+    ret(2, 1) = aMatrix[ 9];
+    ret(2, 2) = aMatrix[10];
+    ret(2, 3) = aMatrix[11];
+    ret(3, 0) = aMatrix[12];
+    ret(3, 1) = aMatrix[13];
+    ret(3, 2) = aMatrix[14];
+    ret(3, 3) = aMatrix[15];
+
+    return ret;
+}
+
+template<typename tVoxel>
+int Volume<tVoxel>::GetHalfSet()
+{
+    return _halfset;
+}
+
+
+template<typename tVoxel>
+Matrix<double> Volume<tVoxel>::VolumeMatrix()
+{
+    return _volumeMatrix;
+}
+
+template<typename tVoxel>
+Matrix<double> Volume<tVoxel>::VolumeMatrixNorm()
+{
+    return _volumeMatrix * (1/GetVoxelSize().x);
+}
+
+
+template<typename tVoxel>
+Matrix<double> Volume<tVoxel>::VolumeMatrixInv()
+{
+    return _volumeMatrixInv;
+}
+
+template<typename tVoxel>
+Matrix<double> Volume<tVoxel>::VolumeMatrixInvNorm()
+{
+    return _volumeMatrixInv * GetVoxelSize().x;
+}
+
+template<typename tVoxel>
+Matrix<double> Volume<tVoxel>::GetCorners()
+{
+    // Result
+    Matrix<double> corn(4, 8);
+
+    // 8 corners
+    for (int x = 0; x <= 1; x++){
+        for (int y = 0; y <= 1; y++){
+            for (int z = 0; z <= 1; z++){
+                // Index
+                int idx = x + y*2 + z*4;
+
+                // Voxel corners
+                corn(0, idx) = _dimension.x * x;
+                corn(1, idx) = _dimension.y * y;
+                corn(2, idx) = _dimension.z * z;
+                corn(3, idx) = 1;
+            }
+        }
+    }
+
+    // To global frame
+    corn = _volumeMatrix * corn;
+
+    return corn;
+}
+
+template<typename tVoxel>
+Matrix<double> Volume<tVoxel>::GetSubVolumeCorners(uint aIndex)
+{
+    // Result
+    Matrix<double> corn(4, 8);
+
+    // 8 corners
+    for (int x = 0; x <= 1; x++){
+        for (int y = 0; y <= 1; y++){
+            for (int z = 0; z <= 1; z++){
+                // Index
+                int idx = x + y*2 + z*4;
+
+                // Voxel corners
+                corn(0, idx) = _dimensionSubVolume[aIndex].x * x;
+                corn(1, idx) = _dimensionSubVolume[aIndex].y * y;
+                corn(2, idx) = _dimensionSubVolume[aIndex].z * z;
+                corn(3, idx) = 1;
+            }
+        }
+    }
+
+    // To global frame
+    //TODO: implement
+    //corn = _volumeMatrixSubVolume[aIndex] * corn;
+
+    return corn;
+}
+
 
 template<typename tVoxel>
 void Volume<tVoxel>::PositionInSpace(float3 aVoxelSize, float aVoxelSizeSubVolume, Volume<tVoxel>& vol, float3 aSubVolumePosition, float3 aSubVolumeShift)

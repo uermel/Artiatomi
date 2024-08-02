@@ -19,19 +19,24 @@ FourFilterKernel::FourFilterKernel(CUmodule aModule)
 }
 
 
-float FourFilterKernel::operator()(Cuda::CudaDeviceVariable& img, size_t stride, int pixelcount, float lp, float hp, float lps, float hps)
+float FourFilterKernel::operator()(Cuda::CudaDeviceVariable& img,
+                                   size_t stride,
+                                   uint2 pixelcount,
+                                   float2 asymCorrFac,
+                                   float lp, float hp, float lps, float hps)
 {
     CUdeviceptr img_dptr = img.GetDevicePtr();
 
-    void** arglist = (void**)new void*[7];
+    void** arglist = (void**)new void*[8];
 
     arglist[0] = &img_dptr;
     arglist[1] = &stride;
     arglist[2] = &pixelcount;
-    arglist[3] = &lp;
-    arglist[4] = &hp;
-    arglist[5] = &lps;
-    arglist[6] = &hps;
+    arglist[3] = &asymCorrFac;
+    arglist[4] = &lp;
+    arglist[5] = &hp;
+    arglist[6] = &lps;
+    arglist[7] = &hps;
 
     float ms;
 

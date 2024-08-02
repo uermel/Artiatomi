@@ -241,16 +241,16 @@ __device__ float cubicTex2DSimple(texture<float, 2, cudaReadModeElementType> _te
 
 
 
-// transform vector by matrix
-__device__
-void MatrixVector3Mul(float4x4 M, float3* v)
-{
-	float3 erg;
-	erg.x = M.m[0].x * v->x + M.m[0].y * v->y + M.m[0].z * v->z + 1.f * M.m[0].w;
-	erg.y = M.m[1].x * v->x + M.m[1].y * v->y + M.m[1].z * v->z + 1.f * M.m[1].w;
-	erg.z = M.m[2].x * v->x + M.m[2].y * v->y + M.m[2].z * v->z + 1.f * M.m[2].w;
-	*v = erg;
-}
+//// transform vector by matrix
+//__device__
+//void MatrixVector3Mul(float4x4 M, float3* v)
+//{
+//	float3 erg;
+//	erg.x = M.m[0].x * v->x + M.m[0].y * v->y + M.m[0].z * v->z + 1.f * M.m[0].w;
+//	erg.y = M.m[1].x * v->x + M.m[1].y * v->y + M.m[1].z * v->z + 1.f * M.m[1].w;
+//	erg.z = M.m[2].x * v->x + M.m[2].y * v->y + M.m[2].z * v->z + 1.f * M.m[2].w;
+//	*v = erg;
+//}
 
 // transform vector by matrix
 __device__

@@ -254,7 +254,7 @@ void SetConstantValues(BPLUTSlicedKernel& kernel,
 
     temp = vol.GetSubVolumeBBoxMin(subVol);
     kernel.SetConstantValue("c_bBoxMin", &temp);
-    //printf("c_bBoxMin: %f, %f, %f\n", temp.x, temp.y, temp.z);
+    printf("c_bBoxMin: %f, %f, %f\n", temp.x, temp.y, temp.z);
 
     float matrix[16];
     proj.GetDetectorMatrix(index, matrix, 1);

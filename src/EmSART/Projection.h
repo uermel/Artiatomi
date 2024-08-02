@@ -26,14 +26,11 @@
 
 #include "EmSartDefault.h"
 #include "io/ProjectionSource.h"
-//#include "io/MRCFile.h"
-//#include "io/Dm4FileStack.h"
 #include <MarkerFile.h>
-//#include "io/MarkerFile.h"
 #include <Matrix.h>
-//#include "utils/Matrix.h"
 #include "cuda_kernels/Constants.h"
 #include "Volume.h"
+#include "utils/ConvexPolygon.h"
 
 enum ProjectionListType
 {
@@ -50,6 +47,14 @@ private:
 	float3 matrixToFloat3(Matrix<float>& val);
 	bool compensateImageRotation;
 
+    vector<Matrix<double>> projectionMatrices;
+    vector<Matrix<double>> detectorMatrices;
+
+    bool* goodProjection;
+    int goodProjectionCount;
+    //Matrix<double>* _projectionMatrices;
+    //Matrix<double>* _detectorMatrices;
+
 protected:
 	ProjectionSource* ps;
 	MarkerFile* markers;
@@ -60,9 +65,15 @@ public:
 	~Projection();
 
 	dim3 GetDimension();
+    template<class T> T GetDim();
+    template<class T> T GetFFTDim();
 	int GetWidth();
 	int GetHeight();
 	int GetMaxDimension();
+    int GetMaxShells();
+    int GetPixelCount();
+    int GetFFTPixelCount();
+    float2 GetAsymCorrFactor();
 	float3 GetPosition(uint aIndex);
 	float3 GetPixelUPitch(uint aIndex);  //c_zPitch
 	float3 GetPixelVPitch(uint aIndex);  //c_yPitch
@@ -76,12 +87,40 @@ public:
 	float GetMean(int index);
 	void Normalize(float* data, float mean);*/
 	Matrix<float> RotateMatrix(uint aIndex, Matrix<float>& matrix);
+
+    template <class T>
+    Matrix<T> ProjectionMatrix(uint aIndex);
+
+    template <class T>
+    Matrix<T> DetectorMatrix(uint aIndex);
+
+    float3x3 ProjectionMatrix3x3(uint aIndex);
+    float4x4 ProjectionMatrix4x4(uint aIndex);
+
+    float3x3 DetectorMatrix3x3(uint aIndex);
+    float4x4 DetectorMatrix4x4(uint aIndex);
+
+    float3x3 SystemMatrix3x3(uint aIndex, Matrix<double> volumeMatrix);
+    float4x4 SystemMatrix4x4(uint aIndex, Matrix<double> volumeMatrix);
+
+    float3x3 SystemMatrixInv3x3(uint aIndex, Matrix<double> volumeMatrixInv);
+    float4x4 SystemMatrixInv4x4(uint aIndex, Matrix<double> volumeMatrixInv);
+
+    bool IsGood(uint aIndex);
+    int GetProjCount();
+    int GetGoodProjCount();
+
+
 	void CreateProjectionIndexList(ProjectionListType type, int* projectionCount, int** indexList);
 	float GetPixelSize();
 
 	void ComputeHitPoints(Volume<unsigned short>& vol, uint index, int2& pA, int2& pB, int2& pC, int2& pD);
-	void ComputeHitPoints(Volume<float>& vol, uint index, int2& pA, int2& pB, int2& pC, int2& pD);
-	void ComputeHitPoint(float posX, float posY, float posZ, uint index, int2& pA);
+    void ComputeHitPoints(Volume<float>& vol, uint index, int2& pA, int2& pB, int2& pC, int2& pD);
+
+    void ComputeHitPointsNew(Volume<unsigned short>& vol, uint index, vector<float2>& corners, vector<float>& normVals);
+    void ComputeHitPointsNew(Volume<float>& vol, uint index, vector<float2>& corners, vector<float>& normVals);
+
+    void ComputeHitPoint(float posX, float posY, float posZ, uint index, int2& pA);
 
 	float2 GetExtraShift(size_t index);
 	void SetExtraShift(size_t index, float2 extraShift);

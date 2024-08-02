@@ -295,6 +295,11 @@ inline __host__ __device__ int4 operator-(int4 &a)
 // addition
 ////////////////////////////////////////////////////////////////////////////////
 
+inline __host__ __device__ double2 operator+(double2 a, double2 b)
+{
+    return make_double2(a.x + b.x, a.y + b.y);
+}
+
 inline __host__ __device__ float2 operator+(float2 a, float2 b)
 {
     return make_float2(a.x + b.x, a.y + b.y);
@@ -490,10 +495,16 @@ inline __host__ __device__ void operator+=(uint4 &a, uint b)
 // subtract
 ////////////////////////////////////////////////////////////////////////////////
 
+inline __host__ __device__ double2 operator-(double2 a, double2 b)
+{
+    return make_double2(a.x - b.x, a.y - b.y);
+}
+
 inline __host__ __device__ float2 operator-(float2 a, float2 b)
 {
     return make_float2(a.x - b.x, a.y - b.y);
 }
+
 inline __host__ __device__ void operator-=(float2 &a, float2 b)
 {
     a.x -= b.x; a.y -= b.y;
@@ -678,6 +689,15 @@ inline __host__ __device__ void operator-=(uint4 &a, uint b)
 ////////////////////////////////////////////////////////////////////////////////
 // multiply
 ////////////////////////////////////////////////////////////////////////////////
+
+inline __host__ __device__ double2 operator*(double2 a, double2 b)
+{
+    return make_double2(a.x * b.x, a.y * b.y);
+}
+inline __host__ __device__ double2 operator*(double b, double2 a)
+{
+    return make_double2(b * a.x, b * a.y);
+}
 
 inline __host__ __device__ float2 operator*(float2 a, float2 b)
 {

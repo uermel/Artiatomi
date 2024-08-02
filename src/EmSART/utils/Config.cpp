@@ -70,6 +70,9 @@ namespace Configuration
 		WBPFilter(FM_RAMP),
 		Cs(2.7f),
 		Voltage(300),
+        AmplitudeContrast(0.07),
+        DeconvStrength(10.f),
+        CTFSliceBatch(10),
 		MagAnisotropyAmount(1.0f),
 		MagAnisotropyAngleInDeg(0.0f),
 		IgnoreZShiftForCTF(false),
@@ -79,7 +82,10 @@ namespace Configuration
 		DoseWeighting(false),
 		PhaseFlipOnly(false),
 		WienerFilterNoiseLevel(0.1f),
-		LimitToNyquist(true)
+		LimitToNyquist(true),
+        WriteDebug(false),
+        SNRFile(string()),
+        ProjectionSubFile(string())
 			//ProjNormVal(-1)
 #ifdef REFINE_MODE
 			,
@@ -110,6 +116,7 @@ namespace Configuration
 			SizeSubVol(0),
 			VoxelSizeSubVol(0),
 			MotiveList(),
+            MaskFile(),
 			SubVolPath(),
 			ShiftInputFile(),
 			BatchSize(0),
@@ -119,7 +126,13 @@ namespace Configuration
             TomogramIndex(0),
             NormalizeMRCParticle(false),
             NormalizationRadius(0.8),
-            InvertMRCParticle(false)
+            InvertMRCParticle(false),
+            SubvolsWithRotation(false),
+            ReferenceEM(string()),
+            ReferenceMRC(string()),
+            ContinueRec(false),
+            AverageOverlap(false)
+
 #endif
 	{
 		while (appEnvp && *appEnvp) {
@@ -393,6 +406,9 @@ namespace Configuration
 		{
 			Cs = GetFloat("Cs");
 			Voltage = GetFloat("Voltage");
+            AmplitudeContrast = GetFloat("AmplitudeContrast");
+            DeconvStrength = GetFloat("DeconvStrength");
+            CTFSliceBatch = GetInt("CTFSliceBatch");
 		}
 
 		BadPixelValue = GetFloat("BadPixelValue");
@@ -416,10 +432,9 @@ namespace Configuration
 		CTFSliceThickness = GetFloat("CTFSliceThickness", 50.0f);
         LimitToNyquist = GetBool("LimitToNyquist", true);
 
-        LUTFile = GetString("LUTfile");
-        LUTSize = GetInt("LUTSize");
-        LUTStep = GetFloat("LUTStep");
-        support = GetFloat("Support");
+        WriteDebug = GetBool("WriteDebug", false);
+        SNRFile = GetStringOptional("SNRFile");
+        ProjectionSubFile = GetStringOptional("ProjectionSubFile");
 		
 #ifdef REFINE_MODE
 		SizeSubVol = GetInt("SizeSubVol");
@@ -501,6 +516,7 @@ namespace Configuration
 		SizeSubVol = GetInt("SizeSubVol");
 		VoxelSizeSubVol = GetFloat("VoxelSizeSubVol");
 		MotiveList = GetString("MotiveList");
+        MaskFile = GetString("MaskFile");
 		SubVolPath = GetString("SubVolPath");
 		ShiftInputFile = GetString("ShiftInputFile");
 		BatchSize = GetInt("BatchSize");
@@ -529,6 +545,11 @@ namespace Configuration
         NormalizeMRCParticle = GetBool("NormalizeMRCParticle");
         NormalizationRadius = GetFloat("NormalizationRadius");
         InvertMRCParticle = GetBool("InvertMRCParticle");
+        SubvolsWithRotation = GetBool("SubvolsWithRotation", false);
+        ReferenceEM = GetStringOptional("ReferenceEM");
+        ReferenceMRC = GetStringOptional("ReferenceMRC");
+        ContinueRec = GetBool("ContinueRec");
+        AverageOverlap = GetBool("AverageOverlap", false);
 #endif
 	}
     Config* Config::config = NULL;

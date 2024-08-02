@@ -33,7 +33,8 @@ class Volume : public ImageBase
 {
 public:
 	Volume(string aFileName, void(*readStatusCallback)(FileReader::FileReaderStatus) = NULL);
-	~Volume();
+
+    [[noreturn]] ~Volume();
 
 	virtual ImageType_enum GetImageType();
 	virtual FileType_enum GetFileType();

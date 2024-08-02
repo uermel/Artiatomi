@@ -126,3 +126,468 @@ void SetConstantValues(CTFSlicedKernel& kernel, Projection& proj, int index, flo
     float _applyEnvelopeFunction = 0;
     kernel.SetConstantValue("c_applyEnvelopeFunction", &_applyEnvelopeFunction);
 }
+
+
+PostFilterSumKernel::PostFilterSumKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim)
+        : CudaKernel("postFilterSum", aModule, aGridDim, aBlockDim, 0)
+{
+
+}
+
+PostFilterSumKernel::PostFilterSumKernel(CUmodule aModule)
+        : CudaKernel("postFilterSum", aModule, make_dim3(1, 1, 1), make_dim3(8, 8, 1), 0)
+{
+
+}
+
+void PostFilterSumKernel::AllocOffsets(int maxSliceNumber) {
+    d_offsets.Alloc(maxSliceNumber * sizeof(float));
+    h_offsets = new float[maxSliceNumber];
+    slice_number = maxSliceNumber;
+}
+
+
+float PostFilterSumKernel::operator()(CudaDeviceVariable& image,
+                                      CudaDeviceVariable& filter,
+                                      CudaDeviceVariable& result,
+                                      uint2 fftDim,
+                                      ctfConstants constants,
+                                      ctfImageConstants imageConstants,
+                                      vector<float>* offsets,
+                                      int2 minmaxSlice)
+{
+    CUdeviceptr image_dptr = image.GetDevicePtr();
+    CUdeviceptr filter_dptr = filter.GetDevicePtr();
+    CUdeviceptr result_dptr = result.GetDevicePtr();
+
+    // Offsets in m to Device
+    for(int i=0; i < imageConstants.sliceNumber; i++){
+        h_offsets[i] = (*offsets)[i] * powf(10, -9);
+    }
+
+    d_offsets.CopyHostToDevice(h_offsets, imageConstants.sliceNumber * sizeof(float));
+    CUdeviceptr offsets_dptr = d_offsets.GetDevicePtr();
+
+    void** arglist = (void**)new void*[8];
+
+    arglist[0] = &image_dptr;
+    arglist[1] = &filter_dptr;
+    arglist[2] = &result_dptr;
+    arglist[3] = &fftDim;
+    arglist[4] = &constants;
+    arglist[5] = &imageConstants;
+    arglist[6] = &offsets_dptr;
+    arglist[7] = &minmaxSlice;
+
+    float ms;
+
+    CUevent eventStart;
+    CUevent eventEnd;
+    CUstream stream = 0;
+    cudaSafeCall(cuEventCreate(&eventStart, CU_EVENT_BLOCKING_SYNC));
+    cudaSafeCall(cuEventCreate(&eventEnd, CU_EVENT_BLOCKING_SYNC));
+
+    cudaSafeCall(cuEventRecord(eventStart, stream));
+    cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, NULL, arglist, NULL));
+
+    cudaSafeCall(cuCtxSynchronize());
+
+    cudaSafeCall(cuEventRecord(eventEnd, stream));
+    cudaSafeCall(cuEventSynchronize(eventEnd));
+    cudaSafeCall(cuEventElapsedTime(&ms, eventStart, eventEnd));
+
+    cudaSafeCall(cuEventDestroy(eventStart));
+    cudaSafeCall(cuEventDestroy(eventEnd));
+
+    delete[] arglist;
+    return ms;
+}
+
+PostFilterSumCTFfreeKernel::PostFilterSumCTFfreeKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim)
+        : CudaKernel("postFilterSumCTFfree", aModule, aGridDim, aBlockDim, 0)
+{
+
+}
+
+PostFilterSumCTFfreeKernel::PostFilterSumCTFfreeKernel(CUmodule aModule)
+        : CudaKernel("postFilterSumCTFfree", aModule, make_dim3(1, 1, 1), make_dim3(8, 8, 1), 0)
+{
+
+}
+
+void PostFilterSumCTFfreeKernel::AllocOffsets(int maxSliceNumber) {
+    d_offsets.Alloc(maxSliceNumber * sizeof(float));
+    h_offsets = new float[maxSliceNumber];
+    slice_number = maxSliceNumber;
+}
+
+
+float PostFilterSumCTFfreeKernel::operator()(CudaDeviceVariable& image,
+                                      CudaDeviceVariable& filter,
+                                      CudaDeviceVariable& result,
+                                      CudaDeviceVariable& result2,
+                                      uint2 fftDim,
+                                      ctfConstants constants,
+                                      ctfImageConstants imageConstants,
+                                      vector<float>* offsets,
+                                      int2 minmaxSlice)
+{
+    CUdeviceptr image_dptr = image.GetDevicePtr();
+    CUdeviceptr filter_dptr = filter.GetDevicePtr();
+    CUdeviceptr result_dptr = result.GetDevicePtr();
+    CUdeviceptr result2_dptr = result2.GetDevicePtr();
+
+    // Offsets in m to Device
+    for(int i=0; i < imageConstants.sliceNumber; i++){
+        h_offsets[i] = (*offsets)[i] * powf(10, -9);
+    }
+
+    d_offsets.CopyHostToDevice(h_offsets, imageConstants.sliceNumber * sizeof(float));
+    CUdeviceptr offsets_dptr = d_offsets.GetDevicePtr();
+
+    void** arglist = (void**)new void*[9];
+
+    arglist[0] = &image_dptr;
+    arglist[1] = &filter_dptr;
+    arglist[2] = &result_dptr;
+    arglist[3] = &fftDim;
+    arglist[4] = &constants;
+    arglist[5] = &imageConstants;
+    arglist[6] = &offsets_dptr;
+    arglist[7] = &minmaxSlice;
+    arglist[8] = &result2_dptr;
+
+    float ms;
+
+    CUevent eventStart;
+    CUevent eventEnd;
+    CUstream stream = 0;
+    cudaSafeCall(cuEventCreate(&eventStart, CU_EVENT_BLOCKING_SYNC));
+    cudaSafeCall(cuEventCreate(&eventEnd, CU_EVENT_BLOCKING_SYNC));
+
+    cudaSafeCall(cuEventRecord(eventStart, stream));
+    cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, NULL, arglist, NULL));
+
+    cudaSafeCall(cuCtxSynchronize());
+
+    cudaSafeCall(cuEventRecord(eventEnd, stream));
+    cudaSafeCall(cuEventSynchronize(eventEnd));
+    cudaSafeCall(cuEventElapsedTime(&ms, eventStart, eventEnd));
+
+    cudaSafeCall(cuEventDestroy(eventStart));
+    cudaSafeCall(cuEventDestroy(eventEnd));
+
+    delete[] arglist;
+    return ms;
+}
+
+PostFilterKernel::PostFilterKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim)
+        : CudaKernel("postFilter", aModule, aGridDim, aBlockDim, 0)
+{
+
+}
+
+PostFilterKernel::PostFilterKernel(CUmodule aModule)
+        : CudaKernel("postFilter", aModule, make_dim3(1, 1, 1), make_dim3(16, 16, 1), 0)
+{
+
+}
+
+
+float PostFilterKernel::operator()(CudaDeviceVariable& image,
+                                   CudaDeviceVariable& filter,
+                                   CudaDeviceVariable& result,
+                                   uint2 fftDim,
+                                   float normFactor)
+{
+    CUdeviceptr image_dptr = image.GetDevicePtr();
+    CUdeviceptr filter_dptr = filter.GetDevicePtr();
+    CUdeviceptr result_dptr = result.GetDevicePtr();
+
+    void** arglist = (void**)new void*[5];
+
+    arglist[0] = &image_dptr;
+    arglist[1] = &filter_dptr;
+    arglist[2] = &result_dptr;
+    arglist[3] = &fftDim;
+    arglist[4] = &normFactor;
+
+    float ms;
+
+    CUevent eventStart;
+    CUevent eventEnd;
+    CUstream stream = 0;
+    cudaSafeCall(cuEventCreate(&eventStart, CU_EVENT_BLOCKING_SYNC));
+    cudaSafeCall(cuEventCreate(&eventEnd, CU_EVENT_BLOCKING_SYNC));
+
+    cudaSafeCall(cuEventRecord(eventStart, stream));
+    cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, NULL, arglist, NULL));
+
+    cudaSafeCall(cuCtxSynchronize());
+
+    cudaSafeCall(cuEventRecord(eventEnd, stream));
+    cudaSafeCall(cuEventSynchronize(eventEnd));
+    cudaSafeCall(cuEventElapsedTime(&ms, eventStart, eventEnd));
+
+    cudaSafeCall(cuEventDestroy(eventStart));
+    cudaSafeCall(cuEventDestroy(eventEnd));
+
+    delete[] arglist;
+    return ms;
+}
+
+PreFilterSpreadAdHocKernel::PreFilterSpreadAdHocKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim)
+        : CudaKernel("preFilterSpreadAdHoc",
+                     aModule, aGridDim, aBlockDim, 0),
+                     h_offsets(nullptr)
+{
+
+}
+
+PreFilterSpreadAdHocKernel::PreFilterSpreadAdHocKernel(CUmodule aModule)
+        : CudaKernel("preFilterSpreadAdHoc",
+                     aModule,
+                     make_dim3(1, 1, 1),
+                     make_dim3(16, 16, 1), 0),
+                     h_offsets(nullptr)
+{
+
+}
+
+void PreFilterSpreadAdHocKernel::AllocOffsets(int maxSliceNumber) {
+    d_offsets.Alloc(maxSliceNumber * sizeof(float));
+    h_offsets = new float[maxSliceNumber];
+}
+
+float PreFilterSpreadAdHocKernel::operator()(CudaDeviceVariable& image,
+                                             CudaDeviceVariable& filter,
+                                             CudaDeviceVariable& result,
+                                             uint2 fftDim,
+                                             ctfConstants constants,
+                                             ctfImageConstants imageConstants,
+                                             vector<float>* offsets,
+                                             int2 minmaxSlice)
+{
+    CUdeviceptr image_dptr = image.GetDevicePtr();
+    CUdeviceptr filter_dptr = filter.GetDevicePtr();
+    CUdeviceptr result_dptr = result.GetDevicePtr();
+    CUtexObject snr_tex = 0;
+
+    // Offsets in m to Device
+    for(int i=0; i < imageConstants.sliceNumber; i++){
+        h_offsets[i] = (*offsets)[i] * powf(10, -9);
+    }
+
+    d_offsets.CopyHostToDevice(h_offsets, imageConstants.sliceNumber * sizeof(float));
+    CUdeviceptr offsets_dptr = d_offsets.GetDevicePtr();
+
+    void** arglist = (void**)new void*[8];
+
+    arglist[0] = &image_dptr;
+    arglist[1] = &filter_dptr;
+    arglist[2] = &result_dptr;
+    arglist[3] = &fftDim;
+    arglist[4] = &constants;
+    arglist[5] = &imageConstants;
+    arglist[6] = &offsets_dptr;
+    arglist[7] = &minmaxSlice;
+
+    float ms;
+
+    CUevent eventStart;
+    CUevent eventEnd;
+    CUstream stream = 0;
+    cudaSafeCall(cuEventCreate(&eventStart, CU_EVENT_BLOCKING_SYNC));
+    cudaSafeCall(cuEventCreate(&eventEnd, CU_EVENT_BLOCKING_SYNC));
+
+    cudaSafeCall(cuEventRecord(eventStart, stream));
+    cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, NULL, arglist, NULL));
+
+    cudaSafeCall(cuCtxSynchronize());
+
+    cudaSafeCall(cuEventRecord(eventEnd, stream));
+    cudaSafeCall(cuEventSynchronize(eventEnd));
+    cudaSafeCall(cuEventElapsedTime(&ms, eventStart, eventEnd));
+
+    cudaSafeCall(cuEventDestroy(eventStart));
+    cudaSafeCall(cuEventDestroy(eventEnd));
+
+    delete[] arglist;
+    return ms;
+}
+
+
+PreFilterSpreadSNRKernel::PreFilterSpreadSNRKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim)
+        : CudaKernel("preFilterSpreadSNR",
+                     aModule, aGridDim, aBlockDim, 0),
+          h_offsets(nullptr)
+{
+
+}
+
+PreFilterSpreadSNRKernel::PreFilterSpreadSNRKernel(CUmodule aModule)
+        : CudaKernel("preFilterSpreadSNR",
+                     aModule,
+                     make_dim3(1, 1, 1),
+                     make_dim3(16, 16, 1), 0),
+          h_offsets(nullptr)
+{
+
+}
+
+void PreFilterSpreadSNRKernel::AllocOffsets(int maxSliceNumber) {
+    d_offsets.Alloc(maxSliceNumber * sizeof(float));
+    h_offsets = new float[maxSliceNumber];
+}
+
+float PreFilterSpreadSNRKernel::operator()(CudaDeviceVariable& image,
+                                           CudaDeviceVariable& filter,
+                                           CudaDeviceVariable& result,
+                                           Cuda::CudaTextureObject1D& texSNR,
+                                           Cuda::CudaTextureObject1D& texNP,
+                                           uint2 fftDim,
+                                           ctfConstants constants,
+                                           ctfImageConstants imageConstants,
+                                           vector<float>* offsets,
+                                           int2 minmaxSlice,
+                                           float deconvStrength)
+{
+    CUdeviceptr image_dptr = image.GetDevicePtr();
+    CUdeviceptr filter_dptr = filter.GetDevicePtr();
+    CUdeviceptr result_dptr = result.GetDevicePtr();
+    CUtexObject snr_tex = texSNR.GetTexObject();
+    CUtexObject np_tex = texNP.GetTexObject();
+
+    // Offsets in m to Device
+    for(int i=0; i < imageConstants.sliceNumber; i++){
+        h_offsets[i] = (*offsets)[i] * powf(10, -9);
+    }
+
+    d_offsets.CopyHostToDevice(h_offsets, imageConstants.sliceNumber * sizeof(float));
+    CUdeviceptr offsets_dptr = d_offsets.GetDevicePtr();
+
+    void** arglist = (void**)new void*[11];
+
+    arglist[0] = &image_dptr;
+    arglist[1] = &filter_dptr;
+    arglist[2] = &result_dptr;
+    arglist[3] = &snr_tex;
+    arglist[4] = &np_tex;
+    arglist[5] = &fftDim;
+    arglist[6] = &constants;
+    arglist[7] = &imageConstants;
+    arglist[8] = &offsets_dptr;
+    arglist[9] = &minmaxSlice;
+    arglist[10] = &deconvStrength;
+
+    float ms;
+
+    CUevent eventStart;
+    CUevent eventEnd;
+    CUstream stream = 0;
+    cudaSafeCall(cuEventCreate(&eventStart, CU_EVENT_BLOCKING_SYNC));
+    cudaSafeCall(cuEventCreate(&eventEnd, CU_EVENT_BLOCKING_SYNC));
+
+    cudaSafeCall(cuEventRecord(eventStart, stream));
+    cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, NULL, arglist, NULL));
+
+    cudaSafeCall(cuCtxSynchronize());
+
+    cudaSafeCall(cuEventRecord(eventEnd, stream));
+    cudaSafeCall(cuEventSynchronize(eventEnd));
+    cudaSafeCall(cuEventElapsedTime(&ms, eventStart, eventEnd));
+
+    cudaSafeCall(cuEventDestroy(eventStart));
+    cudaSafeCall(cuEventDestroy(eventEnd));
+
+    delete[] arglist;
+    return ms;
+}
+
+
+PreFilterSpreadSNRrelionKernel::PreFilterSpreadSNRrelionKernel(CUmodule aModule, dim3 aGridDim, dim3 aBlockDim)
+        : CudaKernel("preFilterSpreadSNRrelion",
+                     aModule, aGridDim, aBlockDim, 0),
+          h_offsets(nullptr)
+{
+
+}
+
+PreFilterSpreadSNRrelionKernel::PreFilterSpreadSNRrelionKernel(CUmodule aModule)
+        : CudaKernel("preFilterSpreadSNRrelion",
+                     aModule,
+                     make_dim3(1, 1, 1),
+                     make_dim3(16, 16, 1), 0),
+          h_offsets(nullptr)
+{
+
+}
+
+void PreFilterSpreadSNRrelionKernel::AllocOffsets(int maxSliceNumber) {
+    d_offsets.Alloc(maxSliceNumber * sizeof(float));
+    h_offsets = new float[maxSliceNumber];
+}
+
+float PreFilterSpreadSNRrelionKernel::operator()(CudaDeviceVariable& image,
+                                           CudaDeviceVariable& filter,
+                                           CudaDeviceVariable& result,
+                                           Cuda::CudaTextureObject1D& texSNR,
+                                           Cuda::CudaTextureObject1D& texNP,
+                                           uint2 fftDim,
+                                           ctfConstants constants,
+                                           ctfImageConstants imageConstants,
+                                           vector<float>* offsets,
+                                           int2 minmaxSlice,
+                                           float deconvStrength)
+{
+    CUdeviceptr image_dptr = image.GetDevicePtr();
+    CUdeviceptr filter_dptr = filter.GetDevicePtr();
+    CUdeviceptr result_dptr = result.GetDevicePtr();
+    CUtexObject snr_tex = texSNR.GetTexObject();
+    CUtexObject np_tex = texNP.GetTexObject();
+
+    // Offsets in m to Device
+    for(int i=0; i < imageConstants.sliceNumber; i++){
+        h_offsets[i] = (*offsets)[i] * powf(10, -9);
+    }
+
+    d_offsets.CopyHostToDevice(h_offsets, imageConstants.sliceNumber * sizeof(float));
+    CUdeviceptr offsets_dptr = d_offsets.GetDevicePtr();
+
+    void** arglist = (void**)new void*[11];
+
+    arglist[0] = &image_dptr;
+    arglist[1] = &filter_dptr;
+    arglist[2] = &result_dptr;
+    arglist[3] = &snr_tex;
+    arglist[4] = &np_tex;
+    arglist[5] = &fftDim;
+    arglist[6] = &constants;
+    arglist[7] = &imageConstants;
+    arglist[8] = &offsets_dptr;
+    arglist[9] = &minmaxSlice;
+    arglist[10] = &deconvStrength;
+
+    float ms;
+
+    CUevent eventStart;
+    CUevent eventEnd;
+    CUstream stream = 0;
+    cudaSafeCall(cuEventCreate(&eventStart, CU_EVENT_BLOCKING_SYNC));
+    cudaSafeCall(cuEventCreate(&eventEnd, CU_EVENT_BLOCKING_SYNC));
+
+    cudaSafeCall(cuEventRecord(eventStart, stream));
+    cudaSafeCall(cuLaunchKernel(mFunction, mGridDim.x, mGridDim.y, mGridDim.z, mBlockDim.x, mBlockDim.y, mBlockDim.z, mSharedMemSize, NULL, arglist, NULL));
+
+    cudaSafeCall(cuCtxSynchronize());
+
+    cudaSafeCall(cuEventRecord(eventEnd, stream));
+    cudaSafeCall(cuEventSynchronize(eventEnd));
+    cudaSafeCall(cuEventElapsedTime(&ms, eventStart, eventEnd));
+
+    cudaSafeCall(cuEventDestroy(eventStart));
+    cudaSafeCall(cuEventDestroy(eventEnd));
+
+    delete[] arglist;
+    return ms;
+}

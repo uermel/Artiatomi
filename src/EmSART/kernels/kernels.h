@@ -12,6 +12,8 @@
 #include "FPLUTKernel.h"
 #include "FPLUTSlicedKernel.h"
 #include "FPDistSlicedKernel.h"
+#include "FPDistOrthoKernel.h"
+#include "FPOrthoKernel.h"
 #include "BPKernel.h"
 #include "BPLUTKernel.h"
 #include "BPLUTBWKernel.h"
@@ -20,6 +22,7 @@
 #include "BPLUTBlockNoDivKernel.h"
 #include "BPLUTVBlockSlicedKernel.h"
 #include "BPLUTSlicedKernel.h"
+#include "BPOrthoSlicedKernel.h"
 
 // 2D Image processing
 #include "CompKernel.h"
@@ -41,6 +44,10 @@
 #include "WbpWeightingKernel.h"
 #include "SplinePrefilter.h"
 #include "OversampleKernel.h"
+#include "ComputeLUTKernel.h"
+#include "FFTShiftKernel.h"
+#include "RadialSumKernel.h"
+#include "FreqSampleKernel.h"
 
 #include "RectToSqrSlice.h"
 #include "SqrSliceToRectSliceKernel.h"
