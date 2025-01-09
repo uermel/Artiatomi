@@ -64,9 +64,9 @@ AvgProcess::AvgProcess(size_t _sizeVol,
       rotateMaskCC(aRotateMaskCC),
       useFilterVolume(aUseFilterVolume),
 	  ctx(_ctx), 
-	  rot((int)_sizeVol, _stream, _ctx, linearInterpolation), 
-	  rotMask((int)_sizeVol, _stream, _ctx, linearInterpolation),
-	  rotMaskCC((int)_sizeVol, _stream, _ctx, linearInterpolation),
+	  rot((int)_sizeVol, _stream, _ctx),// linearInterpolation),
+	  rotMask((int)_sizeVol, _stream, _ctx, CR_INTERP_LINEAR),// linearInterpolation),
+	  rotMaskCC((int)_sizeVol, _stream, _ctx, CR_INTERP_LINEAR),// linearInterpolation),
 	  reduce((int)_sizeVol * (int)_sizeVol * (int)_sizeVol, _stream, _ctx),
 	  sub((int)_sizeVol, _stream, _ctx),
 	  makecplx((int)_sizeVol, _stream, _ctx),
@@ -108,7 +108,8 @@ AvgProcess::AvgProcess(size_t _sizeVol,
       d_real_f1_orig(_sizeVol * _sizeVol * _sizeVol * sizeof(float)),
       d_cplx_F1(_sizeVol * _sizeVol * _sizeVol * sizeof(float2)),
       d_cplx_f1sqr(_sizeVol * _sizeVol * _sizeVol * sizeof(float2)),
-      d_real_NCCDen1(_sizeVol * _sizeVol * _sizeVol * sizeof(float))
+      d_real_NCCDen1(_sizeVol * _sizeVol * _sizeVol * sizeof(float)),
+      d_real_NCCDen2(_sizeVol * _sizeVol * _sizeVol * sizeof(float))
 {
 	cudaSafeCall(cuMemAllocHost((void**)&index, sizeof(int)));
 	cudaSafeCall(cuMemAllocHost((void**)&sum_h, sizeof(float)));
@@ -145,6 +146,8 @@ void AvgProcess::planAngularSampling(float aPhiAngIter,
 {
     float rphi, npsi, dpsi, rpsi, rthe;
 
+    bool rigidScan = true;
+
     for (int iterPhi = 0; iterPhi < 2 * (int)aPhiAngIter + 1; ++iterPhi) {
         rphi = aPhiAngInc * ((float)iterPhi - aPhiAngIter);
 
@@ -154,7 +157,11 @@ void AvgProcess::planAngularSampling(float aPhiAngIter,
             if (iterThe == 0) {
                 npsi = 1;
                 dpsi = 360;
-            } else {
+            }else if (rigidScan){
+                dpsi = aPhiAngInc;
+                npsi = ceilf(360.f/aPhiAngInc);
+            }
+            else {
                 dpsi = aAngIncr / sinf((float)iterThe * aAngIncr * (float) M_PI / 180.0f);
                 npsi = ceilf(360.0f / dpsi);
             }
@@ -162,11 +169,20 @@ void AvgProcess::planAngularSampling(float aPhiAngIter,
             for (int iterPsi = 0; iterPsi < (int)npsi; ++iterPsi) {
                 rpsi = (float)iterPsi * dpsi;
 
+                // TODO: fix this
+                // M_vor -> pre-orientation
+                // M_init -> initial scanning angle
+                // M_couplePP -> if parameter on
+                // M_rot -> final scanning angle
+
+                // M_rot = M_vor * M_init * M_couplePP * v
+
                 if (aCouplePhiToPsi) {
-                    rphi = aPhiAngInc * ((float)iterPhi - aPhiAngIter) - rpsi;
-                } else {
-                    rphi = aPhiAngInc * ((float)iterPhi - aPhiAngIter);
+                    rphi = rphi - rpsi;
                 }
+//                else {
+//                    rphi = rphi;
+//                }
 
                 vector<float> angles = {rphi, rpsi, rthe};
                 angleList.push_back(angles);
@@ -319,6 +335,7 @@ maxVals_t AvgProcess::executePadfield(float* _data,
     rot.SetOldAngles(oldphi, oldpsi, oldtheta);
     rotMask.SetOldAngles(oldphi, oldpsi, oldtheta);
 
+
     if (rotateMaskCC)
     {
         rotMaskCC.SetTexture(d_real_ccMask_orig);
@@ -361,7 +378,7 @@ maxVals_t AvgProcess::executePadfield(float* _data,
         // Binarize mask if desired
         if (binarizeMask)
         {
-            binarize.Binarize(d_real_mask1, d_real_mask1);
+            binarize.Binarize(d_real_mask1, d_real_mask1, 0.5f);
         }
 
         // Sum of mask
@@ -658,6 +675,603 @@ maxVals_t AvgProcess::executePadfield(float* _data,
         {
             //find new Maximum value and store position and value
             reduce.MaxIndexMaskedCplx(d_ffttemp, d_buffer, d_real_ccMask, d_index);
+//            {
+//                auto tmp = new float[3];
+//                d_index.
+//                printf("INDEX");
+//            }
+        }
+
+        // Get maximum
+        max.Max(d_maxVals, d_index, d_buffer, rphi, rpsi, rthe);
+    }
+
+    cudaSafeCall(cuStreamSynchronize(stream));
+    d_maxVals.CopyDeviceToHost(&m);
+    cudaSafeCall(cuStreamSynchronize(stream));
+
+    return m;
+}
+
+maxVals_t AvgProcess::executeMaskFirst(float* _data,
+                                      float* coverageWedge,
+                                      float* overlapWedge,
+                                      float* filter,
+                                      float oldphi,
+                                      float oldpsi,
+                                      float oldtheta,
+                                      float rDown,
+                                      float rUp,
+                                      float smooth,
+                                      float3 oldShift,
+                                      bool computeCCValOnly,
+                                      int oldIndex)
+{
+    int oldWedge = -1;
+    maxVals_t m;
+    m.index = 0;
+    m.ccVal = -10000;
+    m.rphi = 0;
+    m.rpsi = 0;
+    m.rthe = 0;
+    cudaSafeCall(cuStreamSynchronize(stream));
+    d_maxVals.CopyHostToDeviceAsync(stream, &m);
+
+    ////////////////////
+    /// Prep Filters ///
+    ////////////////////
+    // FFTshift Coverage Wedge
+    d_real_tmp.CopyHostToDevice(coverageWedge);
+    fft.FFTShiftReal(d_real_tmp, d_real_cov_wedge);
+
+    // FFTshift Overlap Wedge
+    d_real_tmp.CopyHostToDevice(overlapWedge);
+    fft.FFTShiftReal(d_real_tmp, d_real_ovl_wedge);
+
+    // FFTshift Filter
+    if (useFilterVolume)
+    {
+        d_real_tmp.CopyHostToDevice(filter);
+        fft.FFTShiftReal(d_real_tmp, d_real_filter);
+    }
+
+    ///////////////////////////
+    /// Prep Particle image ///
+    ///////////////////////////
+    // FFT of particle
+    d_real_tmp.CopyHostToDeviceAsync(stream, _data);
+    makecplx.MakeCplxWithSub(d_real_tmp, d_cplx_F2, 0);
+    cufftSafeCall(cufftExecC2C(ffthandle,
+                               (cufftComplex*)d_cplx_F2.GetDevicePtr(),
+                               (cufftComplex*)d_cplx_F2.GetDevicePtr(),
+                               CUFFT_FORWARD));
+
+    // Particle * wedge (coverage)
+    //TODO:change back
+    //mul.MulVol(d_real_cov_wedge, d_cplx_F2);
+    fft.ParticleWiener(d_cplx_F2, d_real_ovl_wedge, d_real_cov_wedge, 0.0000001f);
+
+    // Filter particle
+    if (useFilterVolume)
+    {
+        mul.MulVol(d_real_filter, d_cplx_F2);
+    }
+    else
+    {
+        fft.BandpassFFTShift(d_cplx_F2, rDown, rUp, smooth);
+    }
+
+    // IFFT particle
+    cufftSafeCall(cufftExecC2C(ffthandle,
+                               (cufftComplex*)d_cplx_F2.GetDevicePtr(),
+                               (cufftComplex*)d_cplx_F2.GetDevicePtr(),
+                               CUFFT_INVERSE));
+
+    mul.Mul(1.0f / sizeTot, d_cplx_F2);
+    makecplx.MakeReal(d_cplx_F2, d_real_f2);
+
+    // Particle sum
+    reduce.Sum(d_real_f2, d_buffer);
+    d_buffer.CopyDeviceToHostAsync(stream, sum_h, sizeof(float));
+
+    cudaSafeCall(cuStreamSynchronize(stream));
+
+    // Subtract mean, FFT of particle, FFT of particle^2
+    makecplx.MakeCplxWithSub(d_real_f2, d_cplx_F2_orig, *sum_h / (float)sizeTot);
+    //makecplx.MakeCplxWithSqrSub(d_real_f2, d_cplx_F2sqr_orig, *sum_h / (float)sizeTot);
+
+    // F2 and F2^2
+    cufftSafeCall(cufftExecC2C(ffthandle,
+                               (cufftComplex*)d_cplx_F2_orig.GetDevicePtr(),
+                               (cufftComplex*)d_cplx_F2_orig.GetDevicePtr(),
+                               CUFFT_FORWARD));
+
+    // Sum for normalization
+    cudaSafeCall(cuStreamSynchronize(stream));
+    reduce.SumAbsSqrCplx(d_cplx_F2_orig, d_real_NCCDen2);
+    cudaSafeCall(cuStreamSynchronize(stream));
+//    cufftSafeCall(cufftExecC2C(ffthandle,
+//                               (cufftComplex*)d_cplx_F2sqr_orig.GetDevicePtr(),
+//                               (cufftComplex*)d_cplx_F2sqr_orig.GetDevicePtr(),
+//                               CUFFT_FORWARD));
+
+
+    /////////////////////
+    /// Prep Rotation ///
+    /////////////////////
+    // Setup rotation of ref/mask/maskCC
+    rot.SetTexture(d_real_f1_orig);
+    rotMask.SetTexture(d_real_mask1_orig);
+
+    rot.SetOldAngles(oldphi, oldpsi, oldtheta);
+    rotMask.SetOldAngles(oldphi, oldpsi, oldtheta);
+
+//    {
+//        //printf("Simple Rot Now\n");
+//        rot.Rot(d_real_f1, 0, 0, 0);
+//        auto tmp = new float[sizeVol*sizeVol*sizeVol];
+//
+//        d_real_f1.CopyDeviceToHost(tmp);
+//
+//        stringstream ss;
+//        ss << "rotated_old_angles.em";
+//        emwrite(ss.str(), tmp, sizeVol, sizeVol, sizeVol);
+//
+//        delete[] tmp;
+//    }
+
+    if (rotateMaskCC)
+    {
+        rotMaskCC.SetTexture(d_real_ccMask_orig);
+        rotMaskCC.SetOldAngles(oldphi, oldpsi, oldtheta);
+    }
+
+    //for angle...
+    float rthe = 0;
+    float rpsi = 0;
+    float rphi = 0;
+
+    int counter = 0;
+
+    for (int trpIdx = 0; trpIdx < angleList.size(); trpIdx++)
+    {
+        vector<float> angles = angleList[trpIdx];
+        rphi = angles[0];
+        rpsi = angles[1];
+        rthe = angles[2];
+
+        // Get pre-processed particle
+        //d_cplx_F2.CopyDeviceToDeviceAsync(stream, d_cplx_F2_orig);
+        d_cplx_NCCNum.CopyDeviceToDeviceAsync(stream, d_cplx_F2_orig);
+        //d_cplx_F2sqr.CopyDeviceToDeviceAsync(stream, d_cplx_F2sqr_orig);
+
+        ///////////////////////////////
+        /// Process reference image ///
+        ///////////////////////////////
+
+        // Get rotated ref/mask/maskCC
+        rot.Rot(d_real_f1, rphi, rpsi, rthe, true);
+        rotMask.Rot(d_real_mask1, rphi, rpsi, rthe);
+
+//        {
+//            auto tmp = new float[sizeVol*sizeVol*sizeVol];
+//
+//            d_real_f1.CopyDeviceToHost(tmp);
+//
+//            stringstream ss;
+//            ss << "rotated_" << trpIdx << ".em";//<< rphi << "_" << rpsi << "_" << rthe << ".em";
+//            emwrite(ss.str(), tmp, sizeVol, sizeVol, sizeVol);
+//
+//            delete[] tmp;
+//        }
+
+        if (rotateMaskCC)
+        {
+            d_real_ccMask.Memset(0);
+            rotMaskCC.Rot(d_real_ccMask, rphi, rpsi, rthe);
+            //binarize.Binarize(d_real_ccMask, d_real_tmp, 0.1f);
+            //d_real_ccMask.CopyDeviceToDevice(d_real_tmp);
+        }
+
+//        {
+//            auto temp = new float[sizeTot];
+//            auto tempx = new float[sizeTot];
+//            auto tempy = new float[sizeTot];
+//
+//            d_real_ccMask.CopyDeviceToHost(temp);
+//
+////            for (int i = 0; i<sizeTot; i++){
+////                tempx[i] = temp[i].x;
+////                tempy[i] = temp[i].y;
+////            }
+//
+//            stringstream ss;
+//            ss << "ccmask_real.em";
+//            emwrite(ss.str(), temp, sizeVol, sizeVol, sizeVol);
+//
+////            stringstream ss2;
+////            ss2 << "ccmap_imag.em";
+////            emwrite(ss2.str(), tempy, sizeVol, sizeVol, sizeVol);
+//
+//            delete[] temp;
+//            delete[] tempx;
+//            delete[] tempy;
+//        }
+
+        // Binarize mask if desired
+        if (binarizeMask)
+        {
+            binarize.Binarize(d_real_mask1, d_real_mask1, 0.5f);
+        }
+
+        // Sum of mask
+        cudaSafeCall(cuStreamSynchronize(stream));
+        reduce.Sum(d_real_mask1, d_real_maskNorm);
+        cudaSafeCall(cuStreamSynchronize(stream));
+
+        // ref/mask to cmplx storage
+        makecplx.MakeCplxWithSub(d_real_f1, d_cplx_F1, 0);
+        //makecplx.MakeCplxWithSub(d_real_mask1, d_cplx_M1, 0);
+
+        // Sum of masked ref (real space)
+        cudaSafeCall(cuStreamSynchronize(stream));
+        reduce.MaskedSumCplx(d_cplx_F1, d_real_mask1, d_sum);
+        cudaSafeCall(cuStreamSynchronize(stream));
+
+        // Apply mask, generate masked ref, and masked, squared ref
+        mul.MulMaskMeanFreeCplx(d_cplx_F1, d_cplx_f1sqr, d_real_mask1, d_sum, d_real_maskNorm);
+
+//        {
+//            auto temp = new float2[sizeTot];
+//            auto tempx = new float[sizeTot];
+//            auto tempy = new float[sizeTot];
+//
+//            d_cplx_F1.CopyDeviceToHost(temp);
+//
+//            for (int i = 0; i<sizeTot; i++){
+//                tempx[i] = temp[i].x;
+//                tempy[i] = temp[i].y;
+//            }
+//
+//            stringstream ss;
+//            ss << "F1_after_mask_real.em";
+//            emwrite(ss.str(), tempx, sizeVol, sizeVol, sizeVol);
+//
+//            stringstream ss2;
+//            ss2 << "F1_after_mask_imag.em";
+//            emwrite(ss2.str(), tempy, sizeVol, sizeVol, sizeVol);
+//
+//            delete[] temp;
+//            delete[] tempx;
+//            delete[] tempy;
+//        }
+
+        cufftSafeCall(cufftExecC2C(ffthandle,
+                                   (cufftComplex*)d_cplx_F1.GetDevicePtr(),
+                                   (cufftComplex*)d_cplx_F1.GetDevicePtr(),
+                                   CUFFT_FORWARD));
+
+//        cufftSafeCall(cufftExecC2C(ffthandle,
+//                                   (cufftComplex*)d_cplx_M1.GetDevicePtr(),
+//                                   (cufftComplex*)d_cplx_M1.GetDevicePtr(),
+//                                   CUFFT_FORWARD));
+
+        // Wedge * ref (overlap wedge)
+        //TODO: change to ovl
+        mul.MulVol(d_real_cov_wedge, d_cplx_F1);
+
+        // Filter ref
+        if (useFilterVolume)
+        {
+            mul.MulVol(d_real_filter, d_cplx_F1);
+        }
+        else
+        {
+            fft.BandpassFFTShift(d_cplx_F1, rDown, rUp, smooth);
+        }
+
+        cudaSafeCall(cuStreamSynchronize(stream));
+        reduce.SumAbsSqrCplx(d_cplx_F1, d_real_NCCDen1);
+        cudaSafeCall(cuStreamSynchronize(stream));
+//        {
+//            float tmp1 = 0;
+//            float tmp2 = 0;
+//            d_real_NCCDen1.CopyDeviceToHost(&tmp1, sizeof(float));
+//            d_real_NCCDen2.CopyDeviceToHost(&tmp2, sizeof(float));
+//
+//            printf("\n Den1: %f\n Den2: %f\n", tmp1, tmp2);
+//        }
+//
+//        {
+//            auto temp = new float2[sizeTot];
+//            auto tempx = new float[sizeTot];
+//            auto tempy = new float[sizeTot];
+//
+//            d_cplx_F1.CopyDeviceToHost(temp);
+//
+//            for (int i = 0; i<sizeTot; i++){
+//                tempx[i] = temp[i].x;
+//                tempy[i] = temp[i].y;
+//            }
+//
+//            stringstream ss;
+//            ss << "F1_after_fft_real.em";
+//            emwrite(ss.str(), tempx, sizeVol, sizeVol, sizeVol);
+//
+//            stringstream ss2;
+//            ss2 << "F1_after_fft_imag.em";
+//            emwrite(ss2.str(), tempy, sizeVol, sizeVol, sizeVol);
+//
+//            delete[] temp;
+//            delete[] tempx;
+//            delete[] tempy;
+//        }
+//
+//        {
+//            auto temp = new float2[sizeTot];
+//            auto tempx = new float[sizeTot];
+//            auto tempy = new float[sizeTot];
+//
+//            d_cplx_NCCNum.CopyDeviceToHost(temp);
+//
+//            for (int i = 0; i<sizeTot; i++){
+//                tempx[i] = temp[i].x;
+//                tempy[i] = temp[i].y;
+//            }
+//
+//            stringstream ss;
+//            ss << "F2_after_fft_real.em";
+//            emwrite(ss.str(), tempx, sizeVol, sizeVol, sizeVol);
+//
+//            stringstream ss2;
+//            ss2 << "F2_after_fft_imag.em";
+//            emwrite(ss2.str(), tempy, sizeVol, sizeVol, sizeVol);
+//
+//            delete[] temp;
+//            delete[] tempx;
+//            delete[] tempy;
+//        }
+
+        // IFFT of ref
+//        cufftSafeCall(cufftExecC2C(ffthandle,
+//                                   (cufftComplex*)d_cplx_F1.GetDevicePtr(),
+//                                   (cufftComplex*)d_cplx_F1.GetDevicePtr(),
+//                                   CUFFT_INVERSE));
+//
+//        mul.Mul(1.0f / sizeTot, d_cplx_F1);
+
+
+
+
+
+//        {
+//            float tmp1 = 0;
+//            d_sum.CopyDeviceToHost(&tmp1, sizeof(float));
+//
+//            printf("\n RefSum: %f\n", tmp1);
+//        }
+
+
+
+//        {
+//            auto temp = new float2[sizeTot];
+//            auto tempx = new float[sizeTot];
+//            auto tempy = new float[sizeTot];
+//
+//            d_cplx_F1.CopyDeviceToHost(temp);
+//
+//            for (int i = 0; i<sizeTot; i++){
+//                tempx[i] = temp[i].x;
+//                tempy[i] = temp[i].y;
+//            }
+//
+//            stringstream ss;
+//            ss << "F1_real.em";
+//            emwrite(ss.str(), tempx, sizeVol, sizeVol, sizeVol);
+//
+//            stringstream ss2;
+//            ss2 << "F1_imag.em";
+//            emwrite(ss2.str(), tempy, sizeVol, sizeVol, sizeVol);
+//
+//            delete[] temp;
+//            delete[] tempx;
+//            delete[] tempy;
+//        }
+
+//        {
+//            auto temp = new float2[sizeTot];
+//            auto tempx = new float[sizeTot];
+//            auto tempy = new float[sizeTot];
+//
+//            d_cplx_f1sqr.CopyDeviceToHost(temp);
+//
+//            for (int i = 0; i<sizeTot; i++){
+//                tempx[i] = temp[i].x;
+//                tempy[i] = temp[i].y;
+//            }
+//
+//            stringstream ss;
+//            ss << "F1sqr_real.em";
+//            emwrite(ss.str(), tempx, sizeVol, sizeVol, sizeVol);
+//
+//            stringstream ss2;
+//            ss2 << "F1sqr_imag.em";
+//            emwrite(ss2.str(), tempy, sizeVol, sizeVol, sizeVol);
+//
+//            delete[] temp;
+//            delete[] tempx;
+//            delete[] tempy;
+//        }
+
+        // Sum of squared ref
+        //reduce.SumCplx(d_cplx_f1sqr, d_real_NCCDen1);
+
+        // FFT of ref
+//        cufftSafeCall(cufftExecC2C(ffthandle,
+//                                   (cufftComplex*)d_cplx_F1.GetDevicePtr(),
+//                                   (cufftComplex*)d_cplx_F1.GetDevicePtr(),
+//                                   CUFFT_FORWARD));
+
+        // NCCNum
+        fft.Correl(d_cplx_F1, d_cplx_NCCNum);
+
+        // NCCDen2 part 1 and 2
+        //fft.Correl(d_cplx_M1, d_cplx_F2);
+        //fft.Correl(d_cplx_M1, d_cplx_F2sqr);
+
+        // IFFT NCCNum
+        cufftSafeCall(cufftExecC2C(ffthandle,
+                                   (cufftComplex*)d_cplx_NCCNum.GetDevicePtr(),
+                                   (cufftComplex*)d_cplx_NCCNum.GetDevicePtr(),
+                                   CUFFT_INVERSE));
+        mul.Mul(1.0f / (float)sizeTot, d_cplx_NCCNum);
+
+//        // IFFT NCCDen2 part 1
+//        cufftSafeCall(cufftExecC2C(ffthandle,
+//                                   (cufftComplex*)d_cplx_F2.GetDevicePtr(),
+//                                   (cufftComplex*)d_cplx_F2.GetDevicePtr(),
+//                                   CUFFT_INVERSE));
+//        mul.Mul(1.0f / (float)sizeTot, d_cplx_F2);
+
+//        // IFFT NCCDen2 part 2
+//        cufftSafeCall(cufftExecC2C(ffthandle,
+//                                   (cufftComplex*)d_cplx_F2sqr.GetDevicePtr(),
+//                                   (cufftComplex*)d_cplx_F2sqr.GetDevicePtr(),
+//                                   CUFFT_INVERSE));
+//        mul.Mul(1.0f / (float)sizeTot, d_cplx_F2sqr);
+
+//        {
+//            auto temp = new float2[sizeTot];
+//            auto tempx = new float[sizeTot];
+//            auto tempy = new float[sizeTot];
+//
+//            d_cplx_NCCNum.CopyDeviceToHost(temp);
+//
+//            for (int i = 0; i<sizeTot; i++){
+//                tempx[i] = temp[i].x;
+//                tempy[i] = temp[i].y;
+//            }
+//
+//            stringstream ss;
+//            ss << "nccnum_real.em";
+//            emwrite(ss.str(), tempx, sizeVol, sizeVol, sizeVol);
+//
+//            stringstream ss2;
+//            ss2 << "nccnum_imag.em";
+//            emwrite(ss2.str(), tempy, sizeVol, sizeVol, sizeVol);
+//
+//            delete[] temp;
+//            delete[] tempx;
+//            delete[] tempy;
+//        }
+
+//        {
+//            auto temp = new float2[sizeTot];
+//            auto tempx = new float[sizeTot];
+//            auto tempy = new float[sizeTot];
+//
+//            d_cplx_F2sqr.CopyDeviceToHost(temp);
+//
+//            for (int i = 0; i<sizeTot; i++){
+//                tempx[i] = temp[i].x;
+//                tempy[i] = temp[i].y;
+//            }
+//
+//            stringstream ss;
+//            ss << "f2sqr_real.em";
+//            emwrite(ss.str(), tempx, sizeVol, sizeVol, sizeVol);
+//
+//            stringstream ss2;
+//            ss2 << "f2sqr_imag.em";
+//            emwrite(ss2.str(), tempy, sizeVol, sizeVol, sizeVol);
+//
+//            delete[] temp;
+//            delete[] tempx;
+//            delete[] tempy;
+//        }
+
+//        {
+//            auto temp = new float2[sizeTot];
+//            auto tempx = new float[sizeTot];
+//            auto tempy = new float[sizeTot];
+//
+//            d_cplx_F2.CopyDeviceToHost(temp);
+//
+//            for (int i = 0; i<sizeTot; i++){
+//                tempx[i] = temp[i].x;
+//                tempy[i] = temp[i].y;
+//            }
+//
+//            stringstream ss;
+//            ss << "f2_real.em";
+//            emwrite(ss.str(), tempx, sizeVol, sizeVol, sizeVol);
+//
+//            stringstream ss2;
+//            ss2 << "f2_imag.em";
+//            emwrite(ss2.str(), tempy, sizeVol, sizeVol, sizeVol);
+//
+//            delete[] temp;
+//            delete[] tempx;
+//            delete[] tempy;
+//        }
+
+//        {
+//            float tmp1 = 0;
+//            float tmp2 = 0;
+//            d_real_NCCDen1.CopyDeviceToHost(&tmp1, sizeof(float));
+//            d_real_NCCDen2.CopyDeviceToHost(&tmp2, sizeof(float));
+//
+//            printf("\n Den1: %f\n Den2: %f\n", tmp1, tmp2);
+//        }
+
+        // Normalize for mask
+        //fft.EnergyNorm(d_cplx_NCCNum, d_cplx_F2sqr, d_cplx_F2, d_real_NCCDen1, d_real_maskNorm);
+        //fft.EnergyNormPadfield(d_cplx_NCCNum, d_cplx_F2sqr, d_cplx_F2, d_real_NCCDen1, d_real_maskNorm);
+        fft.EnergyNormMaskFirst(d_cplx_NCCNum, d_real_NCCDen1, d_real_NCCDen2);
+        // FFTshift normalized cc-result
+        fft.FFTShift2(d_cplx_NCCNum, d_ffttemp);
+
+//        {
+//            auto temp = new float2[sizeTot];
+//            auto tempx = new float[sizeTot];
+//            auto tempy = new float[sizeTot];
+//
+//            d_ffttemp.CopyDeviceToHost(temp);
+//
+//            for (int i = 0; i<sizeTot; i++){
+//                tempx[i] = temp[i].x;
+//                tempy[i] = temp[i].y;
+//            }
+//
+//            stringstream ss;
+//            ss << "ccmap_real.em";
+//            emwrite(ss.str(), tempx, sizeVol, sizeVol, sizeVol);
+//
+//            stringstream ss2;
+//            ss2 << "ccmap_imag.em";
+//            emwrite(ss2.str(), tempy, sizeVol, sizeVol, sizeVol);
+//
+//            delete[] temp;
+//            delete[] tempx;
+//            delete[] tempy;
+//        }
+
+        // Apply cc-mask
+        //mul.MulVol(d_real_ccMask, d_ffttemp);
+        counter++;
+
+        if (computeCCValOnly)
+        {
+            //only read out the CC value at the old shift position and store it in d_buffer
+            d_index.CopyHostToDevice(&oldIndex);
+            cudaSafeCall(cuMemcpy(d_buffer.GetDevicePtr(), d_ffttemp.GetDevicePtr() + oldIndex, sizeof(float)));
+        }
+        else
+        {
+            //find new Maximum value and store position and value
+            cudaSafeCall(cuStreamSynchronize(stream));
+            reduce.MaxIndexMaskedCplx(d_ffttemp, d_buffer, d_real_ccMask, d_index);
+            cudaSafeCall(cuStreamSynchronize(stream));
 //            {
 //                auto tmp = new float[3];
 //                d_index.

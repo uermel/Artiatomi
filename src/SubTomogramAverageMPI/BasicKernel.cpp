@@ -25,17 +25,181 @@
 #include "CudaKernelBinaries.h"
 
 
+CudaMask::CudaMask(int aVolSize, CUstream aStream, CudaContext* context)
+        : volSize(aVolSize), stream(aStream), ctx(context), blockSize(32, 16, 1),
+          gridSize(aVolSize / 32, aVolSize / 16, aVolSize)
+{
+    // CUmodule cuMod = ctx->LoadModule("basicKernels.ptx");
+    CUmodule cuMod = ctx->LoadModulePTX(SubTomogramAverageBasicKernel, 0, false, false);
+
+    sphericalMaskCosineCplx = new CudaKernel("sphericalMaskCosineCplx", cuMod);
+    spheroidMask = new CudaKernel("spheroidMask", cuMod);
+}
+
+void CudaMask::computeRotMat(float phi, float psi, float the, float rotMat[9])
+{
+    float sinphi, sinpsi, sinthe;	/* sin of rotation angles */
+    float cosphi, cospsi, costhe;	/* cos of rotation angles */
+
+    sinphi = sin(phi * (float)M_PI/180.f);
+    sinpsi = sin(psi * (float)M_PI/180.f);
+    sinthe = sin(the * (float)M_PI/180.f);
+
+    cosphi = cos(phi * (float)M_PI/180.f);
+    cospsi = cos(psi * (float)M_PI/180.f);
+    costhe = cos(the * (float)M_PI/180.f);
+
+    /* calculation of rotation matrix */
+    // [ 0 1 2
+    //   3 4 5
+    //   6 7 8 ]
+    // This is the matrix of the actual forward rotation     // rot3dc.c from TOM
+    rotMat[0] = cosphi * cospsi - costhe * sinphi * sinpsi;  // rm00 = cospsi*cosphi-costheta*sinpsi*sinphi;
+    rotMat[1] = -cospsi * sinphi - cosphi * costhe * sinpsi; // rm01 =-cospsi*sinphi-costheta*sinpsi*cosphi;
+    rotMat[2] = sinpsi * sinthe;                             // rm02 = sintheta*sinpsi;
+    rotMat[3] = cosphi * sinpsi + cospsi * costhe * sinphi;  // rm10 = sinpsi*cosphi+costheta*cospsi*sinphi;
+    rotMat[4] = cosphi * cospsi * costhe - sinphi * sinpsi;  // rm11 =-sinpsi*sinphi+costheta*cospsi*cosphi;
+    rotMat[5] = -cospsi * sinthe;                            // rm12 =-sintheta*cospsi;
+    rotMat[6] = sinphi * sinthe;                             // rm20 = sintheta*sinphi;
+    rotMat[7] = cosphi * sinthe;                             // rm21 = sintheta*cosphi;
+    rotMat[8] = costhe;                                      // rm22 = costheta;
+}
+
+void CudaMask::multiplyRotMatrix(const float B[9], const float A[9], float out[9])
+{
+    // Implements Matrix rotation out = B * A (matlab convention)
+    out[0] = A[0]*B[0] + A[3]*B[1] + A[6]*B[2];
+    out[1] = A[1]*B[0] + A[4]*B[1] + A[7]*B[2];
+    out[2] = A[2]*B[0] + A[5]*B[1] + A[8]*B[2];
+    out[3] = A[0]*B[3] + A[3]*B[4] + A[6]*B[5];
+    out[4] = A[1]*B[3] + A[4]*B[4] + A[7]*B[5];
+    out[5] = A[2]*B[3] + A[5]*B[4] + A[8]*B[5];
+    out[6] = A[0]*B[6] + A[3]*B[7] + A[6]*B[8];
+    out[7] = A[1]*B[6] + A[4]*B[7] + A[7]*B[8];
+    out[8] = A[2]*B[6] + A[5]*B[7] + A[8]*B[8];
+
+}
+
+void CudaMask::SetOldAngles(float aPhi, float aPsi, float aTheta)
+{
+    oldphi = aPhi;
+    oldpsi = aPsi;
+    oldtheta = aTheta;
+}
+
+void CudaMask::runSphericalMaskCosineCplx(CudaDeviceVariable &d_odata,
+                                          float radius,
+                                          float taper,
+                                          float3 center)
+{
+    CUdeviceptr out_dptr = d_odata.GetDevicePtr();
+
+    void** arglist = (void**)new void*[4];
+
+    arglist[0] = &volSize;
+    arglist[1] = &out_dptr;
+    arglist[2] = &radius;
+    arglist[3] = &taper;
+    arglist[4] = &center;
+
+    cudaSafeCall(cuLaunchKernel(sphericalMaskCosineCplx->GetCUfunction(), gridSize.x, gridSize.y,
+                                gridSize.z, blockSize.x, blockSize.y, blockSize.z, 0, stream, arglist,NULL));
+
+    delete[] arglist;
+}
+
+void CudaMask::SphericalMaskCosineCplx(CudaDeviceVariable &d_odata,
+                                       float radius,
+                                       float taper,
+                                       float3 center)
+{
+    runSphericalMaskCosineCplx(d_odata, radius, taper, center);
+}
+
+void CudaMask::runSpheroidMaskKernel(CudaDeviceVariable &d_odata,
+                                     float3 radius,
+                                     float3 center,
+                                     float rotMat[9])
+{
+    CUdeviceptr out_dptr = d_odata.GetDevicePtr();
+
+    // Forward Matrix for rotation
+    // [ 0 1 2          [ rotMat0
+    //   3 4 5    --->    rotMat1
+    //   6 7 8 ]          rotMat2 ]
+    // x_rot = rotMat0.x * x + rotMat0.y * y + rotMat0.z * z
+    // y_rot = rotMat1.x * x + rotMat1.y * y + rotMat1.z * z
+    // z_rot = rotMat2.x * x + rotMat2.y * y + rotMat2.z * z
+    float3 rotMat0 = make_float3(rotMat[0], rotMat[1], rotMat[2]);
+    float3 rotMat1 = make_float3(rotMat[3], rotMat[4], rotMat[5]);
+    float3 rotMat2 = make_float3(rotMat[6], rotMat[7], rotMat[8]);
+
+    void** arglist = (void**)new void*[7];
+
+    arglist[0] = &volSize;
+    arglist[1] = &out_dptr;
+    arglist[2] = &radius;
+    arglist[3] = &center;
+    arglist[4] = &rotMat0;
+    arglist[5] = &rotMat1;
+    arglist[6] = &rotMat2;
+
+    cudaSafeCall(cuLaunchKernel(spheroidMask->GetCUfunction(), gridSize.x, gridSize.y,
+                                gridSize.z, blockSize.x, blockSize.y, blockSize.z, 0, stream, arglist,NULL));
+
+    delete[] arglist;
+}
+
+void CudaMask::SpheroidMask(CudaDeviceVariable &d_odata,
+                            float3 radius,
+                            float3 center,
+                            float phi,
+                            float psi,
+                            float the)
+{
+    float rotMat1[9];
+    float rotMat2[9];
+    float rotMat[9];
+    computeRotMat(oldphi, oldpsi, oldtheta, rotMat1);
+    computeRotMat(phi, psi, the, rotMat2);
+    multiplyRotMatrix(rotMat2, rotMat1, rotMat);
+
+    runSpheroidMaskKernel(d_odata, radius, center, rotMat);
+}
+
+
 CudaSub::CudaSub(int aVolSize, CUstream aStream, CudaContext* context)
 	: volSize(aVolSize), stream(aStream), ctx(context), blockSize(32, 16, 1), 
 	  gridSize(aVolSize / 32, aVolSize / 16, aVolSize)
 {
 	// CUmodule cuMod = ctx->LoadModule("basicKernels.ptx");
     CUmodule cuMod = ctx->LoadModulePTX(SubTomogramAverageBasicKernel, 0, false, false);
-	
+
+    set = new CudaKernel("set", cuMod);
 	add = new CudaKernel("add", cuMod);
 	sub = new CudaKernel("sub", cuMod);
 	subCplx = new CudaKernel("subCplx", cuMod);
 	subCplx2 = new CudaKernel("subCplx2", cuMod);
+    regError = new CudaKernel("regError", cuMod);
+}
+void CudaSub::runSetKernel(CudaDeviceVariable& d_odata, float val)
+{
+    CUdeviceptr out_dptr = d_odata.GetDevicePtr();
+
+    void** arglist = (void**)new void*[3];
+
+    arglist[0] = &volSize;
+    arglist[1] = &out_dptr;
+    arglist[2] = &val;
+
+    cudaSafeCall(cuLaunchKernel(set->GetCUfunction(), gridSize.x, gridSize.y,
+                                gridSize.z, blockSize.x, blockSize.y, blockSize.z, 0, stream, arglist,NULL));
+
+    delete[] arglist;
+}
+void CudaSub::Set(CudaDeviceVariable &d_odata, float val)
+{
+    runSetKernel(d_odata, val);
 }
 
 void CudaSub::runAddKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata)
@@ -54,6 +218,7 @@ void CudaSub::runAddKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_od
 
     delete[] arglist;
 }
+
 void CudaSub::Add(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata)
 {
 	runAddKernel(d_idata, d_odata);
@@ -131,8 +296,40 @@ void CudaSub::SubCplx(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, 
 	runSubCplxKernel(d_idata, d_odata, val, divVal);
 }
 
+void CudaSub::runRegError(CudaDeviceVariable &d_im1,
+                          CudaDeviceVariable &d_im2,
+                          CudaDeviceVariable &d_im1f,
+                          CudaDeviceVariable &d_im2f,
+                          CudaDeviceVariable &d_outVol)
+{
+    CUdeviceptr im1_dptr = d_im1.GetDevicePtr();
+    CUdeviceptr im2_dptr = d_im2.GetDevicePtr();
+    CUdeviceptr im1f_dptr = d_im1f.GetDevicePtr();
+    CUdeviceptr im2f_dptr = d_im2f.GetDevicePtr();
+    CUdeviceptr out_dptr = d_outVol.GetDevicePtr();
 
+    void** arglist = (void**)new void*[6];
 
+    arglist[0] = &volSize;
+    arglist[1] = &im1_dptr;
+    arglist[2] = &im2_dptr;
+    arglist[3] = &im1f_dptr;
+    arglist[4] = &im2f_dptr;
+    arglist[5] = &out_dptr;
+
+    cudaSafeCall(cuLaunchKernel(regError->GetCUfunction(), gridSize.x, gridSize.y,
+                                gridSize.z, blockSize.x, blockSize.y, blockSize.z, 0, stream, arglist,NULL));
+
+    delete[] arglist;
+}
+void CudaSub::RegError(CudaDeviceVariable &d_im1,
+                       CudaDeviceVariable &d_im2,
+                       CudaDeviceVariable &d_im1f,
+                       CudaDeviceVariable &d_im2f,
+                       CudaDeviceVariable &d_outVol)
+{
+    runRegError(d_im1, d_im2, d_im1f, d_im2f, d_outVol);
+}
 
 
 
@@ -231,25 +428,26 @@ CudaBinarize::CudaBinarize(int aVolSize, CUstream aStream, CudaContext* context)
 	binarize = new CudaKernel("binarize", cuMod);
 }
 
-void CudaBinarize::runBinarizeKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata)
+void CudaBinarize::runBinarizeKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, float thresh)
 {
 	CUdeviceptr in_dptr = d_idata.GetDevicePtr();
 	CUdeviceptr out_dptr = d_odata.GetDevicePtr();
 
-    void** arglist = (void**)new void*[3];
+    void** arglist = (void**)new void*[4];
 
     arglist[0] = &volSize;
     arglist[1] = &in_dptr;
     arglist[2] = &out_dptr;
+    arglist[3] = &thresh;
 
     cudaSafeCall(cuLaunchKernel(binarize->GetCUfunction(), gridSize.x, gridSize.y,
 		gridSize.z, blockSize.x, blockSize.y, blockSize.z, 0, stream, arglist,NULL));
 
     delete[] arglist;
 }
-void CudaBinarize::Binarize(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata)
+void CudaBinarize::Binarize(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, float thresh)
 {
-	runBinarizeKernel(d_idata, d_odata);
+	runBinarizeKernel(d_idata, d_odata, thresh);
 }
 
 
@@ -406,7 +604,10 @@ CudaFFT::CudaFFT(int aVolSize, CUstream aStream, CudaContext* context)
     splitDataset = new CudaKernel("splitDataset", cuMod);
 	energynorm = new CudaKernel("energynorm", cuMod);
     energynormPadfield = new CudaKernel("energynormPadfield", cuMod);
+    energynormMaskFirst = new CudaKernel("energynormMaskFirst", cuMod);
     particleWiener = new CudaKernel("particleWiener", cuMod);
+    butter = new CudaKernel("butter", cuMod);
+    butterfilt = new CudaKernel("butterfilt", cuMod);
 }
 
 void CudaFFT::runConvKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata)
@@ -639,6 +840,33 @@ void CudaFFT::EnergyNormPadfield(CudaDeviceVariable& d_NCCNum,
     runEnergyNormPadfieldKernel(d_NCCNum, d_NCCDen2_f2sqr, d_NCCDen2_f2, d_NCCDen1, d_maskNorm);
 }
 
+void CudaFFT::runEnergyNormMaskFirstKernel(CudaDeviceVariable& d_NCCNum,
+                                           CudaDeviceVariable& d_NCCDen1,
+                                           CudaDeviceVariable& d_NCCDen2)
+{
+    CUdeviceptr NCCNum_dptr = d_NCCNum.GetDevicePtr();
+    CUdeviceptr NCCDen1_dptr = d_NCCDen1.GetDevicePtr();
+    CUdeviceptr NCCDen2_dptr = d_NCCDen2.GetDevicePtr();
+
+    void** arglist = (void**)new void*[4];
+
+    arglist[0] = &volSize;
+    arglist[1] = &NCCNum_dptr;
+    arglist[2] = &NCCDen1_dptr;
+    arglist[3] = &NCCDen2_dptr;
+
+    cudaSafeCall(cuLaunchKernel(energynormMaskFirst->GetCUfunction(), gridSize.x, gridSize.y,
+                                gridSize.z, blockSize.x, blockSize.y, blockSize.z, 0, stream, arglist,NULL));
+
+    delete[] arglist;
+}
+void CudaFFT::EnergyNormMaskFirst(CudaDeviceVariable& d_NCCNum,
+                                 CudaDeviceVariable& d_NCCDen1,
+                                 CudaDeviceVariable& d_NCCDen2)
+{
+    runEnergyNormMaskFirstKernel(d_NCCNum, d_NCCDen1, d_NCCDen2);
+}
+
 void CudaFFT::runParticleWienerKernel(CudaDeviceVariable& d_particle,
                                       CudaDeviceVariable& d_wedge_ctfsqr,
                                       CudaDeviceVariable& d_wedge_coverage,
@@ -667,6 +895,62 @@ void CudaFFT::ParticleWiener(CudaDeviceVariable& d_particle,
                              float wienerConst)
 {
     runParticleWienerKernel(d_particle, d_wedge_ctfsqr, d_wedge_coverage, wienerConst);
+}
+
+void CudaFFT::runButterFilter(CudaDeviceVariable &d_volIn,
+                              CudaDeviceVariable &d_volOut,
+                              int order,
+                              float cutoff)
+{
+    CUdeviceptr in_dptr = d_volIn.GetDevicePtr();
+    CUdeviceptr out_dptr = d_volOut.GetDevicePtr();
+
+    void** arglist = (void**)new void*[5];
+
+    arglist[0] = &volSize;
+    arglist[1] = &in_dptr;
+    arglist[2] = &out_dptr;
+    arglist[3] = &order;
+    arglist[4] = &cutoff;
+
+    cudaSafeCall(cuLaunchKernel(butter->GetCUfunction(), gridSize.x, gridSize.y,
+                                gridSize.z, blockSize.x, blockSize.y, blockSize.z, 0, stream, arglist,NULL));
+
+    delete[] arglist;
+}
+
+void CudaFFT::ButterFilter(CudaDeviceVariable &d_volIn,
+                           CudaDeviceVariable& d_volOut,
+                           int order,
+                           float cutoff)
+{
+    runButterFilter(d_volIn, d_volOut, order, cutoff);
+}
+
+void CudaFFT::runButterTest(CudaDeviceVariable &d_volOut,
+                              int order,
+                              float cutoff)
+{
+    CUdeviceptr out_dptr = d_volOut.GetDevicePtr();
+
+    void** arglist = (void**)new void*[4];
+
+    arglist[0] = &volSize;
+    arglist[1] = &out_dptr;
+    arglist[2] = &order;
+    arglist[3] = &cutoff;
+
+    cudaSafeCall(cuLaunchKernel(butterfilt->GetCUfunction(), gridSize.x, gridSize.y,
+                                gridSize.z, blockSize.x, blockSize.y, blockSize.z, 0, stream, arglist,NULL));
+
+    delete[] arglist;
+}
+
+void CudaFFT::ButterTest(CudaDeviceVariable& d_volOut,
+                         int order,
+                         float cutoff)
+{
+    runButterTest(d_volOut, order, cutoff);
 }
 
 void CudaFFT::runSplitDataset(CudaDeviceVariable& d_volIn, CudaDeviceVariable& d_volOutA, CudaDeviceVariable& d_volOutB)
@@ -960,4 +1244,97 @@ void CudaRadial::runDivKernel(CudaDeviceVariable &d_ampSum, CudaDeviceVariable &
                                 NULL));
 
     delete[] arglist;
+}
+
+CudaCmp::CudaCmp(int aVolSize, CUstream aStream, CudaContext* context)
+        : volSize(aVolSize), stream(aStream), ctx(context), blockSize(32, 16, 1),
+          gridSize(aVolSize / 32, aVolSize / 16, aVolSize)
+{
+    // CUmodule cuMod = ctx->LoadModule("basicKernels.ptx");
+    CUmodule cuMod = ctx->LoadModulePTX(SubTomogramAverageBasicKernel, 0, false, false);
+
+    minIdx = new CudaKernel("minIdx", cuMod);
+    selIdx = new CudaKernel("selIdx", cuMod);
+}
+
+void CudaCmp::runMinIdxKernel(CudaDeviceVariable& d_im,
+                              CudaDeviceVariable& d_min,
+                              CudaDeviceVariable& d_minIdx1,
+                              CudaDeviceVariable& d_minIdx2,
+                              int idx1,
+                              int idx2)
+{
+    CUdeviceptr im_dptr = d_im.GetDevicePtr();
+    CUdeviceptr min_dptr = d_min.GetDevicePtr();
+    CUdeviceptr minIdx1_dptr = d_minIdx1.GetDevicePtr();
+    CUdeviceptr minIdx2_dptr = d_minIdx2.GetDevicePtr();
+
+
+    void** arglist = (void**)new void*[7];
+
+    arglist[0] = &volSize;
+    arglist[1] = &im_dptr;
+    arglist[2] = &min_dptr;
+    arglist[3] = &minIdx1_dptr;
+    arglist[4] = &minIdx2_dptr;
+    arglist[5] = &idx1;
+    arglist[6] = &idx2;
+
+    cudaSafeCall(cuLaunchKernel(minIdx->GetCUfunction(),
+                                gridSize.x,
+                                gridSize.y,
+                                gridSize.z,
+                                blockSize.x,
+                                blockSize.y,
+                                blockSize.z,
+                                0, stream, arglist,NULL));
+
+    delete[] arglist;
+}
+
+void CudaCmp::MinIdx(CudaDeviceVariable& d_im,
+                     CudaDeviceVariable& d_min,
+                     CudaDeviceVariable& d_minIdx1,
+                     CudaDeviceVariable& d_minIdx2,
+                     int idx1,
+                     int idx2)
+{
+    runMinIdxKernel(d_im, d_min, d_minIdx1, d_minIdx2, idx1, idx2);
+}
+
+void CudaCmp::runSelIdxKernel(CudaDeviceVariable &d_im,
+                              CudaDeviceVariable &d_minIdx,
+                              CudaDeviceVariable &d_outVol,
+                              int idx)
+{
+    CUdeviceptr im_dptr = d_im.GetDevicePtr();
+    CUdeviceptr min_dptr = d_minIdx.GetDevicePtr();
+    CUdeviceptr out_dptr = d_outVol.GetDevicePtr();
+
+    void** arglist = (void**)new void*[5];
+
+    arglist[0] = &volSize;
+    arglist[1] = &im_dptr;
+    arglist[2] = &min_dptr;
+    arglist[3] = &out_dptr;
+    arglist[4] = &idx;
+
+    cudaSafeCall(cuLaunchKernel(selIdx->GetCUfunction(),
+                                gridSize.x,
+                                gridSize.y,
+                                gridSize.z,
+                                blockSize.x,
+                                blockSize.y,
+                                blockSize.z,
+                                0, stream, arglist,NULL));
+
+    delete[] arglist;
+}
+
+void CudaCmp::SelIdx(CudaDeviceVariable &d_im,
+                     CudaDeviceVariable &d_minIdx,
+                     CudaDeviceVariable &d_outVol,
+                     int idx)
+{
+    runSelIdxKernel(d_im, d_minIdx, d_outVol, idx);
 }

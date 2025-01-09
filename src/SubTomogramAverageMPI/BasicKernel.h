@@ -33,13 +33,46 @@
 
 using namespace Cuda;
 
+class CudaMask
+{
+private:
+    CudaKernel* sphericalMaskCosineCplx;
+    CudaKernel* spheroidMask;
+
+    CudaContext* ctx;
+    int volSize;
+    dim3 blockSize;
+    dim3 gridSize;
+
+    float oldphi = 0;
+    float oldpsi = 0;
+    float oldtheta = 0;
+
+    CUstream stream;
+
+    void runSphericalMaskCosineCplx(CudaDeviceVariable& d_odata, float radius, float taper, float3 center);
+    void runSpheroidMaskKernel(CudaDeviceVariable& d_odata, float3 radius, float3 center, float rotMat[9]);
+
+public:
+    CudaMask(int aVolSize, CUstream aStream, CudaContext* context);
+
+    void SphericalMaskCosineCplx(CudaDeviceVariable& d_odata, float radius, float taper, float3 center);
+    void SpheroidMask(CudaDeviceVariable& d_odata, float3 radius, float3 center, float phi, float psi, float the);
+
+    void SetOldAngles(float aPhi, float aPsi, float aTheta);
+    void computeRotMat(float phi, float psi, float theta, float rotMat[9]);
+    void multiplyRotMatrix(const float m1[9], const float m2[9], float out[9]);
+};
+
 class CudaSub
 {
 private:
+    CudaKernel* set;
 	CudaKernel* sub;
 	CudaKernel* subCplx;
 	CudaKernel* subCplx2;
 	CudaKernel* add;
+    CudaKernel* regError;
 
 	CudaContext* ctx;
 	int volSize;
@@ -48,18 +81,31 @@ private:
 
 	CUstream stream;
 
+    void runSetKernel(CudaDeviceVariable& d_odata, float val);
 	void runAddKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
 	void runSubKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, float val);
 	void runSubCplxKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, CudaDeviceVariable& val, float divVal);
 	void runSubCplxKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, CudaDeviceVariable& val, CudaDeviceVariable& divVal);
+    void runRegError(CudaDeviceVariable& d_im1,
+                     CudaDeviceVariable& d_im2,
+                     CudaDeviceVariable& d_im1f,
+                     CudaDeviceVariable& d_im2f,
+                     CudaDeviceVariable& d_outVol);
 
 public:
 	CudaSub(int aVolSize, CUstream aStream, CudaContext* context);
 
+    void Set(CudaDeviceVariable& d_odata, float val);
 	void Add(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
 	void Sub(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, float val);
 	void SubCplx(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, CudaDeviceVariable& val, float divVal);
 	void SubCplx(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, CudaDeviceVariable& val, CudaDeviceVariable& divVal);
+
+    void RegError(CudaDeviceVariable& d_im1,
+                  CudaDeviceVariable& d_im2,
+                  CudaDeviceVariable& d_im1f,
+                  CudaDeviceVariable& d_im2f,
+                  CudaDeviceVariable& d_outVol);
 };
 
 class CudaMakeCplxWithSub
@@ -100,12 +146,12 @@ private:
 
 	CUstream stream;
 
-	void runBinarizeKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
+	void runBinarizeKernel(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, float thresh);
 
 public:
 	CudaBinarize(int aVolSize, CUstream aStream, CudaContext* context);
 
-	void Binarize(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata);
+	void Binarize(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata, float thresh);
 };
 
 class CudaWedgeNorm
@@ -199,7 +245,10 @@ private:
 	CudaKernel* splitDataset;
 	CudaKernel* energynorm;
     CudaKernel* energynormPadfield;
+    CudaKernel* energynormMaskFirst;
     CudaKernel* particleWiener;
+    CudaKernel* butter;
+    CudaKernel* butterfilt;
 
 	CudaContext* ctx;
 	int volSize;
@@ -225,10 +274,23 @@ private:
                                      CudaDeviceVariable& d_NCCDen1,
                                      CudaDeviceVariable& d_maskNorm);
 
+    void runEnergyNormMaskFirstKernel(CudaDeviceVariable& d_NCCNum,
+                                      CudaDeviceVariable& d_NCCDen1,
+                                      CudaDeviceVariable& d_NCCDen2);
+
     void runParticleWienerKernel(CudaDeviceVariable& d_particle,
                                  CudaDeviceVariable& d_wedge_ctfsqr,
                                  CudaDeviceVariable& d_wedge_coverage,
                                  float wienerConst);
+
+    void runButterFilter(CudaDeviceVariable& d_volIn,
+                         CudaDeviceVariable& d_volOut,
+                         int order,
+                         float cutoff);
+
+    void runButterTest(CudaDeviceVariable& d_volOut,
+                    int order,
+                    float cutoff);
 
 public:
 	CudaFFT(int aVolSize, CUstream aStream, CudaContext* context);
@@ -250,11 +312,23 @@ public:
                             CudaDeviceVariable& d_NCCDen1,
                             CudaDeviceVariable& d_maskNorm);
 
+    void EnergyNormMaskFirst(CudaDeviceVariable& d_NCCNum,
+                             CudaDeviceVariable& d_NCCDen1,
+                             CudaDeviceVariable& d_NCCDen2);
+
     void ParticleWiener(CudaDeviceVariable& d_particle,
                         CudaDeviceVariable& d_wedge_ctfsqr,
                         CudaDeviceVariable& d_wedge_coverage,
                         float wienerConst);
 
+    void ButterFilter(CudaDeviceVariable& d_volIn,
+                      CudaDeviceVariable& d_volOut,
+                      int order,
+                      float cutoff);
+
+    void ButterTest(CudaDeviceVariable& d_volOut,
+                    int order,
+                    float cutoff);
 };
 
 class CudaMax
@@ -310,6 +384,48 @@ public:
     void Line2Sphere(CudaDeviceVariable& d_outVol);
     void Div(CudaDeviceVariable& d_ampSum, CudaDeviceVariable& d_nShell, CudaDeviceVariable& d_SNR);
 };
+
+class CudaCmp
+{
+private:
+    CudaKernel* minIdx;
+    CudaKernel* selIdx;
+
+    CudaContext* ctx;
+    int volSize;
+    dim3 blockSize;
+    dim3 gridSize;
+
+    CUstream stream;
+
+    void runMinIdxKernel(CudaDeviceVariable& d_im,
+                         CudaDeviceVariable& d_min,
+                         CudaDeviceVariable& d_minIdx1,
+                         CudaDeviceVariable& d_minIdx2,
+                         int idx1,
+                         int idx2);
+
+    void runSelIdxKernel(CudaDeviceVariable& d_im,
+                         CudaDeviceVariable& d_minIdx,
+                         CudaDeviceVariable& d_outVol,
+                         int idx);
+
+public:
+    CudaCmp(int aVolSize, CUstream aStream, CudaContext* context);
+
+    void MinIdx(CudaDeviceVariable& d_im,
+                CudaDeviceVariable& d_min,
+                CudaDeviceVariable& d_minIdx1,
+                CudaDeviceVariable& d_minIdx2,
+                int idx1,
+                int idx2);
+
+    void SelIdx(CudaDeviceVariable& d_im,
+                CudaDeviceVariable& d_minIdx,
+                CudaDeviceVariable& d_outVol,
+                int idx);
+};
+
 
 
 

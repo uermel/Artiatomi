@@ -7,5 +7,6 @@
 
 #include "cuda_kernels/basicKernels.cu.h"
 #include "cuda_kernels/kernel.cu.h"
+#include "cuda_kernels/splines.cu.h"
 
 #endif

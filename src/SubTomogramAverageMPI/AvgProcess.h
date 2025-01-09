@@ -133,6 +133,7 @@ private:
 	CudaDeviceVariable d_cplx_F1;
 	CudaDeviceVariable d_cplx_f1sqr;
 	CudaDeviceVariable d_real_NCCDen1;
+    CudaDeviceVariable d_real_NCCDen2;
 
 	cufftHandle ffthandle;
 
@@ -185,6 +186,20 @@ public:
 							  float3 oldShift,
 							  bool computeCCValOnly,
 							  int oldIndex);
+
+    maxVals_t executeMaskFirst(float* _data,
+                              float* coverageWedge,
+                              float* overlapWedge,
+                              float* filter,
+                              float oldphi,
+                              float oldpsi,
+                              float oldtheta,
+                              float rDown,
+                              float rUp,
+                              float smooth,
+                              float3 oldShift,
+                              bool computeCCValOnly,
+                              int oldIndex);
 
 	maxVals_t executePhaseCorrelation(float* _data,
                                       float* wedge,

@@ -37,15 +37,7 @@ struct SharedMemory
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/*
-	This version adds multiple elements per thread sequentially.  This reduces the overall
-	cost of the algorithm while keeping the work complexity O(n) and the step complexity O(log n).
-	(Brent's Theorem optimization)
 
-	Note, this kernel needs a minimum of 64*sizeof(T) bytes of shared memory.
-	In other words if blockSize <= 32, allocate 64*sizeof(T) bytes.
-	If blockSize > 32, allocate blockSize*sizeof(T) bytes.
-*/
 template <unsigned int blockSize>
 __device__ void
 reduce(float *g_idata, float *g_odata, unsigned int n)
@@ -173,6 +165,138 @@ extern "C" __global__ void
 reduce_2(float *g_idata, float *g_odata, unsigned int n)   {reduce<  2>(g_idata, g_odata, n);}
 extern "C" __global__ void
 reduce_1(float *g_idata, float *g_odata, unsigned int n)   {reduce<  1>(g_idata, g_odata, n);}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+template <unsigned int blockSize>
+__device__ void
+maskedReduce(float *g_idata, float *g_mask, float *g_odata, unsigned int n)
+{
+    float *sdata = SharedMemory<float>();
+
+    // perform first level of reduction,
+    // reading from global memory, writing to shared memory
+    unsigned int tid = threadIdx.x;
+    unsigned int i = blockIdx.x*blockSize*2 + threadIdx.x;
+    unsigned int gridSize = blockSize*2*gridDim.x;
+
+    float mySum = 0;
+
+    // we reduce multiple elements per thread.  The number is determined by the
+    // number of active thread blocks (via gridDim).  More blocks will result
+    // in a larger gridSize and therefore fewer elements per thread
+    while (i < n)
+    {
+        mySum += g_idata[i] * g_mask[i];
+
+        // ensure we don't read out of bounds -- this is optimized away for powerOf2 sized arrays
+        mySum += g_idata[i+blockSize] * g_mask[i+blockSize];
+
+        i += gridSize;
+    }
+
+    // each thread puts its local sum into shared memory
+    sdata[tid] = mySum;
+    __syncthreads();
+
+
+    // do reduction in shared mem
+    if (blockSize >= 512)
+    {
+        if (tid < 256)
+        {
+            sdata[tid] = mySum = mySum + sdata[tid + 256];
+        }
+
+        __syncthreads();
+    }
+
+    if (blockSize >= 256)
+    {
+        if (tid < 128)
+        {
+            sdata[tid] = mySum = mySum + sdata[tid + 128];
+        }
+
+        __syncthreads();
+    }
+
+    if (blockSize >= 128)
+    {
+        if (tid <  64)
+        {
+            sdata[tid] = mySum = mySum + sdata[tid +  64];
+        }
+
+        __syncthreads();
+    }
+
+    if (tid < 32)
+    {
+        // now that we are using warp-synchronous programming (below)
+        // we need to declare our shared memory volatile so that the compiler
+        // doesn't reorder stores to it and induce incorrect behavior.
+        volatile float *smem = sdata;
+
+        if (blockSize >=  64)
+        {
+            smem[tid] = mySum = mySum + smem[tid + 32];
+        }
+
+        if (blockSize >=  32)
+        {
+            smem[tid] = mySum = mySum + smem[tid + 16];
+        }
+
+        if (blockSize >=  16)
+        {
+            smem[tid] = mySum = mySum + smem[tid +  8];
+        }
+
+        if (blockSize >=   8)
+        {
+            smem[tid] = mySum = mySum + smem[tid +  4];
+        }
+
+        if (blockSize >=   4)
+        {
+            smem[tid] = mySum = mySum + smem[tid +  2];
+        }
+
+        if (blockSize >=   2)
+        {
+            smem[tid] = mySum = mySum + smem[tid +  1];
+        }
+    }
+
+    // write result for this block to global mem
+    if (tid == 0)
+        g_odata[blockIdx.x] = sdata[0];
+}
+
+// Declaration of templated functions
+extern "C" __global__ void
+maskedReduce_512(float *g_idata, float *g_mask, float *g_odata, unsigned int n) {maskedReduce<512>(g_idata, g_mask, g_odata, n);}
+extern "C" __global__ void
+maskedReduce_256(float *g_idata, float *g_mask, float *g_odata, unsigned int n) {maskedReduce<256>(g_idata, g_mask, g_odata, n);}
+extern "C" __global__ void
+maskedReduce_128(float *g_idata, float *g_mask, float *g_odata, unsigned int n) {maskedReduce<128>(g_idata, g_mask, g_odata, n);}
+extern "C" __global__ void
+maskedReduce_64(float *g_idata, float *g_mask, float *g_odata, unsigned int n)  {maskedReduce< 64>(g_idata, g_mask, g_odata, n);}
+extern "C" __global__ void
+maskedReduce_32(float *g_idata, float *g_mask, float *g_odata, unsigned int n)  {maskedReduce< 32>(g_idata, g_mask, g_odata, n);}
+extern "C" __global__ void
+maskedReduce_16(float *g_idata, float *g_mask, float *g_odata, unsigned int n)  {maskedReduce< 16>(g_idata, g_mask, g_odata, n);}
+extern "C" __global__ void
+maskedReduce_8(float *g_idata, float *g_mask, float *g_odata, unsigned int n)   {maskedReduce<  8>(g_idata, g_mask, g_odata, n);}
+extern "C" __global__ void
+maskedReduce_4(float *g_idata, float *g_mask, float *g_odata, unsigned int n)   {maskedReduce<  4>(g_idata, g_mask, g_odata, n);}
+extern "C" __global__ void
+maskedReduce_2(float *g_idata, float *g_mask, float *g_odata, unsigned int n)   {maskedReduce<  2>(g_idata, g_mask, g_odata, n);}
+extern "C" __global__ void
+maskedReduce_1(float *g_idata, float *g_mask, float *g_odata, unsigned int n)   {maskedReduce<  1>(g_idata, g_mask, g_odata, n);}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -567,6 +691,138 @@ reduceSqrCplx_2(float2 *g_idata, float *g_odata, unsigned int n)   {reduceSqrCpl
 extern "C" __global__ void
 reduceSqrCplx_1(float2 *g_idata, float *g_odata, unsigned int n)   {reduceSqrCplx<  1>(g_idata, g_odata, n);}
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <unsigned int blockSize>
+__device__ void
+reduceAbsSqrCplx(float2 *g_idata, float *g_odata, unsigned int n)
+{
+    float *sdata = SharedMemory<float>();
+
+    // perform first level of reduction,
+    // reading from global memory, writing to shared memory
+    unsigned int tid = threadIdx.x;
+    unsigned int i = blockIdx.x*blockSize*2 + threadIdx.x;
+    unsigned int gridSize = blockSize*2*gridDim.x;
+
+    float mySum = 0;
+
+    // we reduce multiple elements per thread.  The number is determined by the
+    // number of active thread blocks (via gridDim).  More blocks will result
+    // in a larger gridSize and therefore fewer elements per thread
+    while (i < n)
+    {
+        float val = sqrtf(g_idata[i].x * g_idata[i].x + g_idata[i].y * g_idata[i].y);
+        mySum += val * val;
+
+        // ensure we don't read out of bounds -- this is optimized away for powerOf2 sized arrays
+        val = sqrtf(g_idata[i+blockSize].x * g_idata[i+blockSize].x + g_idata[i+blockSize].y * g_idata[i+blockSize].y);
+        mySum += val * val;
+
+        i += gridSize;
+    }
+
+    // each thread puts its local sum into shared memory
+    sdata[tid] = mySum;
+    __syncthreads();
+
+
+    // do reduction in shared mem
+    if (blockSize >= 512)
+    {
+        if (tid < 256)
+        {
+            sdata[tid] = mySum = mySum + sdata[tid + 256];
+        }
+
+        __syncthreads();
+    }
+
+    if (blockSize >= 256)
+    {
+        if (tid < 128)
+        {
+            sdata[tid] = mySum = mySum + sdata[tid + 128];
+        }
+
+        __syncthreads();
+    }
+
+    if (blockSize >= 128)
+    {
+        if (tid <  64)
+        {
+            sdata[tid] = mySum = mySum + sdata[tid +  64];
+        }
+
+        __syncthreads();
+    }
+
+    if (tid < 32)
+    {
+        // now that we are using warp-synchronous programming (below)
+        // we need to declare our shared memory volatile so that the compiler
+        // doesn't reorder stores to it and induce incorrect behavior.
+        volatile float *smem = sdata;
+
+        if (blockSize >=  64)
+        {
+            smem[tid] = mySum = mySum + smem[tid + 32];
+        }
+
+        if (blockSize >=  32)
+        {
+            smem[tid] = mySum = mySum + smem[tid + 16];
+        }
+
+        if (blockSize >=  16)
+        {
+            smem[tid] = mySum = mySum + smem[tid +  8];
+        }
+
+        if (blockSize >=   8)
+        {
+            smem[tid] = mySum = mySum + smem[tid +  4];
+        }
+
+        if (blockSize >=   4)
+        {
+            smem[tid] = mySum = mySum + smem[tid +  2];
+        }
+
+        if (blockSize >=   2)
+        {
+            smem[tid] = mySum = mySum + smem[tid +  1];
+        }
+    }
+
+    // write result for this block to global mem
+    if (tid == 0)
+        g_odata[blockIdx.x] = sdata[0];
+}
+
+// Declaration of templated functions
+extern "C" __global__ void
+reduceAbsSqrCplx_512(float2 *g_idata, float *g_odata, unsigned int n) {reduceAbsSqrCplx<512>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceAbsSqrCplx_256(float2 *g_idata, float *g_odata, unsigned int n) {reduceAbsSqrCplx<256>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceAbsSqrCplx_128(float2 *g_idata, float *g_odata, unsigned int n) {reduceAbsSqrCplx<128>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceAbsSqrCplx_64(float2 *g_idata, float *g_odata, unsigned int n)  {reduceAbsSqrCplx< 64>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceAbsSqrCplx_32(float2 *g_idata, float *g_odata, unsigned int n)  {reduceAbsSqrCplx< 32>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceAbsSqrCplx_16(float2 *g_idata, float *g_odata, unsigned int n)  {reduceAbsSqrCplx< 16>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceAbsSqrCplx_8(float2 *g_idata, float *g_odata, unsigned int n)   {reduceAbsSqrCplx<  8>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceAbsSqrCplx_4(float2 *g_idata, float *g_odata, unsigned int n)   {reduceAbsSqrCplx<  4>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceAbsSqrCplx_2(float2 *g_idata, float *g_odata, unsigned int n)   {reduceAbsSqrCplx<  2>(g_idata, g_odata, n);}
+extern "C" __global__ void
+reduceAbsSqrCplx_1(float2 *g_idata, float *g_odata, unsigned int n)   {reduceAbsSqrCplx<  1>(g_idata, g_odata, n);}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

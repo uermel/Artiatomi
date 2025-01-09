@@ -41,6 +41,16 @@ CudaReducer::CudaReducer(int aVoxelCount, CUstream aStream, CudaContext* context
 	sum2   = new CudaKernel("reduce_2",   cuMod);
 	sum1   = new CudaKernel("reduce_1",   cuMod);
 
+    maskedSum512 = new CudaKernel("maskedReduce_512", cuMod);
+    maskedSum256 = new CudaKernel("maskedReduce_256", cuMod);
+    maskedSum128 = new CudaKernel("maskedReduce_128", cuMod);
+    maskedSum64  = new CudaKernel("maskedReduce_64",  cuMod);
+    maskedSum32  = new CudaKernel("maskedReduce_32",  cuMod);
+    maskedSum16  = new CudaKernel("maskedReduce_16",  cuMod);
+    maskedSum8   = new CudaKernel("maskedReduce_8",   cuMod);
+    maskedSum4   = new CudaKernel("maskedReduce_4",   cuMod);
+    maskedSum2   = new CudaKernel("maskedReduce_2",   cuMod);
+    maskedSum1   = new CudaKernel("maskedReduce_1",   cuMod);
 		
 	sumCplx512 = new CudaKernel("reduceCplx_512", cuMod);
 	sumCplx256 = new CudaKernel("reduceCplx_256", cuMod);
@@ -74,6 +84,17 @@ CudaReducer::CudaReducer(int aVoxelCount, CUstream aStream, CudaContext* context
 	sumSqrCplx4   = new CudaKernel("reduceSqrCplx_4",   cuMod);
 	sumSqrCplx2   = new CudaKernel("reduceSqrCplx_2",   cuMod);
 	sumSqrCplx1   = new CudaKernel("reduceSqrCplx_1",   cuMod);
+
+    sumAbsSqrCplx512 = new CudaKernel("reduceAbsSqrCplx_512", cuMod);
+    sumAbsSqrCplx256 = new CudaKernel("reduceAbsSqrCplx_256", cuMod);
+    sumAbsSqrCplx128 = new CudaKernel("reduceAbsSqrCplx_128", cuMod);
+    sumAbsSqrCplx64  = new CudaKernel("reduceAbsSqrCplx_64",  cuMod);
+    sumAbsSqrCplx32  = new CudaKernel("reduceAbsSqrCplx_32",  cuMod);
+    sumAbsSqrCplx16  = new CudaKernel("reduceAbsSqrCplx_16",  cuMod);
+    sumAbsSqrCplx8   = new CudaKernel("reduceAbsSqrCplx_8",   cuMod);
+    sumAbsSqrCplx4   = new CudaKernel("reduceAbsSqrCplx_4",   cuMod);
+    sumAbsSqrCplx2   = new CudaKernel("reduceAbsSqrCplx_2",   cuMod);
+    sumAbsSqrCplx1   = new CudaKernel("reduceAbsSqrCplx_1",   cuMod);
 
     maxIndex512 = new CudaKernel("maxIndex_512", cuMod);
     maxIndex256 = new CudaKernel("maxIndex_256", cuMod);
@@ -379,6 +400,56 @@ void CudaReducer::Sum(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata)
 
 }
 
+void CudaReducer::MaskedSum(CudaDeviceVariable& d_idata, CudaDeviceVariable &d_mask, CudaDeviceVariable& d_odata)
+{
+    int blocks;
+    int threads;
+    float gpu_result = 0;
+    bool needReadBack = true;
+
+    gpu_result = 0;
+
+
+    getNumBlocksAndThreads(voxelCount, blocks, threads);
+    // execute the kernel
+    runMaskedSumKernel(voxelCount, blocks, threads, d_idata, d_mask, d_odata);
+
+    // sum partial block sums on GPU
+    int s=blocks;
+
+    while (s > 1)
+    {
+        int threads = 0, blocks = 0;
+        getNumBlocksAndThreads(s, blocks, threads);
+
+        runSumKernel(s, blocks, threads, d_odata, d_odata);
+        s = (s + (threads*2-1)) / (threads*2);
+    }
+
+    if (s > 1)
+    {
+        printf("Oops, not a power of 2?\n");
+        //      // copy result from device to host
+        //d_odata.CopyDeviceToHost(h_odata, s * sizeof(float));
+
+        //      for (int i=0; i < s; i++)
+        //      {
+        //          gpu_result += h_odata[i];
+        //      }
+
+        //      needReadBack = false;
+    }
+
+
+
+    if (needReadBack)
+    {
+        // copy final sum from device to host
+        //d_odata.CopyDeviceToHost(&gpu_result, sizeof(float));
+    }
+
+}
+
 void CudaReducer::SumSqrCplx(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata)
 {
 	int blocks;
@@ -428,6 +499,57 @@ void CudaReducer::SumSqrCplx(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_
     }
 
 }
+
+void CudaReducer::SumAbsSqrCplx(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata)
+{
+    int blocks;
+    int threads;
+    float gpu_result = 0;
+    bool needReadBack = true;
+
+    gpu_result = 0;
+
+
+    getNumBlocksAndThreads(voxelCount, blocks, threads);
+    // execute the kernel
+    runSumAbsSqrCplxKernel(voxelCount, blocks, threads, d_idata, d_odata);
+
+    // sum partial block sums on GPU
+    int s=blocks;
+
+    while (s > 1)
+    {
+        int threads = 0, blocks = 0;
+        getNumBlocksAndThreads(s, blocks, threads);
+
+        runSumKernel(s, blocks, threads, d_odata, d_odata);
+        s = (s + (threads*2-1)) / (threads*2);
+    }
+
+    if (s > 1)
+    {
+        printf("Oops, not a power of 2?\n");
+        //      // copy result from device to host
+        //d_odata.CopyDeviceToHost(h_odata, s * sizeof(float));
+
+        //      for (int i=0; i < s; i++)
+        //      {
+        //          gpu_result += h_odata[i];
+        //      }
+
+        //      needReadBack = false;
+    }
+
+
+
+    if (needReadBack)
+    {
+        // copy final sum from device to host
+        //d_odata.CopyDeviceToHost(&gpu_result, sizeof(float));
+    }
+
+}
+
 
 void CudaReducer::SumCplx(CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata)
 {
@@ -822,6 +944,65 @@ void CudaReducer::runSumKernel(int size, int blocks, int threads, CudaDeviceVari
     delete[] arglist;
 }
 
+void CudaReducer::runMaskedSumKernel(int size, int blocks, int threads, CudaDeviceVariable& d_idata, CudaDeviceVariable& d_mask, CudaDeviceVariable& d_odata)
+{
+    CudaKernel* kernel;
+    dim3 dimBlock(threads, 1, 1);
+    dim3 dimGrid(blocks, 1, 1);
+
+    // when there is only one warp per block, we need to allocate two warps
+    // worth of shared memory so that we don't index shared memory out of bounds
+    int smemSize = (threads <= 32) ? 2 * threads * sizeof(float) : threads * sizeof(float);
+
+    switch (threads)
+    {
+        case 512:
+            kernel = maskedSum512; break;
+        case 256:
+            kernel = maskedSum256; break;
+        case 128:
+            kernel = maskedSum128; break;
+        case 64:
+            kernel = maskedSum64; break;
+        case 32:
+            kernel = maskedSum32; break;
+        case 16:
+            kernel = maskedSum16; break;
+        case  8:
+            kernel = maskedSum8; break;
+        case  4:
+            kernel = maskedSum4; break;
+        case  2:
+            kernel = maskedSum2; break;
+        case  1:
+            kernel = maskedSum1; break;
+    }
+
+    CUdeviceptr in_dptr = d_idata.GetDevicePtr();
+    CUdeviceptr mask_dptr = d_mask.GetDevicePtr();
+    CUdeviceptr out_dptr = d_odata.GetDevicePtr();
+    int n = size;
+
+    void** arglist = (void**)new void*[4];
+
+    arglist[0] = &in_dptr;
+    arglist[1] = &mask_dptr;
+    arglist[2] = &out_dptr;
+    arglist[3] = &n;
+
+    cudaSafeCall(cuLaunchKernel(kernel->GetCUfunction(),
+                                dimGrid.x,
+                                dimGrid.y,
+                                dimGrid.z,
+                                dimBlock.x,
+                                dimBlock.y,
+                                dimBlock.z,
+                                smemSize, stream, arglist,NULL));
+
+    delete[] arglist;
+}
+
+
 void CudaReducer::runSumSqrCplxKernel(int size, int blocks, int threads, CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata)
 {
 	CudaKernel* kernel;
@@ -878,6 +1059,73 @@ void CudaReducer::runSumSqrCplxKernel(int size, int blocks, int threads, CudaDev
     //cudaSafeCall(cuEventRecord(eventStart, stream));
     cudaSafeCall(cuLaunchKernel(kernel->GetCUfunction(), dimGrid.x, dimGrid.y,
 		dimGrid.z, dimBlock.x, dimBlock.y, dimBlock.z, smemSize, stream, arglist,NULL));
+
+    //cudaSafeCall(cuCtxSynchronize());
+
+    //cudaSafeCall(cuStreamQuery(stream));
+    //cudaSafeCall(cuEventRecord(eventEnd, stream));
+    //cudaSafeCall(cuEventSynchronize(eventEnd));
+    //cudaSafeCall(cuEventElapsedTime(&ms, eventStart, eventEnd));
+
+    delete[] arglist;
+}
+
+void CudaReducer::runSumAbsSqrCplxKernel(int size, int blocks, int threads, CudaDeviceVariable& d_idata, CudaDeviceVariable& d_odata)
+{
+    CudaKernel* kernel;
+    dim3 dimBlock(threads, 1, 1);
+    dim3 dimGrid(blocks, 1, 1);
+
+    // when there is only one warp per block, we need to allocate two warps
+    // worth of shared memory so that we don't index shared memory out of bounds
+    int smemSize = (threads <= 32) ? 2 * threads * sizeof(float) : threads * sizeof(float);
+
+    switch (threads)
+    {
+        case 512:
+            kernel = sumAbsSqrCplx512; break;
+        case 256:
+            kernel = sumAbsSqrCplx256; break;
+        case 128:
+            kernel = sumAbsSqrCplx128; break;
+        case 64:
+            kernel = sumAbsSqrCplx64; break;
+        case 32:
+            kernel = sumAbsSqrCplx32; break;
+        case 16:
+            kernel = sumAbsSqrCplx16; break;
+        case  8:
+            kernel = sumAbsSqrCplx8; break;
+        case  4:
+            kernel = sumAbsSqrCplx4; break;
+        case  2:
+            kernel = sumAbsSqrCplx2; break;
+        case  1:
+            kernel = sumAbsSqrCplx1; break;
+    }
+
+    CUdeviceptr in_dptr = d_idata.GetDevicePtr();
+    CUdeviceptr out_dptr = d_odata.GetDevicePtr();
+    int n = size;
+
+    void** arglist = (void**)new void*[3];
+
+    arglist[0] = &in_dptr;
+    arglist[1] = &out_dptr;
+    arglist[2] = &n;
+
+    //float ms;
+
+    //CUevent eventStart;
+    //CUevent eventEnd;
+    //CUstream stream = 0;
+    //cudaSafeCall(cuEventCreate(&eventStart, CU_EVENT_BLOCKING_SYNC));
+    //cudaSafeCall(cuEventCreate(&eventEnd, CU_EVENT_BLOCKING_SYNC));
+
+    //cudaSafeCall(cuStreamQuery(stream));
+    //cudaSafeCall(cuEventRecord(eventStart, stream));
+    cudaSafeCall(cuLaunchKernel(kernel->GetCUfunction(), dimGrid.x, dimGrid.y,
+                                dimGrid.z, dimBlock.x, dimBlock.y, dimBlock.z, smemSize, stream, arglist,NULL));
 
     //cudaSafeCall(cuCtxSynchronize());
 

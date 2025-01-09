@@ -734,12 +734,19 @@ add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${STA_PATH}/cuda_kernels/basicKern
 add_custom_target(sta_basic_ptx_header ALL
         DEPENDS ${CMAKE_SOURCE_DIR}/${STA_PATH}/cuda_kernels/basicKernels.cu.h ${STA_PATH}/cuda_kernels/basicKernels.cu
         SOURCES ${STA_PATH}/cuda_kernels/basicKernels.cu)
+
+cuda_compile_ptx(STA_SPLINE_PTX_FILES ${STA_PATH}/cuda_kernels/splines.cu OPTIONS ${CUDA_COMPILE_OPTIONS})
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/${STA_PATH}/cuda_kernels/splines.cu.h COMMAND ${BIN2C_EXEC} -p 0 --const --name SplinesKernel ${STA_SPLINE_PTX_FILES} > ${CMAKE_SOURCE_DIR}/${STA_PATH}/cuda_kernels/splines.cu.h DEPENDS ${STA_SPLINE_PTX_FILES})
+add_custom_target(sta_splines_ptx_header ALL
+		DEPENDS ${CMAKE_SOURCE_DIR}/${STA_PATH}/cuda_kernels/splines.cu.h ${STA_PATH}/cuda_kernels/splines.cu
+		SOURCES ${STA_PATH}/cuda_kernels/splines.cu)
 ######################### STA Common ########################
 
 ######################### SubTomogramAverageMPI ########################
 
 set(STA_SRC
         ${STA_COMMON_SRC}
+		${STA_PATH}/AdaptiveRegularizer.cpp
         ${STA_PATH}/SubTomogramAverageMPI.cpp
         )
         
@@ -757,7 +764,9 @@ add_executable(SubTomogramAverageMPI
 
 # Executable depends on ptx files
 add_dependencies(SubTomogramAverageMPI sta_ptx_header)  
-add_dependencies(SubTomogramAverageMPI sta_basic_ptx_header)    
+add_dependencies(SubTomogramAverageMPI sta_basic_ptx_header)
+add_dependencies(SubTomogramAverageMPI sta_splines_ptx_header)
+
 
 target_include_directories(SubTomogramAverageMPI PUBLIC ${STA_INC})
 target_link_libraries(SubTomogramAverageMPI ${STA_LIB})
@@ -769,6 +778,7 @@ target_compile_options(SubTomogramAverageMPI PUBLIC -fpermissive)
 
 set(ADDPARTICLES_SRC
         ${STA_COMMON_SRC}
+		${STA_PATH}/AdaptiveRegularizer.cpp
         ${STA_PATH}/AddParticles.cpp
         )
         
@@ -787,6 +797,7 @@ add_executable(AddParticles
 # Executable depends on ptx files
 add_dependencies(AddParticles sta_ptx_header)  
 add_dependencies(AddParticles sta_basic_ptx_header)    
+add_dependencies(AddParticles sta_splines_ptx_header)
 
 target_include_directories(AddParticles PUBLIC ${ADDPARTICLES_INC})
 target_link_libraries(AddParticles ${ADDPARTICLES_LIB})

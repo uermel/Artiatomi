@@ -35,13 +35,26 @@
 
 using namespace Cuda;
 
+uint PowTwoDivider(uint n);
+
+typedef enum cudarot_interp_enum {
+    CR_INTERP_LINEAR = 0,
+    CR_INTERP_CUBIC = 1
+} cudarot_interp_mode;
+
 class CudaRot
 {
 private:
-	CudaKernel* rotVol;
-	CudaKernel* shiftRotVol;
-	CudaKernel* shift;
-	CudaKernel* rotVolCplx;
+	CudaKernel* rotVol_linear;
+	CudaKernel* shiftRotVol_linear;
+	CudaKernel* shift_linear;
+    CudaKernel* rotVol_spline;
+    CudaKernel* shiftRotVol_spline;
+    CudaKernel* shift_spline;
+
+    CudaKernel* prefilter3DX;
+    CudaKernel* prefilter3DY;
+    CudaKernel* prefilter3DZ;
 
 	CudaContext* ctx;
 	int volSize;
@@ -50,33 +63,38 @@ private:
 
 	float oldphi, oldpsi, oldtheta;
 
-	CudaArray3D shiftTex;
-	CudaArray3D dataTex;
-	CudaArray3D dataTexCplx;
+    cudarot_interp_mode mInterpMode;
+
+    CudaArray3D md_dataArray;
+    CudaTextureObject3D md_dataTex;
+    CudaDeviceVariable md_tempData;
 
 	CUstream stream;
 
 	void runShiftKernel(CudaDeviceVariable& d_odata, float3 shiftVal);
-	void runRotKernel(CudaDeviceVariable& d_odata, float rotMat[3][3]);
-    void runShiftRotKernel(CudaDeviceVariable& d_odata, float3 shiftVal, float rotMat[3][3]);
-	void runRotCplxKernel(CudaDeviceVariable& d_odata, float rotMat[3][3]);
+	void runRotKernel(CudaDeviceVariable& d_odata, float rotMat[9]);
+    void runShiftRotKernel(CudaDeviceVariable& d_odata, float3 shiftVal, float rotMat[9]);
+	//void runRotCplxKernel(CudaDeviceVariable& d_odata, float rotMat[3][3]);
 
-	void computeRotMat(float phi, float psi, float theta, float rotMat[3][3]);
-	void multiplyRotMatrix(float m1[3][3], float m2[3][3], float out[3][3]);
+    void runPrefilterXKernel(CudaDeviceVariable &d_iodata);
+    void runPrefilterYKernel(CudaDeviceVariable &d_iodata);
+    void runPrefilterZKernel(CudaDeviceVariable &d_iodata);
+
+	void computeRotMat(float phi, float psi, float theta, float rotMat[9]);
+	void multiplyRotMatrix(const float m1[9], const float m2[9], float out[9]);
 public:
 
-	CudaRot(int aVolSize, CUstream aStream, CudaContext* context, bool linearInterpolation);
+	CudaRot(int aVolSize, CUstream aStream, CudaContext* context, cudarot_interp_mode interpolation = CR_INTERP_CUBIC);
 
 	void SetTextureShift(CudaDeviceVariable& d_idata);
 	void SetTexture(CudaDeviceVariable& d_idata);
-	void SetTextureCplx(CudaDeviceVariable& d_idata);
 
 	void Shift(CudaDeviceVariable& d_odata, float3 shiftVal);
-	void Rot(CudaDeviceVariable& d_odata, float phi, float psi, float theta);
+	void Rot(CudaDeviceVariable& d_odata, float phi, float psi, float theta, bool print=false);
 	void ShiftRot(CudaDeviceVariable& d_odata, float3 shiftVal, float phi, float psi, float theta);
-	void RotCplx(CudaDeviceVariable& d_odata, float phi, float psi, float theta);
 
 	void SetOldAngles(float aPhi, float aPsi, float aTheta);
 };
+
 
 #endif //CUDAROT_H

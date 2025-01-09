@@ -9,6 +9,7 @@
 
 
 #define EPS (0.000001f)
+#define M_PI       3.14159265358979323846f
 
 #include <cuda.h>
 #include <device_launch_parameters.h>
@@ -16,87 +17,180 @@
 #include "float.h"
 #include <builtin_types.h>
 #include <vector_functions.h>
+#include "cubic_interpolation/cubicTex3D.cu"
 
-texture<float, 3, cudaReadModeElementType> texVol;
-texture<float, 3, cudaReadModeElementType> texShift;
-texture<float2, 3, cudaReadModeElementType> texVolCplx;
+//texture<float, 3, cudaReadModeElementType> texVol;
+//texture<float, 3, cudaReadModeElementType> texShift;
+//texture<float2, 3, cudaReadModeElementType> texVolCplx;
 texture<float, 1, cudaReadModeElementType> texLine;
 
 extern "C"
-__global__ void rot3d(int size, float3 rotMat0, float3 rotMat1, float3 rotMat2, float* outVol)
+__global__ void rot3d_linear(int size, CUtexObject inTex, float3 rotMat0, float3 rotMat1, float3 rotMat2, float* outVol)
 {
 	const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;	
 	const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;	
 
-	float center = size / 2;
+	float center = (float)size / 2.f;
 
-	float3 vox = make_float3(x - center, y - center, z - center);
+	float3 vox = make_float3((float)x - center, (float)y - center, (float)z - center);
 	float3 rotVox;
-	rotVox.x = center + rotMat0.x * vox.x + rotMat1.x * vox.y + rotMat2.x * vox.z;
-	rotVox.y = center + rotMat0.y * vox.x + rotMat1.y * vox.y + rotMat2.y * vox.z;
-	rotVox.z = center + rotMat0.z * vox.x + rotMat1.z * vox.y + rotMat2.z * vox.z;
+    // Matrix
+    //  [ rotMat0
+    //    rotMat1
+    //    rotMat2 ]
+	rotVox.x = center + rotMat0.x * vox.x + rotMat0.y * vox.y + rotMat0.z * vox.z;
+	rotVox.y = center + rotMat1.x * vox.x + rotMat1.y * vox.y + rotMat1.z * vox.z;
+	rotVox.z = center + rotMat2.x * vox.x + rotMat2.y * vox.y + rotMat2.z * vox.z;
 
-	outVol[z * size * size + y * size + x] = tex3D(texVol, rotVox.x + 0.5f, rotVox.y + 0.5f, rotVox.z + 0.5f);
-
+	outVol[z * size * size + y * size + x] = tex3D<float>(inTex, rotVox.x + 0.5f, rotVox.y + 0.5f, rotVox.z + 0.5f);
 }
 
 extern "C"
-__global__ void shiftRot3d(int size, float3 shift, float3 rotMat0, float3 rotMat1, float3 rotMat2, float* outVol)
+__global__ void rot3d_spline(int size, CUtexObject inTex, float3 rotMat0, float3 rotMat1, float3 rotMat2, float* outVol)
 {
     const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
     const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
     const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
 
-    float center = size/2.f;
+    float center = (float)size / 2.f;
+
+    float3 vox = make_float3((float)x - center, (float)y - center, (float)z - center);
+    float3 rotVox;
+    // Matrix
+    //  [ rotMat0
+    //    rotMat1
+    //    rotMat2 ]
+    rotVox.x = center + rotMat0.x * vox.x + rotMat0.y * vox.y + rotMat0.z * vox.z;
+    rotVox.y = center + rotMat1.x * vox.x + rotMat1.y * vox.y + rotMat1.z * vox.z;
+    rotVox.z = center + rotMat2.x * vox.x + rotMat2.y * vox.y + rotMat2.z * vox.z;
+
+    outVol[z * size * size + y * size + x] = cubicTex3D<float>(inTex, make_float3(rotVox.x + 0.5f, rotVox.y + 0.5f, rotVox.z + 0.5f));
+}
+
+extern "C"
+__global__ void shiftRot3d_linear(int size, CUtexObject inTex, float3 shift, float3 rotMat0, float3 rotMat1, float3 rotMat2, float* outVol)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    float center = (float)size/2.f;
     //float3 rotCenter = make_float3(center+shift.x, center+shift.y, center+shift.z);
 
     float3 rotShift;
-    rotShift.x = rotMat0.x * shift.x + rotMat1.x * shift.y + rotMat2.x * shift.z;
-    rotShift.y = rotMat0.y * shift.x + rotMat1.y * shift.y + rotMat2.y * shift.z;
-    rotShift.z = rotMat0.z * shift.x + rotMat1.z * shift.y + rotMat2.z * shift.z;
+    // Matrix
+    //  [ rotMat0
+    //    rotMat1
+    //    rotMat2 ]
+    rotShift.x = rotMat0.x * shift.x + rotMat0.y * shift.y + rotMat0.z * shift.z;
+    rotShift.y = rotMat1.x * shift.x + rotMat1.y * shift.y + rotMat1.z * shift.z;
+    rotShift.z = rotMat2.x * shift.x + rotMat1.y * shift.y + rotMat2.z * shift.z;
 
-    float3 vox = make_float3(x - (center + shift.x), y - (center + shift.y), z - (center + shift.z));
+    float3 vox = make_float3((float)x - (center + shift.x), (float)y - (center + shift.y), (float)z - (center + shift.z));
 
     float3 rotVox;
-    rotVox.x = center + rotMat0.x * vox.x + rotMat1.x * vox.y + rotMat2.x * vox.z - (shift.x - rotShift.x);
-    rotVox.y = center + rotMat0.y * vox.x + rotMat1.y * vox.y + rotMat2.y * vox.z - (shift.y - rotShift.y);
-    rotVox.z = center + rotMat0.z * vox.x + rotMat1.z * vox.y + rotMat2.z * vox.z - (shift.z - rotShift.z);
+    // Matrix
+    //  [ rotMat0
+    //    rotMat1
+    //    rotMat2 ]
+    rotVox.x = center + rotMat0.x * vox.x + rotMat0.y * vox.y + rotMat0.z * vox.z - (shift.x - rotShift.x);
+    rotVox.y = center + rotMat1.x * vox.x + rotMat1.y * vox.y + rotMat1.z * vox.z - (shift.y - rotShift.y);
+    rotVox.z = center + rotMat2.x * vox.x + rotMat2.y * vox.y + rotMat2.z * vox.z - (shift.z - rotShift.z);
 
-    outVol[z * size * size + y * size + x] = tex3D(texVol, rotVox.x + 0.5f, rotVox.y + 0.5f, rotVox.z + 0.5f);
+    outVol[z * size * size + y * size + x] = tex3D<float>(inTex, rotVox.x + 0.5f, rotVox.y + 0.5f, rotVox.z + 0.5f);
 }
 
 extern "C"
-__global__ void rot3dCplx(int size, float3 rotMat0, float3 rotMat1, float3 rotMat2, float2* outVol)
+__global__ void shiftRot3d_spline(int size, CUtexObject inTex, float3 shift, float3 rotMat0, float3 rotMat1, float3 rotMat2, float* outVol)
 {
-	const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
-	const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;	
-	const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;	
-	
-	float center = size / 2;
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
 
-	float3 vox = make_float3(x - center, y - center, z - center);
-	float3 rotVox;
-	rotVox.x = center + rotMat0.x * vox.x + rotMat1.x * vox.y + rotMat2.x * vox.z;
-	rotVox.y = center + rotMat0.y * vox.x + rotMat1.y * vox.y + rotMat2.y * vox.z;
-	rotVox.z = center + rotMat0.z * vox.x + rotMat1.z * vox.y + rotMat2.z * vox.z;
+    float center = (float)size/2.f;
+    //float3 rotCenter = make_float3(center+shift.x, center+shift.y, center+shift.z);
 
-	outVol[z * size * size + y * size + x] = tex3D(texVolCplx, rotVox.x + 0.5f, rotVox.y + 0.5f, rotVox.z + 0.5f);
+    float3 rotShift;
+    // Matrix
+    //  [ rotMat0
+    //    rotMat1
+    //    rotMat2 ]
+    rotShift.x = rotMat0.x * shift.x + rotMat0.y * shift.y + rotMat0.z * shift.z;
+    rotShift.y = rotMat1.x * shift.x + rotMat1.y * shift.y + rotMat1.z * shift.z;
+    rotShift.z = rotMat2.x * shift.x + rotMat1.y * shift.y + rotMat2.z * shift.z;
+
+    float3 vox = make_float3((float)x - (center + shift.x), (float)y - (center + shift.y), (float)z - (center + shift.z));
+
+    float3 rotVox;
+    // Matrix
+    //  [ rotMat0
+    //    rotMat1
+    //    rotMat2 ]
+    rotVox.x = center + rotMat0.x * vox.x + rotMat0.y * vox.y + rotMat0.z * vox.z - (shift.x - rotShift.x);
+    rotVox.y = center + rotMat1.x * vox.x + rotMat1.y * vox.y + rotMat1.z * vox.z - (shift.y - rotShift.y);
+    rotVox.z = center + rotMat2.x * vox.x + rotMat2.y * vox.y + rotMat2.z * vox.z - (shift.z - rotShift.z);
+
+    outVol[z * size * size + y * size + x] = cubicTex3D<float>(inTex, make_float3(rotVox.x + 0.5f, rotVox.y + 0.5f, rotVox.z + 0.5f));
 }
+
+//extern "C"
+// WRONG ROTATION
+//__global__ void rot3dCplx(int size, float3 rotMat0, float3 rotMat1, float3 rotMat2, float2* outVol)
+//{
+//	const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+//	const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+//	const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+//
+//	float center = size / 2;
+//
+//	float3 vox = make_float3(x - center, y - center, z - center);
+//	float3 rotVox;
+//	rotVox.x = center + rotMat0.x * vox.x + rotMat1.x * vox.y + rotMat2.x * vox.z;
+//	rotVox.y = center + rotMat0.y * vox.x + rotMat1.y * vox.y + rotMat2.y * vox.z;
+//	rotVox.z = center + rotMat0.z * vox.x + rotMat1.z * vox.y + rotMat2.z * vox.z;
+//
+//	outVol[z * size * size + y * size + x] = tex3D(texVolCplx, rotVox.x + 0.5f, rotVox.y + 0.5f, rotVox.z + 0.5f);
+//}
 
 
 extern "C"
-	__global__ void shift(int size, float* outVol, float3 shift)
+	__global__ void shift_linear(int size, CUtexObject inTex, float* outVol, float3 shift)
 {
 	const int x = blockIdx.x * blockDim.x + threadIdx.x;
 	const int y = blockIdx.y * blockDim.y + threadIdx.y;	
 	const int z = blockIdx.z * blockDim.z + threadIdx.z;	
 	
-	float sx = float(x - shift.x + 0.5f) / float(size);
-	float sy = float(y - shift.y + 0.5f) / float(size);
-	float sz = float(z - shift.z + 0.5f) / float(size); 
+	float sx = (float)x - shift.x + 0.5f;// / float(size);
+	float sy = (float)y - shift.y + 0.5f;// / float(size);
+	float sz = (float)z - shift.z + 0.5f;// / float(size);
 	
-	outVol[z * size * size + y * size + x] = tex3D(texShift, sx, sy, sz);
+	outVol[z * size * size + y * size + x] = tex3D<float>(inTex, sx, sy, sz);
+}
+
+extern "C"
+__global__ void shift_spline(int size, CUtexObject inTex, float* outVol, float3 shift)
+{
+    const int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    float sx = (float)x - shift.x + 0.5f;// / float(size);
+    float sy = (float)y - shift.y + 0.5f;// / float(size);
+    float sz = (float)z - shift.z + 0.5f;// / float(size);
+
+    outVol[z * size * size + y * size + x] = cubicTex3D<float>(inTex, make_float3(sx, sy, sz));
+}
+
+
+extern "C"
+__global__ void set(int size, float* outVol, float val)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    outVol[z * size * size + y * size + x] = val;
 }
 
 
@@ -123,15 +217,135 @@ extern "C"
 
 
 extern "C"
-__global__ void subCplx(int size, float2* inVol, float2* outVol, float* subval, float divVal)
+__global__ void regError(int size,
+                         float* inVol1,
+                         float* inVol2,
+                         float2* inVol1filt,
+                         float2* inVol2filt,
+                         float2* outError)
 {
 	const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;	
 	const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;	
 	
-	float2 temp = inVol[z * size * size + y * size + x];
-	temp.x -= subval[0] / divVal;
-	outVol[z * size * size + y * size + x] = temp;
+	float im1 = inVol1[z * size * size + y * size + x];
+    float im2 = inVol2[z * size * size + y * size + x];
+
+    float2 im1f = inVol1filt[z * size * size + y * size + x];
+    float2 im2f = inVol2filt[z * size * size + y * size + x];
+
+    float e1 = abs(im1f.x - im2);
+    float e2 = abs(im1 - im2f.x);
+
+    outError[z * size * size + y * size + x] = make_float2(e1*e1 + e2*e2, 0);
+}
+
+extern "C"
+__global__ void subCplx(int size, float2* inVol, float2* outVol, float* subval, float divVal)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    float2 temp = inVol[z * size * size + y * size + x];
+    temp.x -= subval[0] / divVal;
+    outVol[z * size * size + y * size + x] = temp;
+}
+
+extern "C"
+__global__ void spheroidMask(int size,
+                             float* outVol,
+                             float3 radius,
+                             float3 center,
+                             float3 rotMat0,
+                             float3 rotMat1,
+                             float3 rotMat2)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    float c = size/2;
+    float tx = (float)x - (c + center.x);
+    float ty = (float)y - (c + center.x);
+    float tz = (float)z - (c + center.x);
+
+    // Matrix
+    //  [ rotMat0
+    //    rotMat1
+    //    rotMat2 ]
+    float xx = rotMat0.x * tx + rotMat0.y * ty + rotMat0.z * tz;
+    float yy = rotMat1.x * tx + rotMat1.y * ty + rotMat1.z * tz;
+    float zz = rotMat2.x * tx + rotMat2.y * ty + rotMat2.z * tz;
+
+    float cond = (xx*xx) / (radius.x*radius.x) + (yy*yy) / (radius.y*radius.y) + (zz*zz) / (radius.z*radius.z);
+    float mask = (1 >= cond) ? 1.f : 0.f;
+
+    outVol[z * size * size + y * size + x] = mask;
+}
+
+extern "C"
+__global__ void sphericalMaskCosineCplx(int size, float2* outVol, float radius, float taper, float3 center)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    float c = size/2;
+    float xx = (float)x - (c + center.x);
+    float yy = (float)y - (c + center.x);
+    float zz = (float)z - (c + center.x);
+    float r = sqrtf(xx*xx + yy*yy + zz*zz);
+
+    float mask = 0.f;
+    bool inside = r <= radius;
+    bool border = (!inside) & (r <= radius + taper);
+
+    if (inside)
+    {
+        mask = 1.f;
+    }
+
+    if (border)
+    {
+        mask = 0.5f + 0.5f * cosf(M_PI * (r-radius) / taper);
+    }
+
+    outVol[z * size * size + y * size + x] = make_float2(mask, 0.f);
+}
+
+extern "C"
+__global__ void minIdx(int size, float2* inVol1, float* inVol2, int* indeces1, int* indeces2, int idx1, int idx2)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    float vol1 = inVol1[z * size * size + y * size + x].x;
+    float vol2 = inVol2[z * size * size + y * size + x];
+
+    if (vol1 < vol2)
+    {
+        inVol2[z * size * size + y * size + x] = vol1;
+        indeces1[z * size * size + y * size + x] = idx1;
+        indeces2[z * size * size + y * size + x] = idx2;
+    }
+}
+
+extern "C"
+__global__ void selIdx(int size, float2* inVol1, int* indeces, float* outVol, int idx)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    float vol1 = inVol1[z * size * size + y * size + x].x;
+    int corr_idx = indeces[z * size * size + y * size + x];
+
+    if (corr_idx == idx)
+    {
+        outVol[z * size * size + y * size + x] = vol1;
+    }
 }
 
 
@@ -232,13 +446,13 @@ __global__ void makeCplxWithSquareAndSub(int size, float* inVol, float2* outVol,
 
 
 extern "C"
-__global__ void binarize(int size, float* inVol, float* outVol)
+__global__ void binarize(int size, float* inVol, float* outVol, float thresh)
 {
 	const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;	
 	const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;	
 	
-	outVol[z * size * size + y * size + x] = inVol[z * size * size + y * size + x] > 0.5f ? 1.0f : 0.0f;
+	outVol[z * size * size + y * size + x] = inVol[z * size * size + y * size + x] > thresh ? 1.0f : 0.0f;
 }
 
 
@@ -494,6 +708,60 @@ __global__ void fftshift2(int size, float2* volIn, float2* volOut)
 	volOut[z * size * size + y * size + x] = temp;
 }
 
+extern "C"
+__global__ void butter(int size, float2* volIn, float2* volOut, int order, float cutoff)
+{
+    const int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    // Shifted indeces for filter computation
+    int i = (x + size / 2) % size;
+    int j = (y + size / 2) % size;
+    int k = (z + size / 2) % size;
+
+    // Cutoff in cycles/pixel
+    float cut = cutoff * 2.f;
+    float center = (float)size/2;
+
+    float ii = (((float)i - center) / (cut * (float)size));
+    float jj = (((float)j - center) / (cut * (float)size));
+    float kk = (((float)k - center) / (cut * (float)size));
+
+    float r = ii*ii + jj*jj + kk*kk;
+    float filt = 1 / (1 + powf(r, (float)order));
+
+    float2 in = volIn[z * size * size + y * size + x];
+    in.x = in.x * filt;
+    in.y = in.y * filt;
+    volOut[z * size * size + y * size + x] = in;
+}
+
+extern "C"
+__global__ void butterfilt(int size, float* volOut, int order, float cutoff)
+{
+    const int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    // Shifted indeces for filter computation
+    int i = (x + size / 2) % size;
+    int j = (y + size / 2) % size;
+    int k = (z + size / 2) % size;
+
+    // Cutoff in cycles/pixel
+    float cut = cutoff * 2.f;
+    float center = (float)size/2;
+
+    float ii = (((float)i - center) / (cut * (float)size));
+    float jj = (((float)j - center) / (cut * (float)size));
+    float kk = (((float)k - center) / (cut * (float)size));
+
+    float r = ii*ii + jj*jj + kk*kk;
+    float filt = 1 / (1 + powf(r, (float)order));
+
+    volOut[z * size * size + y * size + x] = filt;
+}
 
 extern "C"
 __global__ void splitDataset(int size, float2 * dataIn, float2 * dataOutA, float2 * dataOutB)
@@ -581,6 +849,29 @@ __global__ void energynormPadfield(int size, float2* NCCNum, float2* NCCDen2_f2s
     float NCCDen2p2 = NCCDen2_f2[z * size * size + y * size + x].x;
     float NCCDen2 = NCCDen2p1 - (NCCDen2p2 * NCCDen2p2) / maskNorm[0];
     float Den = sqrt(NCCDen1[0]) * sqrt(NCCDen2);
+
+    float2 erg;
+    erg.x = 0;
+    erg.y = 0;
+
+    if (Den > EPS)
+    {
+        erg.x = Num / Den;
+    }
+
+    NCCNum[z * size * size + y * size + x] = erg;
+}
+
+extern "C"
+__global__ void energynormMaskFirst(int size, float2* NCCNum, float* NCCDen1, float* NCCDen2)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    const unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    float Num = NCCNum[z * size * size + y * size + x].x;
+    float numel = size*size*size;
+    float Den = sqrt(NCCDen1[0] / numel) * sqrt(NCCDen2[0] / numel);
 
     float2 erg;
     erg.x = 0;

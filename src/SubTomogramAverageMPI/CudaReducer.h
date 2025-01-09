@@ -46,6 +46,17 @@ private:
 	CudaKernel* sum2;
 	CudaKernel* sum1;
 
+    CudaKernel* maskedSum512;
+    CudaKernel* maskedSum256;
+    CudaKernel* maskedSum128;
+    CudaKernel* maskedSum64;
+    CudaKernel* maskedSum32;
+    CudaKernel* maskedSum16;
+    CudaKernel* maskedSum8;
+    CudaKernel* maskedSum4;
+    CudaKernel* maskedSum2;
+    CudaKernel* maskedSum1;
+
 	CudaKernel* sumCplx512;
 	CudaKernel* sumCplx256;
 	CudaKernel* sumCplx128;
@@ -78,6 +89,17 @@ private:
 	CudaKernel* sumSqrCplx4;
 	CudaKernel* sumSqrCplx2;
 	CudaKernel* sumSqrCplx1;
+
+    CudaKernel* sumAbsSqrCplx512;
+    CudaKernel* sumAbsSqrCplx256;
+    CudaKernel* sumAbsSqrCplx128;
+    CudaKernel* sumAbsSqrCplx64;
+    CudaKernel* sumAbsSqrCplx32;
+    CudaKernel* sumAbsSqrCplx16;
+    CudaKernel* sumAbsSqrCplx8;
+    CudaKernel* sumAbsSqrCplx4;
+    CudaKernel* sumAbsSqrCplx2;
+    CudaKernel* sumAbsSqrCplx1;
 
 	CudaKernel* maxIndexMasked512;
 	CudaKernel* maxIndexMasked256;
@@ -137,6 +159,10 @@ private:
 	void runSumKernel(int size, int blocks, int threads,
                       CudaDeviceVariable& d_idata,
                       CudaDeviceVariable& d_odata);
+    void runMaskedSumKernel(int size, int blocks, int threads,
+                            CudaDeviceVariable& d_idata,
+                            CudaDeviceVariable& d_mask,
+                            CudaDeviceVariable& d_odata);
     void runMaxIndexKernel(int size, int blocks, int threads,
                            CudaDeviceVariable& d_idata,
                            CudaDeviceVariable& d_odata,
@@ -158,6 +184,9 @@ private:
 	void runSumSqrCplxKernel(int size, int blocks, int threads,
                              CudaDeviceVariable& d_idata,
                              CudaDeviceVariable& d_odata);
+    void runSumAbsSqrCplxKernel(int size, int blocks, int threads,
+                                CudaDeviceVariable& d_idata,
+                                CudaDeviceVariable& d_odata);
     void runMaxIndexCplxKernel(int size, int blocks, int threads,
                                CudaDeviceVariable& d_idata,
                                CudaDeviceVariable& d_odata,
@@ -178,6 +207,9 @@ public:
 
 	void Sum(CudaDeviceVariable& d_idata,
              CudaDeviceVariable& d_odata);
+    void MaskedSum(CudaDeviceVariable& d_idata,
+                   CudaDeviceVariable& d_mask,
+                   CudaDeviceVariable& d_odata);
     void MaxIndex(CudaDeviceVariable& d_idata,
                   CudaDeviceVariable& d_odata,
                   CudaDeviceVariable& d_index);
@@ -192,6 +224,8 @@ public:
                        CudaDeviceVariable& d_odata);
 	void SumSqrCplx(CudaDeviceVariable& d_idata,
                     CudaDeviceVariable& d_odata);
+    void SumAbsSqrCplx(CudaDeviceVariable& d_idata,
+                       CudaDeviceVariable& d_odata);
     void MaxIndexCplx(CudaDeviceVariable& d_idata,
                       CudaDeviceVariable& d_odata,
                       CudaDeviceVariable& d_index);
