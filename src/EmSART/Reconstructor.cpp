@@ -59,6 +59,67 @@ void Reconstructor::MatrixVector3Mul(float3x3& M, float xIn, float yIn, float& x
 }
 
 template<class TVol>
+void Reconstructor::GetTraversalLength(float& dist, int index, Volume<TVol>* vol)
+{
+    //Shoot ray from center of volume:
+    float3 c_projNorm = proj.GetNormalVector(index);
+    float3 c_detektor = proj.GetPosition(index);
+    float3 MC_bBoxMin;
+    float3 MC_bBoxMax;
+    MC_bBoxMin = vol->GetVolumeBBoxMin();
+    MC_bBoxMax = vol->GetVolumeBBoxMax();
+    float3 volDim = vol->GetDimension();
+    float3 hitPoint;
+    float t;
+
+    t = (c_projNorm.x * (MC_bBoxMin.x + (volDim.x * vol->GetVoxelSize().x * 0.5f)) +
+         c_projNorm.y * (MC_bBoxMin.y + (volDim.y * vol->GetVoxelSize().y * 0.5f)) +
+         c_projNorm.z * (MC_bBoxMin.z + (volDim.z * vol->GetVoxelSize().z * 0.5f)));
+    t += (-c_projNorm.x * c_detektor.x - c_projNorm.y * c_detektor.y - c_projNorm.z * c_detektor.z);
+    t = abs(t);
+
+    hitPoint.x = t * (-c_projNorm.x) + (MC_bBoxMin.x + (volDim.x * vol->GetVoxelSize().x * 0.5f));
+    hitPoint.y = t * (-c_projNorm.y) + (MC_bBoxMin.y + (volDim.y * vol->GetVoxelSize().y * 0.5f));
+    hitPoint.z = t * (-c_projNorm.z) + (MC_bBoxMin.z + (volDim.z * vol->GetVoxelSize().z * 0.5f));
+
+    float4x4 c_DetectorMatrix;
+
+    proj.GetDetectorMatrix(index, (float*)&c_DetectorMatrix, 1);
+    MatrixVector3Mul(c_DetectorMatrix, &hitPoint);
+
+    //--> pixelBorders.x = x.min; pixelBorders.z = y.min;
+    float hitX = round(hitPoint.x);
+    float hitY = round(hitPoint.y);
+
+    //Shoot ray from hit point on projection towards volume to get the distance to entry and exit point
+    //float3 pos = proj.GetPosition(index) + hitX * proj.GetPixelUPitch(index) + hitY * proj.GetPixelVPitch(index);
+    float3 pos = proj.GetPosition(index) + hitX * proj.GetPixelUPitch(index) + hitY * proj.GetPixelVPitch(index);
+
+    float t_in = 0.f;
+    float t_out = 0.f;
+
+    float3 tEntry = make_float3(0, 0, 0);
+    tEntry.x = (MC_bBoxMin.x - pos.x) / c_projNorm.x;
+    tEntry.y = (MC_bBoxMin.y - pos.y) / c_projNorm.y;
+    tEntry.z = (MC_bBoxMin.z - pos.z) / c_projNorm.z;
+
+    float3 tExit = make_float3(0, 0, 0);
+    tExit.x = (MC_bBoxMax.x - pos.x) / c_projNorm.x;
+    tExit.y = (MC_bBoxMax.y - pos.y) / c_projNorm.y;
+    tExit.z = (MC_bBoxMax.z - pos.z) / c_projNorm.z;
+
+    float3 tmin = fminf(tEntry, tExit);
+    float3 tmax = fmaxf(tEntry, tExit);
+
+    t_in  = fmaxf(fmaxf(tmin.x, tmin.y), tmin.z);
+    t_out = fminf(fminf(tmax.x, tmax.y), tmax.z);
+
+    dist = t_out - t_in;
+}
+template void Reconstructor::GetTraversalLength(float& dist, int index, Volume<unsigned short>* vol);
+template void Reconstructor::GetTraversalLength(float& dist, int index, Volume<float>* vol);
+
+template<class TVol>
 void Reconstructor::GetDefocusDistances(float & t_in, float & t_out, int index, Volume<TVol>* vol)
 {
 	//Shoot ray from center of volume:
@@ -1056,11 +1117,35 @@ void Reconstructor::BackProjectionNoCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObje
     pC.x = (int)hitC.x; pC.y = (int)hitC.y;
     pD.x = (int)hitD.x; pD.y = (int)hitD.y;
 	cropKernel(proj_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
+
+    // Compute distance through volume and norm (only for WBP)
+    if (config.WBP_NoSART) {
+        float volumeTraversalLength = 0.f;
+        GetTraversalLength(volumeTraversalLength, proj_index, vol);
+
+        nppSafeCall(nppsDivC_32f_I(volumeTraversalLength,
+                                   (Npp32f *) proj_d.GetDevicePtr(),
+                                   proj.GetWidth() * proj.GetHeight()));
+    }
 	
 	// Prepare and execute Backprojection
 	SetConstantValues(bpKernel, *vol, proj, proj_index, mpi_part, magAnisotropy, magAnisotropyInv);
 
-	float runtime = bpKernel(proj.GetWidth(), proj.GetHeight(), config.Lambda / SIRTCount, 
+    // Compute distance through volume
+    SetConstantValues(volTravLenKernel, *vol, proj, proj_index, mpi_part, magAnisotropy, magAnisotropyInv);
+    float runtime = volTravLenKernel(proj.GetWidth(), proj.GetHeight(), dist_d);
+
+    nppSafeCall(nppsMax_32f((Npp32f*)dist_d.GetDevicePtr(),
+                            proj.GetWidth()*proj.GetHeight(),
+                            (Npp32f*) meanval.GetDevicePtr(),
+                            (Npp8u*) meanbuffer.GetDevicePtr()));
+
+    float volumeTraversalLength = 0.f;
+    meanval.CopyDeviceToHost(&volumeTraversalLength);
+
+    nppSafeCall(nppsDivC_32f_I(1.f/volumeTraversalLength, (Npp32f*)proj_d.GetDevicePtr(), proj.GetWidth()*proj.GetHeight()));
+
+	runtime = bpKernel(proj.GetWidth(), proj.GetHeight(), config.Lambda / SIRTCount,
 		config.OverSampling, 1.0f / (float)(config.OverSampling), texImage, surface, 0, 9999999999999.0f);
 
 }
@@ -1079,6 +1164,16 @@ void Reconstructor::BackProjectionNoCTF(Volume<TVol>* vol, vector<Volume<TVol>*>
 		magAnisotropy = GetMagAnistropyMatrix(config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
 		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
 	}
+
+    // Compute distance through volume and norm (only for WBP)
+    if (config.WBP_NoSART) {
+        float volumeTraversalLength = 0.f;
+        GetTraversalLength(volumeTraversalLength, proj_index, vol);
+
+        nppSafeCall(nppsDivC_32f_I(volumeTraversalLength,
+                                   (Npp32f *) proj_d.GetDevicePtr(),
+                                   proj.GetWidth() * proj.GetHeight()));
+    }
 
 	for (size_t batch = 0; batch < batchSize; batch++)
 	{
@@ -1137,6 +1232,15 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, Cuda::CudaSurfaceObject
     pD.x = (int)hitD.x; pD.y = (int)hitD.y;
     cropKernel(proj_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
 
+    // Compute distance through volume and norm (only for WBP)
+    if (config.WBP_NoSART) {
+        float volumeTraversalLength = 0.f;
+        GetTraversalLength(volumeTraversalLength, proj_index, vol);
+
+        nppSafeCall(nppsDivC_32f_I(volumeTraversalLength,
+                                   (Npp32f *) proj_d.GetDevicePtr(),
+                                   proj.GetWidth() * proj.GetHeight()));
+    }
 
 	for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize())
 	{
@@ -1190,11 +1294,35 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& 
 		magAnisotropyInv = GetMagAnistropyMatrix(1.0f / config.MagAnisotropyAmount, config.MagAnisotropyAngleInDeg - (float)(proj.GetImageRotationToCompensate((uint)proj_index) / M_PI * 180.0), (float)proj.GetWidth(), (float)proj.GetHeight());
 	}
 
+    // Compute distance through volume and norm (only for WBP)
+    if (config.WBP_NoSART) {
+        float volumeTraversalLength = 0.f;
+        GetTraversalLength(volumeTraversalLength, proj_index, vol);
+
+        nppSafeCall(nppsDivC_32f_I(volumeTraversalLength,
+                                   (Npp32f *) proj_d.GetDevicePtr(),
+                                   proj.GetWidth() * proj.GetHeight()));
+    }
+
 	if (mpi_part == 0)
 		printf("\n");
 
 	float t_in, t_out;
 	GetDefocusDistances(t_in, t_out, proj_index, vol);
+
+    // Find area shaded by volume, cut and dim borders
+    int2 pA, pB, pC, pD;
+    float2 hitA, hitB, hitC, hitD;
+    proj.ComputeHitPoints(*vol, proj_index, pA, pB, pC, pD);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pA.x, (float)pA.y, hitA.x, hitA.y);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pB.x, (float)pB.y, hitB.x, hitB.y);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pC.x, (float)pC.y, hitC.x, hitC.y);
+    MatrixVector3Mul(*(float3x3*)magAnisotropyInv.GetData(), (float)pD.x, (float)pD.y, hitD.x, hitD.y);
+    pA.x = (int)hitA.x; pA.y = (int)hitA.y;
+    pB.x = (int)hitB.x; pB.y = (int)hitB.y;
+    pC.x = (int)hitC.x; pC.y = (int)hitC.y;
+    pD.x = (int)hitD.x; pD.y = (int)hitD.y;
+    cropKernel(proj_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
 
 	for (float ray = t_in; ray < t_out; ray += config.CTFSliceThickness / proj.GetPixelSize())
 	{
@@ -1215,6 +1343,15 @@ void Reconstructor::BackProjectionCTF(Volume<TVol>* vol, vector<Volume<TVol>*>& 
 		cufftSafeCall(cufftExecR2C(handleR2C, (cufftReal*)projSquare_d.GetDevicePtr(), (cufftComplex*)fft_d.GetDevicePtr()));
 
 		ctf(fft_d, defocusMin, defocusMax, defocusAngle, false, config.PhaseFlipOnly, config.WienerFilterNoiseLevel, (proj.GetMaxDimension() / 2 + 1) * sizeof(float2), config.CTFBetaFac);
+
+//        float* test = new float[proj.GetMaxDimension()*proj.GetMaxDimension()];
+//        projSquare_d.CopyDeviceToHost(test);
+//
+//        stringstream ss;
+//        ss << "test_" << proj_index << "_" << ray << ".em";
+//        emwrite(ss.str(), (float*)test, proj.GetMaxDimension(), proj.GetMaxDimension());
+//
+//        delete[] test;
 
 		cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
 		nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float), (float)(proj.GetMaxDimension() * proj.GetMaxDimension()),
@@ -1477,7 +1614,6 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 			(Npp32f*)realproj_d.GetDevicePtr(), (int)realproj_d.GetPitch(), roiAll));
 		nppSafeCall(nppiDivC_32f_C1IR(-std_hf, (Npp32f*)realproj_d.GetDevicePtr(), (int)realproj_d.GetPitch(), roiAll));
 
-
 		//rotate image so that tilt axis lies parallel to image axis to avoid smearing if WBP-filter wedge:
 
 		Matrix<double> shiftToCenter(3, 3);
@@ -1518,19 +1654,10 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 		nppSafeCall(nppiWarpAffine_32f_C1R((Npp32f*)realproj_d.GetDevicePtr(), imageSize, (int)realproj_d.GetPitch(), roi,
 			(Npp32f*)realprojUS_d.GetDevicePtr(), (int)realprojUS_d.GetPitch(), roi, affineMatrix, NppiInterpolationMode::NPPI_INTER_CUBIC));
 
-		float t = cts(realprojUS_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, false);
-
-//        float* test = new float[proj.GetMaxDimension()*proj.GetMaxDimension()];
-//        projSquare_d.CopyDeviceToHost(test);
-//
-//        stringstream ss;
-//        ss << "test_" << proj_index << ".em";
-//        emwrite(ss.str(), (float*)test, proj.GetMaxDimension(), proj.GetMaxDimension());
-//
-//        delete[] test;
+        float t = cts(realprojUS_d, proj.GetMaxDimension(), projSquare_d, squareBorderSizeX, squareBorderSizeY, false, false);
 	}
 
-	// good until here
+
 
 	if (!skipFilter || config.WBP_NoSART)
 	{
@@ -1564,42 +1691,38 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 			}
 			emwrite("after.em", temp2, roiFFT.width, roiFFT.height);*/
 		}
-		if (config.WBP_NoSART)
-		{
-			if (config.WBPFilter == FM_EXACT)
-			{
-				float* tiltAngles = new float[projSource->GetProjectionCount()];
-				for (int i = 0; i < projSource->GetProjectionCount(); i++)
-				{
-					tiltAngles[i] = markers(MFI_TiltAngle, i, 0) * M_PI / 180.0f;
-					if (!markers.CheckIfProjIndexIsGood(i))
-					{
-						tiltAngles[i] = -999.0f;
-					}
-				}
+		if (config.WBP_NoSART) {
+            if (config.WBPFilter == FM_EXACT) {
+                float *tiltAngles = new float[projSource->GetProjectionCount()];
+                for (int i = 0; i < projSource->GetProjectionCount(); i++) {
+                    tiltAngles[i] = markers(MFI_TiltAngle, i, 0) * M_PI / 180.0f;
+                    if (!markers.CheckIfProjIndexIsGood(i)) {
+                        tiltAngles[i] = -999.0f;
+                    }
+                }
 
-				meanbuffer.CopyHostToDevice(tiltAngles, projSource->GetProjectionCount() * sizeof(float));
-				delete[] tiltAngles;
-			}
+                meanbuffer.CopyHostToDevice(tiltAngles, projSource->GetProjectionCount() * sizeof(float));
+                delete[] tiltAngles;
+            }
 
-			float volumeHeight = config.RecDimensions.z;
-			float voxelSize = config.VoxelSize.z;
-			volumeHeight *= voxelSize;
+            float volumeHeight = config.RecDimensions.z;
+            float voxelSize = config.VoxelSize.z;
+            volumeHeight *= voxelSize;
 #ifdef SUBVOLREC_MODE
-			/*volumeHeight = config.SizeSubVol;
-			voxelSize = config.VoxelSizeSubVol;*/
+            /*volumeHeight = config.SizeSubVol;
+            voxelSize = config.VoxelSizeSubVol;*/
 #endif
-			float D = (proj.GetMaxDimension() / 2) / volumeHeight * 2.0f;
+            float D = (proj.GetMaxDimension() / 2) / volumeHeight * 2.0f;
 
 
-			//Do WBP weighting
-            double psiAngle = markers(MFI_RotationPsi, (uint)proj_index, 0) / 180.0 * (double)M_PI;
+            //Do WBP weighting
+            double psiAngle = markers(MFI_RotationPsi, (uint) proj_index, 0) / 180.0 * (double) M_PI;
             if (Configuration::Config::GetConfig().UseFixPsiAngle)
-                psiAngle = Configuration::Config::GetConfig().PsiAngle / 180.0 * (double)M_PI;
+                psiAngle = Configuration::Config::GetConfig().PsiAngle / 180.0 * (double) M_PI;
 
             // Fix for WBP of rectangular images (otherwise stuff is rotated out too far)
             float flipAngle;
-            if (abs(abs(psiAngle) - ((double)M_PI/2.)) < ((double)M_PI/4.)){
+            if (abs(abs(psiAngle) - ((double) M_PI / 2.)) < ((double) M_PI / 4.)) {
                 flipAngle = 90.;
             } else {
                 flipAngle = 0.;
@@ -1607,38 +1730,15 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 
             printf("PSI ANGLE: %f \n", flipAngle);
 
-            wbp(fft_d, roiFFT.width * sizeof(Npp32fc), proj.GetMaxDimension(), flipAngle, config.WBPFilter, proj_index, projSource->GetProjectionCount(), D, meanbuffer);
+            //TODO: filter off
+            //wbp(fft_d, roiFFT.width * sizeof(Npp32fc), proj.GetMaxDimension(), flipAngle, config.WBPFilter, proj_index, projSource->GetProjectionCount(), D, meanbuffer);
 
-
-			/*float2* test = new float2[fft_d.GetSize() / 4 / 2];
-			float* test2 = new float[fft_d.GetSize() / 4 / 2];
-			fft_d.CopyDeviceToHost(test);
-
-			for (size_t i = 0; i < fft_d.GetSize() / 4 / 2; i++)
-			{
-				test2[i] = test[i].x;
-			}
-
-			stringstream ss;
-			ss << "projFilter_" << proj_index << ".em";
-			emwrite(ss.str(), test2, proj.GetMaxDimension() / 2 + 1, proj.GetMaxDimension());
-			delete[] test;
-			delete[] test2;*/
 
 		}
 
 		cufftSafeCall(cufftExecC2R(handleC2R, (cufftComplex*)fft_d.GetDevicePtr(), (cufftReal*)projSquare_d.GetDevicePtr()));
 
 		normVal = (float)(proj.GetMaxDimension() * proj.GetMaxDimension());
-
-//        float* test = new float[proj.GetMaxDimension()*proj.GetMaxDimension()];
-//        projSquare_d.CopyDeviceToHost(test);
-//
-//        stringstream ss;
-//        ss << "test_" << proj_index << ".em";
-//        emwrite(ss.str(), (float*)test, proj.GetMaxDimension(), proj.GetMaxDimension());
-//
-//        delete[] test;
 	}
 
 	//Normalize from FFT
@@ -1705,10 +1805,6 @@ void Reconstructor::PrepareProjection(void * img_h, int proj_index, float & mean
 	else
 	{
 		realprojUS_d.CopyDeviceToHost(img_h);
-
-//		stringstream ss;
-//		ss << "test_" << proj_index << ".em";
-//		emwrite(ss.str(), (float*)img_h, proj.GetWidth(), proj.GetHeight());
 	}
 }
 

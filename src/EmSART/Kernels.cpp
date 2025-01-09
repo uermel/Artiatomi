@@ -1299,7 +1299,7 @@ void SetConstantValues(CTFKernel& kernel, Projection& proj, int index, float cs,
     kernel.SetConstantValue("c_voltage", &voltage);
     float _openingAngle = 0.01f;
     kernel.SetConstantValue("c_openingAngle", &_openingAngle);
-    float _ampContrast = 0.00f;
+    float _ampContrast = 0.10f;
     kernel.SetConstantValue("c_ampContrast", &_ampContrast);
     float _phaseContrast = sqrtf(1 - _ampContrast * _ampContrast);
     kernel.SetConstantValue("c_phaseContrast", &_phaseContrast);

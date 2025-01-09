@@ -115,9 +115,12 @@ void ctf(cuComplex* ctf, size_t stride, float defocusMin, float defocusMax, floa
     float p = expf(-((0.943359f * lambda * length * length * H) * (0.943359f * lambda * length * length * H)));
     float q = (a1 * expf(-b1 * (length * length)) + a2 * expf(-b2 * (length * length))) / 2.431f;
 
-    float m = -PhaseShift + (M_PI / 2.0f) * (Cs * lambda * lambda * lambda * length * length * length * length - 2 * defocus * lambda * length * length);
-    float n = c_phaseContrast * sinf(m) + c_ampContrast * cosf(m);
-	
+    // TODO: is this better????
+    float m = PhaseShift - (M_PI / 2.0f) * (Cs * lambda * lambda * lambda * length * length * length * length - 2 * defocus * lambda * length * length);
+    float n = -c_phaseContrast * sinf(m) - c_ampContrast * cosf(m);
+//    float m = -PhaseShift + (M_PI / 2.0f) * (Cs * lambda * lambda * lambda * length * length * length * length - 2 * defocus * lambda * length * length);
+//    float n = c_phaseContrast * sinf(m) + c_ampContrast * cosf(m);
+
 	cuComplex res = *(((cuComplex*)((char*)ctf + stride * y)) + x);
 	
     if (applyForFP && sqrtf(xpos * xpos + ypos * ypos) > betaFac.x && !phaseFlipOnly)// && length < 317382812)
@@ -147,8 +150,11 @@ void ctf(cuComplex* ctf, size_t stride, float defocusMin, float defocusMax, floa
 		expfun = max(expfun, WienerFilterNoiseLevel);
 		float val = n * expfun;
 		
-		res.x = res.x * -val / (val * val + WienerFilterNoiseLevel);
-		res.y = res.y * -val / (val * val + WienerFilterNoiseLevel);
+		//res.x = res.x * -val / (val * val + WienerFilterNoiseLevel);
+		//res.y = res.y * -val / (val * val + WienerFilterNoiseLevel);
+
+		res.x = res.x * -val;
+		res.y = res.y * -val;
     }
     
 	if (phaseFlipOnly)
