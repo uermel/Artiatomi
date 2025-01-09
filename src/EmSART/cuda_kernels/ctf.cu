@@ -119,7 +119,8 @@ void ctf(cuComplex* ctf, size_t stride, float defocusMin, float defocusMax, floa
     float n = c_phaseContrast * sinf(m) + c_ampContrast * cosf(m);
 	
 	cuComplex res = *(((cuComplex*)((char*)ctf + stride * y)) + x);
-	
+	//res.x = 0.f;
+    //res.y = 0.f;
     if (applyForFP && sqrtf(xpos * xpos + ypos * ypos) > betaFac.x && !phaseFlipOnly)// && length < 317382812)
     {
 		length = length / 100000000.0f;
@@ -127,14 +128,16 @@ void ctf(cuComplex* ctf, size_t stride, float defocusMin, float defocusMax, floa
 		float coeff2 = betaFac.z;
 		float coeff3 = betaFac.w;
 		float expfun = expf((-coeff1 * length - coeff2 * length * length - coeff3 * length * length * length));
-		expfun = max(expfun, 0.01f);
+		//expfun = max(expfun, 0.01f);
 		float val = n * expfun;
-		if (abs(val) < 0.0001f && val >=0 ) val = 0.0001f;
-		if (abs(val) < 0.0001f && val < 0 ) val = -0.0001f;
+		//if (abs(val) < 0.0001f && val >=0 ) val = 0.0001f;
+		//if (abs(val) < 0.0001f && val < 0 ) val = -0.0001f;
 		
-		
-		res.x = res.x * -val;
-		res.y = res.y * -val;
+		float sign = (-val > 0) - (-val < 0);
+		//res.x = res.x / ((-val / (val * val + WienerFilterNoiseLevel)) + sign * 0.01f);
+		//res.y = res.y / ((-val / (val * val + WienerFilterNoiseLevel)) + sign * 0.01f);
+        res.x = res.x / ((-val / (val * val + WienerFilterNoiseLevel)) + sign * 0.0001f);
+        res.y = res.y / ((-val / (val * val + WienerFilterNoiseLevel)) + sign * 0.0001f);
     }
 
     if (!applyForFP && sqrtf(xpos * xpos + ypos * ypos) > betaFac.x && !phaseFlipOnly)// && length < 317382812)
@@ -144,11 +147,11 @@ void ctf(cuComplex* ctf, size_t stride, float defocusMin, float defocusMax, floa
 		float coeff2 = betaFac.z;
 		float coeff3 = betaFac.w;
 		float expfun = expf((-coeff1 * length - coeff2 * length * length - coeff3 * length * length * length));
-		expfun = max(expfun, WienerFilterNoiseLevel);
+		//expfun = max(expfun, WienerFilterNoiseLevel);
 		float val = n * expfun;
 		
-		res.x = res.x * -val / (val * val + WienerFilterNoiseLevel);
-		res.y = res.y * -val / (val * val + WienerFilterNoiseLevel);
+		res.x = res.x * (-val / (val * val + WienerFilterNoiseLevel));
+		res.y = res.y * (-val / (val * val + WienerFilterNoiseLevel));
     }
     
 	if (phaseFlipOnly)

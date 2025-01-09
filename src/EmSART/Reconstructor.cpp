@@ -657,6 +657,22 @@ void Reconstructor::ForwardProjectionCTF(Volume<TVol>* vol, CudaTextureObject3D&
 
 				ctf(fft_d, defocusMin, defocusMax, defocusAngle, true, config.PhaseFlipOnly, config.WienerFilterNoiseLevel, (proj.GetMaxDimension() / 2 + 1) * sizeof(float2), config.CTFBetaFac);
 
+                {
+                    auto temp = new float2[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension()];
+                    auto temp2 = new float[(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension()];
+                    fft_d.CopyDeviceToHost(temp);
+
+                    for (int i=0; i<(proj.GetMaxDimension() / 2 + 1) * proj.GetMaxDimension(); i++)
+                    {
+                        temp2[i] = temp[i].x;
+                    }
+                    stringstream ss;
+                    ss << "afterCTF_" << index << "_" << ray << ".em";
+                    emwrite(ss.str(), temp2, (proj.GetMaxDimension() / 2 + 1), proj.GetMaxDimension());
+                    delete[] temp;
+                    delete[] temp2;
+                }
+
                 // To avoid aliasing artifacts low pass filter to Nyquist of Tomogram or Projection fourier filter, whichever is lower.
 				if ((config.VoxelSize.x > 1) && (config.LimitToNyquist)) // assume cubic voxel sizes
 				{
@@ -680,6 +696,8 @@ void Reconstructor::ForwardProjectionCTF(Volume<TVol>* vol, CudaTextureObject3D&
 
 				nppSafeCall(nppiDivC_32f_C1R((Npp32f*)projSquare_d.GetDevicePtr() + squarePointerShift, proj.GetMaxDimension() * sizeof(float), (float)(proj.GetMaxDimension() * proj.GetMaxDimension()),
 					(Npp32f*)dist_d.GetDevicePtr(), (int)dist_d.GetPitch(), roiAll));
+
+
 
 
 				cropKernel(dist_d, config.CutLength, config.DimLength, pA, pB, pC, pD);
@@ -1794,6 +1812,8 @@ void Reconstructor::Compare(Volume<TVol>* vol, char* originalImage, int index)
                                 (Npp8u*) meanbuffer.GetDevicePtr()));
         float volumeTraversalLength = 0.f;
         meanval.CopyDeviceToHost(&volumeTraversalLength);
+
+
 
         realproj_d.CopyHostToDevice(originalImage);
 
